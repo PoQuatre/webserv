@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "**.c"
+      - "**.cpp"
+      - "**.h"
+      - "**.hpp"
+      - "**.cxx"
+      - "**.hxx"
+      - "**.cc"
+      - "**.hh"
+      - "Makefile"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "**.c"
+      - "**.cpp"
+      - "**.h"
+      - "**.hpp"
+      - "**.cxx"
+      - "**.hxx"
+      - "**.cc"
+      - "**.hh"
+      - "Makefile"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: make
+        run: make -j
