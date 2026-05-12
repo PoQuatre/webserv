@@ -1,0 +1,24 @@
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  misc-*,
+  readability-*,
+  portability-*,
+  cert-*,
+  performance-*,
+  -readability-identifier-naming,
+  -readability-magic-numbers,
+  -readability-braces-around-statements,
+  -readability-implicit-bool-conversion,
+  -readability-identifier-length,
+  -bugprone-easily-swappable-parameters,
+  -misc-non-private-member-variables-in-classes,
+  -cert-msc30-c,
+  -cert-msc50-cpp,
+  -cert-msc32-c,
+  -cert-msc51-cpp,
+
+WarningsAsErrors: ""
+HeaderFilterRegex: ".*"
+FormatStyle: file

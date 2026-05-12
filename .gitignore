@@ -1,0 +1,8 @@
+.cache/
+_deps/
+build/
+
+*.[aod]
+compile_commands.json
+
+/webserv
