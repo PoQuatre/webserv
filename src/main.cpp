@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/13 06:17:02 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/13 09:02:09 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,7 +20,7 @@
 
 int32_t main(int32_t ac, char **av)
 {
-    if (ac < 1) {
+    if (ac < 2) {
         std::cerr << "Usage ./webserv <configuration>\n";
         return 1;
     }
