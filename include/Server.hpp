@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/13 05:17:48 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/13 06:01:02 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,9 +39,12 @@ class Server {
 public:
     Server(const std::string &root_path, const Config &config,
         const std::string &server_name, const std::string &listen_addr);
+    Server(const Server &other);
     ~Server();
 
 private:
+    Server();
+
     const Config &_root_config;
     const std::string &_root_path;
     const std::string &_server_name;
