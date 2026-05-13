@@ -1,23 +1,32 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   webserv.hpp                                        :+:      :+:    :+:   */
+/*   http.hpp                                           :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/12 18:55:47 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/13 04:04:03 by mle-flem         ###   ########.fr       */
+/*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
+/*   Updated: 2026/05/13 04:05:09 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
-#include <netinet/in.h>
-#include <stdint.h>
+namespace http {
 
-#include <string>
-#include <vector>
+namespace methods {
+enum HttpMethods {
+    GET = 0,
+    HEAD,
+    POST,
+    PUT,
+    DELETE,
+    CONNECT,
+    OPTIONS,
+    TRACE,
+    PATCH,
+    COUNT,
+};
+}
 
-#include "Server.hpp"
-
-std::vector<Server> parse_config(const std::string &path);
+}

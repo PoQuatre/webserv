@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/13 03:06:47 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/13 04:25:59 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,13 +24,7 @@ std::vector<Server> parse_config(const std::string &path)
     std::vector<Server> servers;
     Config config;
 
-    config.server_name = "test";
-    config.ip32.sin_family = AF_INET;
-    config.ip32.sin_addr.s_addr = htonl(127 << 24 | 1);
-    config.ip32.sin_port = htons(8080);
-    config.root_path = "/test";
-
-    servers.push_back(Server(config));
+    servers.push_back(Server("./test", config, "", "80"));
 
     return servers;
 }
