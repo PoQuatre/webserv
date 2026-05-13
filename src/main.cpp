@@ -12,14 +12,23 @@
 
 #include <stdint.h>
 
+#include <cstddef>
 #include <iostream>
+#include <vector>
+#include "webserv.hpp"
 
 int32_t main(int32_t ac, char **av)
 {
-    (void)av;
-    if (ac < 1) {
-        std::cerr << "Usage ./webserv <configuration>\n";
-        return 1;
-    }
+    if (ac < 1)
+	{
+		std::cerr << "Usage ./webserv <configuration>\n";
+		return 1;
+	}
+	std::vector<Server> servers = parse_config(av[1]);
+	for (size_t i = 0; i < servers.size(); i++)
+	{
+	
+	}
+	(void)av;
     return 0;
 }
