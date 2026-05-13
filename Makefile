@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/13 08:46:11 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/13 08:46:48 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -21,7 +21,7 @@ AUTHORS	= uanglade, nlaporte & mle-flem
 
 CXX				= c++
 OLD_CXXFLAGS	:= $(CXXFLAGS)
-CXXFLAGS		= -Wall -Wextra -Werror -std=c++98
+CXXFLAGS		= -Wall -Wextra -Werror -std=c++98 -DNDEBUG
 DFLAGS			= -MMD -MP -MF $(@:.o=.d)
 RM				= rm -f
 
@@ -34,7 +34,7 @@ CXXFLAGS	+= -Wpedantic -Wshadow -Wformat=2 -Wformat-security -Wundef \
 endif
 
 ifneq ($(filter debug debug-san asan ubsan,$(MAKECMDGOALS)),)
-CXXFLAGS	+= -g3 -fno-omit-frame-pointer
+CXXFLAGS	+= -g3 -fno-omit-frame-pointer -UNDEBUG
 endif
 
 ifneq ($(filter asan,$(MAKECMDGOALS)),)
@@ -85,6 +85,7 @@ SRCS =	Logger.cpp \
 ##begin: HDRS
 HDRS =	include/Logger.hpp \
 		include/Server.hpp \
+		include/http.hpp \
 		include/webserv.hpp
 ##end: HDRS
 
