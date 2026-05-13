@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/13 04:26:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/13 05:17:48 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include <netinet/in.h>
 
 #include <string>
+#include <vector>
 
 #include "http.hpp"
 
@@ -24,6 +25,14 @@ struct Config {
     std::size_t client_max_body_size;
     bool autoindex;
     bool allowed_methods[http::methods::COUNT];
+};
+
+struct Location
+{
+	const std::string path;
+	const Config config;
+	std::vector<Location> children;
+	bool exact;
 };
 
 class Server {
