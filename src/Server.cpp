@@ -6,18 +6,15 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/13 02:58:54 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/13 03:06:44 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Server.hpp"
 
-Server::Server(const Config &config) : _config(config)
+Server::Server(const Config &config)
+    : _config(config)
 {
-	
 }
 
-Server::~Server()
-{
-
-}
+Server::~Server() { }
