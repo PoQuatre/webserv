@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/12 19:01:46 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/13 06:17:27 by uanglade         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -76,11 +76,13 @@ INCS =	$(SRC_DIR)/ \
 # **************************************************************************** #
 
 ##begin: SRCS
-SRCS =	main.cpp
+SRCS =	Logger.cpp \
+		main.cpp
 ##end: SRCS
 
 ##begin: HDRS
-HDRS =	include/webserv.hpp
+HDRS =	include/Logger.hpp \
+		include/webserv.hpp
 ##end: HDRS
 
 OBJS = $(addprefix $(BUILD_DIR)/,$(SRCS:%.cpp=%.o))

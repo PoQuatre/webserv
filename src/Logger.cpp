@@ -1,25 +1,17 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   main.cpp                                           :+:      :+:    :+:   */
+/*   Logger.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
+/*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/13 06:17:02 by uanglade         ###   ########.fr       */
+/*   Created: 2026/05/13 03:26:02 by uanglade          #+#    #+#             */
+/*   Updated: 2026/05/13 04:44:57 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <stdint.h>
+#include "Logger.hpp"
 
-#include <iostream>
+std::ostream *Logger::_out_stream = &std::cout;
 
-int32_t main(int32_t ac, char **av)
-{
-    (void)av;
-    if (ac < 1) {
-        std::cerr << "Usage ./webserv <configuration>\n";
-        return 1;
-    }
-    return 0;
-}
+void Logger::set_log_output(std::ostream *stream) { _out_stream = stream; }
