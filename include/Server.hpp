@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/14 08:40:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 19:32:19 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,7 @@
 
 #include <netinet/in.h>
 
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -27,12 +28,16 @@ struct Config {
     bool allowed_methods[http::methods::COUNT];
 };
 
+std::ostream &operator<<(std::ostream &os, const Config &config);
+
 struct Location {
     const std::string path;
     const Config config;
     std::vector<Location> children;
     bool exact;
 };
+
+std::ostream &operator<<(std::ostream &os, const Location &location);
 
 class Server {
 public:

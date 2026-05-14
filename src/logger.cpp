@@ -1,24 +1,19 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   webserv.hpp                                        :+:      :+:    :+:   */
+/*   logger.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
+/*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/12 18:55:47 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 19:21:31 by uanglade         ###   ########.fr       */
+/*   Created: 2026/05/14 19:25:17 by uanglade          #+#    #+#             */
+/*   Updated: 2026/05/14 19:25:54 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#pragma once
-
-#include <netinet/in.h>
-#include <stdint.h>
-
-#include <string>
-#include <vector>
-
-#include "Server.hpp"
 #include "logger.hpp"
 
-std::vector<Server> parse_config(const std::string &path);
+namespace logger {
+
+std::ostream *out_stream = &std::cout;
+
+}
