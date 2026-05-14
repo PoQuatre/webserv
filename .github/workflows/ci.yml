@@ -37,6 +37,7 @@ jobs:
           tidy-checks: ""
           thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
           extra-args: ${{ steps.flags.outputs.flags }}
+          version: 22
 
       - name: Fail fast?!
         if: steps.linter.outputs.checks-failed > 0
