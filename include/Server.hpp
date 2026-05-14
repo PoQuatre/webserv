@@ -41,6 +41,9 @@ public:
     Server(const Server &other);
     ~Server();
 
+    bool init(int32_t epollfd);
+    int32_t get_sockfd() const;
+
 private:
     Server();
 
@@ -49,5 +52,6 @@ private:
     const std::string _server_name;
     struct sockaddr_in _sockaddr;
     struct sockaddr_in6 _sockaddr6;
+    int32_t _sockfd;
     bool _is_ipv6;
 };

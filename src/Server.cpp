@@ -13,7 +13,10 @@
 #include "Server.hpp"
 
 #include <arpa/inet.h>
+#include <sys/epoll.h>
+#include <unistd.h>
 
+#include <cstdio>
 #include <cstdlib>
 
 Server::Server(const std::string &root_path, const Location &root_location,
@@ -54,8 +57,59 @@ Server::Server(const Server &other)
     , _server_name(other._root_path)
     , _sockaddr(other._sockaddr)
     , _sockaddr6(other._sockaddr6)
+    , _sockfd(-1)
     , _is_ipv6(other._is_ipv6)
 {
 }
 
 Server::~Server() { }
+
+int32_t Server::get_sockfd() const { return _sockfd; }
+
+bool Server::init(int32_t epollfd)
+{
+    int32_t domain = _is_ipv6 ? AF_INET6 : AF_INET;
+    _sockfd = socket(domain, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (_sockfd == -1) {
+        perror("socket");
+        return false;
+    }
+
+    int32_t opt = 1;
+    if (setsockopt(_sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))
+        == -1) {
+        perror("setsockopt");
+        close(_sockfd);
+        _sockfd = -1;
+        return false;
+    }
+
+    sockaddr *addr = _is_ipv6 ? reinterpret_cast<sockaddr *>(&_sockaddr6)
+                              : reinterpret_cast<sockaddr *>(&_sockaddr);
+    socklen_t addrlen = _is_ipv6 ? sizeof(_sockaddr6) : sizeof(_sockaddr);
+    if (bind(_sockfd, addr, addrlen) == -1) {
+        perror("bind");
+        close(_sockfd);
+        _sockfd = -1;
+        return false;
+    }
+
+    if (listen(_sockfd, SOMAXCONN) == -1) {
+        perror("listen");
+        close(_sockfd);
+        _sockfd = -1;
+        return false;
+    }
+
+    epoll_event ev = { };
+    ev.events = EPOLLIN;
+    ev.data.fd = _sockfd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
+        perror("epoll_ctl: _sockfd");
+        close(_sockfd);
+        _sockfd = -1;
+        return false;
+    }
+
+    return true;
+}
