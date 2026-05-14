@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 22:00:51 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 22:55:09 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -72,7 +72,7 @@
     inline void name(                                                          \
         const std::string &fmt, ENUM_BINARY_PARAMS_##n(const T, &arg))         \
     {                                                                          \
-        if (level < log_level())                                               \
+        if ((level) < log_level())                                             \
             return;                                                            \
         write_log(level, Formatter(fmt) CHAIN_ARGS_##n.str());                 \
     }
