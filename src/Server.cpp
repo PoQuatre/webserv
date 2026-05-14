@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/13 06:02:34 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 08:40:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,9 +16,9 @@
 
 #include <cstdlib>
 
-Server::Server(const std::string &root_path, const Config &config,
+Server::Server(const std::string &root_path, const Location &root_location,
     const std::string &server_name, const std::string &listen_addr)
-    : _root_config(config)
+    : _root_location(root_location)
     , _root_path(root_path)
     , _server_name(server_name)
     , _sockaddr()
@@ -47,7 +47,7 @@ Server::Server(const std::string &root_path, const Config &config,
 }
 
 Server::Server(const Server &other)
-    : _root_config(other._root_config)
+    : _root_location(other._root_location)
     , _root_path(other._root_path)
     , _server_name(other._root_path)
     , _sockaddr(other._sockaddr)

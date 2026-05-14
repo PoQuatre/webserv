@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/13 06:01:02 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 08:40:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,17 +27,16 @@ struct Config {
     bool allowed_methods[http::methods::COUNT];
 };
 
-struct Location
-{
-	const std::string path;
-	const Config config;
-	std::vector<Location> children;
-	bool exact;
+struct Location {
+    const std::string path;
+    const Config config;
+    std::vector<Location> children;
+    bool exact;
 };
 
 class Server {
 public:
-    Server(const std::string &root_path, const Config &config,
+    Server(const std::string &root_path, const Location &root_location,
         const std::string &server_name, const std::string &listen_addr);
     Server(const Server &other);
     ~Server();
@@ -45,9 +44,9 @@ public:
 private:
     Server();
 
-    const Config &_root_config;
-    const std::string &_root_path;
-    const std::string &_server_name;
+    const Location _root_location;
+    const std::string _root_path;
+    const std::string _server_name;
     struct sockaddr_in _sockaddr;
     struct sockaddr_in6 _sockaddr6;
     bool _is_ipv6;

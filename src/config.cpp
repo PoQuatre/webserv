@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/13 06:04:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 08:45:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,11 +34,11 @@ std::string dirpart(const std::string &path)
 std::vector<Server> parse_config(const std::string &path)
 {
     std::vector<Server> servers;
-    Config config = { };
+    Location location = { };
 
     const std::string root = dirpart(path);
 
-    servers.push_back(Server(root, config, "example.com", "0.0.0.0:8080"));
+    servers.push_back(Server(root, location, "example.com", "0.0.0.0:8080"));
 
     return servers;
 }
