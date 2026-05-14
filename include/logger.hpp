@@ -152,7 +152,11 @@ private:
     std::size_t _pos;
 };
 
-std::ostream *out_stream = &std::cout;
+inline std::ostream *&out_stream()
+{
+    static std::ostream *s = &std::cout;
+    return s;
+}
 
 inline void write_log(levels::type level, const std::string &msg)
 {
@@ -163,24 +167,24 @@ inline void write_log(levels::type level, const std::string &msg)
     if (!strftime(time_buff, sizeof(time_buff), "%Y-%m-%d %X", &tstruct))
         return;
 
-    *out_stream << "\x1b[2m" << time_buff << "\x1b[0m ";
+    *out_stream() << "\x1b[2m" << time_buff << "\x1b[0m ";
 
     switch (level) {
     case levels::DEBUG:
-        *out_stream << "\x1b[0;1;7;95m DEBUG \x1b[0m ";
+        *out_stream() << "\x1b[0;1;7;95m DEBUG \x1b[0m ";
         break;
     case levels::INFO:
-        *out_stream << "\x1b[0;1;7;96m INFO  \x1b[0m ";
+        *out_stream() << "\x1b[0;1;7;96m INFO  \x1b[0m ";
         break;
     case levels::WARN:
-        *out_stream << "\x1b[0;1;7;93m WARN  \x1b[0m ";
+        *out_stream() << "\x1b[0;1;7;93m WARN  \x1b[0m ";
         break;
     case levels::ERROR:
-        *out_stream << "\x1b[0;1;7;31m ERROR \x1b[0m ";
+        *out_stream() << "\x1b[0;1;7;31m ERROR \x1b[0m ";
         break;
     }
 
-    *out_stream << msg << '\n';
+    *out_stream() << msg << '\n';
 }
 
 #define X(name, func)                                                          \
