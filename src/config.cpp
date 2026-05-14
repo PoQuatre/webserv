@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/14 19:01:17 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/14 21:18:18 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -43,5 +43,6 @@ std::vector<Server> parse_config(const std::string &path)
 
     servers.push_back(Server(root, location, "example.com", "0.0.0.0:8080"));
 
+    logger::info("Successfully parsed configs");
     return servers;
 }

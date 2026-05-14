@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/14 19:57:49 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/14 21:37:45 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -31,32 +31,35 @@ Server::Server(const std::string &root_path, const Location &root_location,
     , _sockaddr6()
     , _is_ipv6(false)
 {
-    logger::info("Creating server with: \n\troot_location: {}\n\troot_path: "
-                 "{}\n\tserver_name: {}",
-        _root_location, _root_path, _server_name);
+    std::string addr;
+    uint32_t port;
+
     if (listen_addr[0] == '[') {
         _is_ipv6 = true;
         _sockaddr6.sin6_family = AF_INET6;
 
-        std::string addr = listen_addr.substr(1, listen_addr.find(']'));
+        addr = listen_addr.substr(1, listen_addr.find(']'));
         inet_pton(AF_INET6, addr.c_str(), &_sockaddr6.sin6_addr);
 
-        _sockaddr6.sin6_port = htons(static_cast<uint16_t>(
-            // listen_addr should be valid at this point in time
-            // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
-            std::atoi(&listen_addr[listen_addr.find("]:") + 2])));
+        // listen_addr should be valid at this point in time
+        // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
+        port = std::atoi(&listen_addr[listen_addr.find("]:") + 2]);
+        _sockaddr6.sin6_port = htons(static_cast<uint16_t>(port));
     } else {
         _is_ipv6 = false;
         _sockaddr.sin_family = AF_INET;
 
-        std::string addr = listen_addr.substr(0, listen_addr.find(':'));
+        addr = listen_addr.substr(0, listen_addr.find(':'));
         inet_pton(AF_INET, addr.c_str(), &_sockaddr.sin_addr);
 
-        _sockaddr.sin_port = htons(static_cast<uint16_t>(
-            // listen_addr should be valid at this point in time
-            // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
-            std::atoi(&listen_addr[listen_addr.find(':') + 1])));
+        // listen_addr should be valid at this point in time
+        // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
+        port = std::atoi(&listen_addr[listen_addr.find(':') + 1]);
+        _sockaddr.sin_port = htons(static_cast<uint16_t>(port));
     }
+    logger::info("Creating server with: \n\troot_location: {}\n\troot_path: "
+                 "{}\n\tserver_name: {}\n\tis ipv6: {}\n\taddr: {}\n\tport: {}",
+        _root_location, _root_path, _server_name, _is_ipv6, addr, port);
 }
 
 Server::Server(const Server &other)
@@ -76,16 +79,22 @@ int32_t Server::get_sockfd() const { return _sockfd; }
 
 bool Server::init(int32_t epollfd)
 {
+    logger::info("Initializing server, name : {}", _server_name);
+
     int32_t domain = _is_ipv6 ? AF_INET6 : AF_INET;
     _sockfd = socket(domain, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (_sockfd == -1) {
+        logger::error("Failed to create socket");
         perror("socket");
         return false;
     }
 
+    logger::info("Created socket: {}", _sockfd);
+
     int32_t opt = 1;
     if (setsockopt(_sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))
         == -1) {
+        logger::error("Failed to set socket options");
         perror("setsockopt");
         close(_sockfd);
         _sockfd = -1;
@@ -96,13 +105,17 @@ bool Server::init(int32_t epollfd)
                               : reinterpret_cast<sockaddr *>(&_sockaddr);
     socklen_t addrlen = _is_ipv6 ? sizeof(_sockaddr6) : sizeof(_sockaddr);
     if (bind(_sockfd, addr, addrlen) == -1) {
+        logger::error("Failed to bind socket");
         perror("bind");
         close(_sockfd);
         _sockfd = -1;
         return false;
     }
 
+    logger::info("Binded socket to address: {}", addr);
+
     if (listen(_sockfd, SOMAXCONN) == -1) {
+        logger::error("Failed to listen on socket");
         perror("listen");
         close(_sockfd);
         _sockfd = -1;
@@ -113,40 +126,37 @@ bool Server::init(int32_t epollfd)
     ev.events = EPOLLIN;
     ev.data.fd = _sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
+        logger::error("Failed to control epoll instance");
         perror("epoll_ctl: _sockfd");
         close(_sockfd);
         _sockfd = -1;
         return false;
     }
 
+    logger::info("Successfully created instance");
+
     return true;
 }
 
 std::ostream &operator<<(std::ostream &os, const Location &location)
 {
-    os << "Location {\n";
-    os << "\tpath: " << location.path << ",\n";
-    os << "\tconfig: " << location.config << ",\n";
-    os << "\texact: " << std::boolalpha << location.exact << ",\n";
+    os << "{";
+    os << "path: " << location.path << ", ";
+    os << "config: " << location.config << ", ";
+    os << "exact: " << std::boolalpha << location.exact << ", ";
 
-    os << "\tchildren: [";
+    os << "children: [";
 
     if (!location.children.empty()) {
-        os << '\n';
-
         for (size_t i = 0; i < location.children.size(); ++i) {
-            os << "\t\t" << location.children[i];
+            os << " " << location.children[i];
 
             if (i + 1 < location.children.size())
                 os << ",";
-
-            os << '\n';
         }
-
-        os << "\t";
     }
 
-    os << "]\n";
+    os << "]";
     os << "}";
 
     return os;
@@ -154,16 +164,26 @@ std::ostream &operator<<(std::ostream &os, const Location &location)
 
 std::ostream &operator<<(std::ostream &os, const Config &config)
 {
-    os << "Config {\n";
-    os << "\troot: " << config.root << ",\n";
+    os << "{";
+    os << "root: " << config.root << ", ";
 
-    os << "\tallowed methods: [";
+    os << "allowed methods: [";
     for (uint8_t i = 0; i < 9; i++) {
-        std::string methods_strings[8];
-        if (config.allowed_methods[i] != http::methods::COUNT) {
-            os << methods_strings[config.allowed_methods[i]];
+        if (config.allowed_methods[i]) {
+            os << http::methods::strings[i];
+            os << ", ";
         }
     }
-
+    os << "], ";
+    os << "autoindex: " << std::boolalpha << config.autoindex << ", ";
+    os << "client max body size: " << config.client_max_body_size << ", ";
+    os << "error pages: [";
+    for (uint32_t i = 0; i < 512; i++) {
+        if (config.error_pages[i]) {
+            os << i << ": " << config.error_pages[i] << ", ";
+        }
+    }
+    os << "]";
+    os << "}";
     return os;
 }
