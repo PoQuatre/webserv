@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 20:23:01 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 22:00:51 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -72,6 +72,8 @@
     inline void name(                                                          \
         const std::string &fmt, ENUM_BINARY_PARAMS_##n(const T, &arg))         \
     {                                                                          \
+        if (level < log_level())                                               \
+            return;                                                            \
         write_log(level, Formatter(fmt) CHAIN_ARGS_##n.str());                 \
     }
 
@@ -158,8 +160,21 @@ inline std::ostream *&out_stream()
     return s;
 }
 
+inline levels::type &log_level()
+{
+#ifndef NDEBUG
+    static levels::type lvl = levels::DEBUG;
+#else
+    static levels::type lvl = levels::INFO;
+#endif
+    return lvl;
+}
+
 inline void write_log(levels::type level, const std::string &msg)
 {
+    if (level < log_level())
+        return;
+
     char time_buff[30];
     time_t now = time(0);
     struct tm tstruct;
@@ -188,7 +203,12 @@ inline void write_log(levels::type level, const std::string &msg)
 }
 
 #define X(name, func)                                                          \
-    inline void func(const std::string &fmt) { write_log(levels::name, fmt); } \
+    inline void func(const std::string &fmt)                                   \
+    {                                                                          \
+        if (levels::name < log_level())                                        \
+            return;                                                            \
+        write_log(levels::name, fmt);                                          \
+    }                                                                          \
     MAKE_LOG_OVERLOADS(func, levels::name)
 LOG_LEVELS
 #undef X
