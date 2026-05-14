@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/13 08:46:48 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/13 12:04:00 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -254,13 +254,13 @@ ifeq ($(NOPRETTY),)
 endif
 endif
 
-$(NAME): .header $(OBJS)
+$(NAME): $(OBJS)
 	@$(call progress,$(CLR_BLUE)Linking $(CLR_TEAL)$@)
 	@mkdir -p $(dir $(MK_CXXFLAGS))
 	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp .header $(if $(MK_REBUILD),fclean)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),fclean)
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(INCS:%=-I%) -o $@ -c $<
