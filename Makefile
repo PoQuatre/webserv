@@ -77,15 +77,16 @@ INCS =	$(SRC_DIR)/ \
 # **************************************************************************** #
 
 ##begin: SRCS
-SRCS =	Server.cpp \
-		config.cpp \
-		main.cpp
+SRCS =	config.cpp \
+		logger.cpp \
+		main.cpp \
+		Server.cpp
 ##end: SRCS
 
 ##begin: HDRS
-HDRS =	include/Server.hpp \
-		include/http.hpp \
+HDRS =	include/http.hpp \
 		include/logger.hpp \
+		include/Server.hpp \
 		include/webserv.hpp
 ##end: HDRS
 

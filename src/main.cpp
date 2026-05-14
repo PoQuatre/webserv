@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 08:18:14 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 19:38:37 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -87,6 +87,8 @@ int32_t main(int32_t ac, char **av)
         std::cerr << "Usage ./webserv <configuration>\n";
         return 1;
     }
+
+    logger::info("Started webserv");
 
     std::vector<Server> servers = parse_config(av[1]);
 
