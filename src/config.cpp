@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/15 14:02:21 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/15 14:05:02 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <iostream>
@@ -23,7 +24,6 @@
 #include "Server.hpp"
 #include "logger.hpp"
 #include "webserv.hpp"
-
 namespace {
 
 enum token_type { BRACE_OPEN, BRACE_CLOSE, WORD };
@@ -33,6 +33,7 @@ struct config_token {
     std::string value;
     uint32_t size;
     token_type type;
+    bool alive;
 };
 
 struct config_node {
@@ -82,7 +83,7 @@ bool key_check_syn(config_token token)
 
 bool config_check_line(std::string str)
 {
-    if (str.size() <= 0)
+    if (str.empty())
         return true;
     char c = str[str.size() - 1];
     if (c == '}' || c == '{' || c == ';')
@@ -136,6 +137,7 @@ bool tokenize_config_file(
                     tokens.clear();
                     return false;
                 }
+                tmp_token.alive = 1;
                 tokens.push_back(tmp_token);
                 i += len;
             }
@@ -156,113 +158,137 @@ void config_free_tree(config_node *root)
     delete root;
 }
 
+bool create_node(std::vector<config_token>::iterator token, config_node **root,
+    std::vector<config_token> &tokens, config_node **og_root)
+{
+    config_node *node;
+
+    if (token + 1 == tokens.end()) {
+        config_free_tree(*og_root);
+        return false;
+    }
+    if (token->value == "location") {
+        token->alive = 0;
+        token++;
+        try {
+            node = new config_node();
+        } catch (...) {
+            config_free_tree(*og_root);
+            return false;
+        }
+        node->key = "location";
+        node->strict = false;
+        if (token == tokens.end()) {
+            config_free_tree(*og_root);
+            return false;
+        }
+        while (token != tokens.end() && !token->value.empty()
+            && token->value[token->value.size() - 1] != '{') {
+            if (token->value[0] == '=')
+                node->strict = true;
+            node->vals.push_back(token->value);
+            token->alive = 0;
+            token++;
+        }
+        if (token == tokens.end() || token->value[0] != '{'
+            || token->value.size() > 1) {
+            config_free_tree(*og_root);
+            if (token != tokens.end())
+                logger::error("'{}' Invalid syntax", token->value);
+            return false;
+        }
+
+        node->type = NODE;
+        node->parent = *root;
+        (*root)->children.push_back(node);
+        *root = node;
+    } else if (token->value == "server" || token->value == "http") {
+        try {
+            node = new config_node();
+        } catch (...) {
+            config_free_tree(*og_root);
+            return false;
+        }
+        node->key = token->value;
+        token->alive = 0;
+        token++;
+        node->type = NODE;
+        node->parent = *root;
+        (*root)->children.push_back(node);
+        *root = node;
+    }
+    if (token == tokens.end() || token->value[0] != '{') {
+
+        logger::error(" no end", token->value);
+        config_free_tree(*og_root);
+        return false;
+    }
+    token->alive = 0;
+    token++;
+    return true;
+}
+bool iter_on_tokens(std::vector<config_token>::iterator &token,
+    config_node **root, std::vector<config_token> tokens)
+{
+    config_node *og_root = *root;
+    config_node *node;
+
+    if (token->value == "server" || token->value == "location"
+        || token->value == "http") {
+        if (!create_node(token, root, tokens, &og_root))
+            return false;
+    } else if (token->value[0] == '}') {
+        if (!(*root)->parent) {
+            logger::error("Extra }", "");
+            config_free_tree(og_root);
+            return false;
+        }
+        *root = (*root)->parent;
+        token++;
+    } else {
+        node = new config_node();
+        node->parent = *root;
+        node->type = LEAF;
+        if (!key_check_syn(*token)) {
+            logger::error(" '{}' Bad syntax", token->value);
+            config_free_tree(og_root);
+            delete node;
+            return false;
+        }
+        node->key = token->value;
+        token++;
+        while (token != tokens.end() && !token->value.empty()
+            && token->value[token->value.size() - 1] != ';') {
+            node->vals.push_back(token->value);
+            token++;
+        }
+        if (token == tokens.end()) {
+            logger::error(" No end", "");
+            config_free_tree(og_root);
+            delete node;
+            return false;
+        }
+        token->value.erase(token->value.length() - 1);
+        node->vals.push_back(token->value);
+        (*root)->children.push_back(node);
+        token++;
+    }
+    return true;
+}
+
 bool token_to_tree(std::vector<config_token> tokens, config_node **tree)
 {
     config_node *root = new config_node();
-    config_node *og_root = root;
-    config_node *node;
     root->type = ROOT;
     root->key = "TOP LEVEL";
     root->parent = 0;
 
     for (std::vector<config_token>::iterator token = tokens.begin();
         token != tokens.end();) {
-        if (token->value == "server" || token->value == "location"
-            || token->value == "http") {
-            if (token + 1 == tokens.end()) {
-                config_free_tree(og_root);
-                return false;
-            }
-            if (token->value == "location") {
-                token++;
-                try {
-                    node = new config_node();
-                } catch (...) {
-                    config_free_tree(og_root);
-                    return false;
-                }
-                node->key = "location";
-                node->strict = false;
-                if (token == tokens.end()) {
-                    config_free_tree(og_root);
-                    return false;
-                }
-                while (token != tokens.end() && !token->value.empty()
-                    && token->value[token->value.size() - 1] != '{') {
-                    if (token->value[0] == '=')
-                        node->strict = true;
-                    node->vals.push_back(token->value);
-                    token++;
-                }
-                if (token == tokens.end() || token->value[0] != '{'
-                    || token->value.size() > 1) {
-                    config_free_tree(og_root);
-                    if (token != tokens.end())
-                        logger::error("'{}' Invalid syntax", token->value);
-                    return false;
-                }
-
-                node->type = NODE;
-                node->parent = root;
-                root->children.push_back(node);
-                root = node;
-            } else if (token->value == "server" || token->value == "http") {
-                try {
-                    node = new config_node();
-                } catch (...) {
-                    config_free_tree(og_root);
-                    return false;
-                }
-                node->key = token->value;
-                token++;
-                node->type = NODE;
-                node->parent = root;
-                root->children.push_back(node);
-                root = node;
-            }
-            if (token == tokens.end() || token->value[0] != '{') {
-
-                logger::error(" no end", token->value);
-                config_free_tree(og_root);
-                return false;
-            }
+        if (!iter_on_tokens(token, &root, tokens))
+            return false;
+        while (token != tokens.end() && !token->alive)
             token++;
-        } else if (token->value[0] == '}') {
-            if (!root->parent) {
-                logger::error("Extra }", "");
-                config_free_tree(og_root);
-                return false;
-            }
-            root = root->parent;
-            token++;
-        } else {
-            node = new config_node();
-            node->parent = root;
-            node->type = LEAF;
-            if (!key_check_syn(*token)) {
-                logger::error(" '{}' Bad syntax", token->value);
-                config_free_tree(og_root);
-                delete node;
-                return false;
-            }
-            node->key = token->value;
-            token++;
-            while (token != tokens.end() && !token->value.empty()
-                && token->value[token->value.size() - 1] != ';') {
-                node->vals.push_back(token->value);
-                token++;
-            }
-            if (token == tokens.end()) {
-                logger::error(" No end", "");
-                config_free_tree(og_root);
-                delete node;
-                return false;
-            }
-            token->value.erase(token->value.length() - 1);
-            node->vals.push_back(token->value);
-            root->children.push_back(node);
-            token++;
-        }
     }
     while (root->parent)
         root = root->parent;
@@ -291,7 +317,6 @@ void debug_tree(config_node *tree, int i)
     if (tree->type == NODE || tree->type == ROOT)
         i--;
 }
-
 }
 
 std::vector<Server> parse_config(const std::string &path)
@@ -305,8 +330,9 @@ std::vector<Server> parse_config(const std::string &path)
 
     if (!tokenize_config_file(path, tokens)) { }
     if (!token_to_tree(tokens, &config_root)) {
-    } else
+    } else {
         debug_tree(config_root, 0);
+    }
     const std::string root = dirpart(path);
 
     servers.push_back(Server(root, location, "example.com", "0.0.0.0:8080"));
