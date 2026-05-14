@@ -57,7 +57,7 @@ Server::Server(const std::string &root_path, const Location &root_location,
         port = std::atoi(&listen_addr[listen_addr.find(':') + 1]);
         _sockaddr.sin_port = htons(static_cast<uint16_t>(port));
     }
-    logger::info("Creating server with: \n\troot_location: {}\n\troot_path: "
+    L_INFO("Creating server with: \n\troot_location: {}\n\troot_path: "
                  "{}\n\tserver_name: {}\n\tis ipv6: {}\n\taddr: {}\n\tport: {}",
         _root_location, _root_path, _server_name, _is_ipv6, addr, port);
 }
@@ -79,22 +79,22 @@ int32_t Server::get_sockfd() const { return _sockfd; }
 
 bool Server::init(int32_t epollfd)
 {
-    logger::info("Initializing server, name : {}", _server_name);
+    L_INFO("Initializing server, name : {}", _server_name);
 
     int32_t domain = _is_ipv6 ? AF_INET6 : AF_INET;
     _sockfd = socket(domain, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (_sockfd == -1) {
-        logger::error("Failed to create socket");
+        L_ERROR("Failed to create socket");
         perror("socket");
         return false;
     }
 
-    logger::info("Created socket: {}", _sockfd);
+    L_INFO("Created socket: {}", _sockfd);
 
     int32_t opt = 1;
     if (setsockopt(_sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))
         == -1) {
-        logger::error("Failed to set socket options");
+        L_ERROR("Failed to set socket options");
         perror("setsockopt");
         close(_sockfd);
         _sockfd = -1;
@@ -105,17 +105,17 @@ bool Server::init(int32_t epollfd)
                               : reinterpret_cast<sockaddr *>(&_sockaddr);
     socklen_t addrlen = _is_ipv6 ? sizeof(_sockaddr6) : sizeof(_sockaddr);
     if (bind(_sockfd, addr, addrlen) == -1) {
-        logger::error("Failed to bind socket");
+        L_ERROR("Failed to bind socket");
         perror("bind");
         close(_sockfd);
         _sockfd = -1;
         return false;
     }
 
-    logger::info("Binded socket to address: {}", addr);
+    L_INFO("Binded socket to address: {}", addr);
 
     if (listen(_sockfd, SOMAXCONN) == -1) {
-        logger::error("Failed to listen on socket");
+        L_ERROR("Failed to listen on socket");
         perror("listen");
         close(_sockfd);
         _sockfd = -1;
@@ -126,14 +126,14 @@ bool Server::init(int32_t epollfd)
     ev.events = EPOLLIN;
     ev.data.fd = _sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
-        logger::error("Failed to control epoll instance");
+        L_ERROR("Failed to control epoll instance");
         perror("epoll_ctl: _sockfd");
         close(_sockfd);
         _sockfd = -1;
         return false;
     }
 
-    logger::info("Successfully created instance");
+    L_INFO("Successfully created instance");
 
     return true;
 }

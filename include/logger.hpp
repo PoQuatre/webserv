@@ -5,7 +5,6 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
 /*   Updated: 2026/05/15 07:40:28 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
@@ -249,3 +248,27 @@ LOG_LEVELS
 #undef MAKE_LOG_OVERLOAD
 #undef MAKE_LOG_OVERLOADS
 #undef LOG_LEVELS
+
+#ifndef NDEBUG
+
+#define L_INFO(format, ...)                                                    \
+    logger::info(                                                              \
+        "\x1b[2m{}:{}\x1b[0m " format, __FILE__, __LINE__, ##__VA_ARGS__)
+#define L_DEBUG(format, ...)                                                   \
+    logger::debug(                                                             \
+        "\x1b[2m{}:{}\x1b[0m " format, __FILE__, __LINE__, ##__VA_ARGS__)
+#define L_WARN(format, ...)                                                    \
+    logger::warn(                                                              \
+        "\x1b[2m{}:{}\x1b[0m " format, __FILE__, __LINE__, ##__VA_ARGS__)
+#define L_ERROR(format, ...)                                                   \
+    logger::error(                                                             \
+        "\x1b[2m{}:{}\x1b[0m " format, __FILE__, __LINE__, ##__VA_ARGS__)
+
+#else
+
+#define L_INFO(format, ...) logger::info(format, ##__VA_ARGS__)
+#define L_DEBUG(format, ...) logger::debug(format, ##__VA_ARGS__)
+#define L_WARN(format, ...) logger::warn(format, ##__VA_ARGS__)
+#define L_ERROR(format, ...) logger::error(format, ##__VA_ARGS__)
+
+#endif
