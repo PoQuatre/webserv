@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/13 12:04:00 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/14 11:57:31 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -34,7 +34,8 @@ CXXFLAGS	+= -Wpedantic -Wshadow -Wformat=2 -Wformat-security -Wundef \
 endif
 
 ifneq ($(filter debug debug-san asan ubsan,$(MAKECMDGOALS)),)
-CXXFLAGS	+= -g3 -fno-omit-frame-pointer -UNDEBUG
+CXXFLAGS	+= -g3 -fno-omit-frame-pointer
+CXXFLAGS	:= $(filter-out -DNDEBUG,$(CXXFLAGS))
 endif
 
 ifneq ($(filter asan,$(MAKECMDGOALS)),)
@@ -296,9 +297,13 @@ format-check: .header
 .PHONY: lint
 lint: .header
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) $(addprefix $(SRC_DIR)/,$(SRCS))
+	$(CLANG_TIDY) -p . $(addprefix $(SRC_DIR)/,$(SRCS))
 
 .PHONY: lint-fix
 lint-fix: .header
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) --fix $(addprefix $(SRC_DIR)/,$(SRCS))
+	$(CLANG_TIDY) -p . --fix $(addprefix $(SRC_DIR)/,$(SRCS))
+
+.PHONY: .ci-args
+.ci-args:
+	echo '$(CXXFLAGS) $(INCS:%=-I%)'

@@ -1,20 +1,33 @@
-name: lint
+name: CI
 
 on:
   push:
     branches: ["main"]
-    paths:
-      ["**.c", "**.cpp", "**.h", "**.hpp", "**.cxx", "**.hxx", "**.cc", "**.hh"]
+    paths: ["**.cpp", "**.hpp", "Makefile"]
   pull_request:
     branches: ["main"]
-    paths:
-      ["**.c", "**.cpp", "**.h", "**.hpp", "**.cxx", "**.hxx", "**.cc", "**.hh"]
+    paths: ["**.cpp", "**.hpp", "Makefile"]
 
 jobs:
-  lint:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - name: make
+        run: make -j
+
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Get c++ flags
+        id: flags
+        run: echo "flags=$(make .ci-args)" >> $GITHUB_OUTPUT
+
       - uses: cpp-linter/cpp-linter-action@v2
         id: linter
         env:
@@ -23,6 +36,8 @@ jobs:
           style: "file"
           tidy-checks: ""
           thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
+          extra-args: ${{ steps.flags.outputs.flags }}
+
       - name: Fail fast?!
         if: steps.linter.outputs.checks-failed > 0
         run: exit 1
