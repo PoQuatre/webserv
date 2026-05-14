@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/14 11:57:31 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/14 12:08:31 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -306,4 +306,4 @@ lint-fix: .header
 
 .PHONY: .ci-args
 .ci-args:
-	echo '$(CXXFLAGS) $(INCS:%=-I%)'
+	@echo '$(CXXFLAGS) $(INCS:%=-I%)'
