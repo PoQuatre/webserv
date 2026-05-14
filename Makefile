@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/14 12:08:31 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/14 14:26:06 by poquatre         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -297,12 +297,12 @@ format-check: .header
 .PHONY: lint
 lint: .header
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) -p . $(addprefix $(SRC_DIR)/,$(SRCS))
+	$(CLANG_TIDY) -p . --quiet $(addprefix $(SRC_DIR)/,$(SRCS))
 
 .PHONY: lint-fix
 lint-fix: .header
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) -p . --fix $(addprefix $(SRC_DIR)/,$(SRCS))
+	$(CLANG_TIDY) -p . --quiet --fix $(addprefix $(SRC_DIR)/,$(SRCS))
 
 .PHONY: .ci-args
 .ci-args:
