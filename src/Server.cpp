@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/14 08:47:35 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 14:24:43 by poquatre         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -36,7 +36,8 @@ Server::Server(const std::string &root_path, const Location &root_location,
         inet_pton(AF_INET6, addr.c_str(), &_sockaddr6.sin6_addr);
 
         _sockaddr6.sin6_port = htons(static_cast<uint16_t>(
-            // NOLINTNEXTLINE(cert-err34-c) listen_addr should be valid
+            // listen_addr should be valid at this point in time
+            // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
             std::atoi(&listen_addr[listen_addr.find("]:") + 2])));
     } else {
         _is_ipv6 = false;
@@ -46,7 +47,8 @@ Server::Server(const std::string &root_path, const Location &root_location,
         inet_pton(AF_INET, addr.c_str(), &_sockaddr.sin_addr);
 
         _sockaddr.sin_port = htons(static_cast<uint16_t>(
-            // NOLINTNEXTLINE(cert-err34-c) listen_addr should be valid
+            // listen_addr should be valid at this point in time
+            // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
             std::atoi(&listen_addr[listen_addr.find(':') + 1])));
     }
 }
