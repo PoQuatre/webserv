@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 18:29:51 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 20:23:01 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -69,7 +69,8 @@
 //
 #define MAKE_LOG_OVERLOAD(n, name, level)                                      \
     template <ENUM_PARAMS_##n(typename T)>                                     \
-    void name(const std::string &fmt, ENUM_BINARY_PARAMS_##n(const T, &arg))   \
+    inline void name(                                                          \
+        const std::string &fmt, ENUM_BINARY_PARAMS_##n(const T, &arg))         \
     {                                                                          \
         write_log(level, Formatter(fmt) CHAIN_ARGS_##n.str());                 \
     }
@@ -93,12 +94,27 @@
 namespace logger {
 
 namespace levels {
-enum LogLevel {
-    DEBUG,
-    INFO,
-    WARN,
-    ERROR,
+
+#define LOG_LEVELS                                                             \
+    X(DEBUG, debug)                                                            \
+    X(INFO, info)                                                              \
+    X(WARN, warn)                                                              \
+    X(ERROR, error)
+
+enum type {
+#define X(name, _) name,
+    LOG_LEVELS
+#undef X
 };
+
+static const char *strings[] = {
+#define X(name, _) #name,
+    LOG_LEVELS
+#undef X
+};
+
+static const std::size_t COUNT = sizeof(strings) / sizeof(*strings);
+
 }
 
 class Formatter {
@@ -138,7 +154,7 @@ private:
 
 std::ostream *out_stream = &std::cout;
 
-inline void write_log(levels::LogLevel level, const std::string &msg)
+inline void write_log(levels::type level, const std::string &msg)
 {
     char time_buff[30];
     time_t now = time(0);
@@ -167,15 +183,11 @@ inline void write_log(levels::LogLevel level, const std::string &msg)
     *out_stream << msg << '\n';
 }
 
-inline void debug(const std::string &fmt) { write_log(levels::DEBUG, fmt); }
-inline void info(const std::string &fmt) { write_log(levels::INFO, fmt); }
-inline void warn(const std::string &fmt) { write_log(levels::WARN, fmt); }
-inline void error(const std::string &fmt) { write_log(levels::ERROR, fmt); }
-
-MAKE_LOG_OVERLOADS(debug, levels::DEBUG)
-MAKE_LOG_OVERLOADS(info, levels::INFO)
-MAKE_LOG_OVERLOADS(warn, levels::WARN)
-MAKE_LOG_OVERLOADS(error, levels::ERROR)
+#define X(name, func)                                                          \
+    inline void func(const std::string &fmt) { write_log(levels::name, fmt); } \
+    MAKE_LOG_OVERLOADS(func, levels::name)
+LOG_LEVELS
+#undef X
 
 }
 
@@ -212,3 +224,4 @@ MAKE_LOG_OVERLOADS(error, levels::ERROR)
 #undef CHAIN_ARGS_10
 #undef MAKE_LOG_OVERLOAD
 #undef MAKE_LOG_OVERLOADS
+#undef LOG_LEVELS
