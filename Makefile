@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/14 14:26:06 by poquatre         ###   ########.fr        #
+#    Updated: 2026/05/14 14:29:14 by poquatre         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -286,13 +286,13 @@ update-srcs: .header
 
 .PHONY: format
 format: .header
-	@$(call progress,$(CLR_BLUE)Formatting $(CLR_TEAL)$(NAME))
-	$(CLANG_FORMAT) -i $(SRCS) $(HDRS)
-
-.PHONY: format-check
-format-check: .header
 	@$(call progress,$(CLR_BLUE)Checking formatting of $(CLR_TEAL)$(NAME))
-	$(CLANG_FORMAT) --dry-run --Werror $(SRCS) $(HDRS)
+	$(CLANG_FORMAT) --dry-run --Werror $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS)
+
+.PHONY: format-fix
+format-fix: .header
+	@$(call progress,$(CLR_BLUE)Formatting $(CLR_TEAL)$(NAME))
+	$(CLANG_FORMAT) -i $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS)
 
 .PHONY: lint
 lint: .header
