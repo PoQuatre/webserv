@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 18:17:16 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/14 18:29:51 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -64,10 +64,10 @@
 #define CHAIN_ARGS_10 CHAIN_ARGS_9 CHAIN_ARG(9)
 
 //
-// LOG_MAKE_OVERLOAD(n, level) -> defines a template overload of `level` for n
+// MAKE_LOG_OVERLOAD(n, level) -> defines a template overload of `level` for n
 // arguments
 //
-#define LOG_MAKE_OVERLOAD(n, name, level)                                      \
+#define MAKE_LOG_OVERLOAD(n, name, level)                                      \
     template <ENUM_PARAMS_##n(typename T)>                                     \
     void name(const std::string &fmt, ENUM_BINARY_PARAMS_##n(const T, &arg))   \
     {                                                                          \
@@ -79,16 +79,16 @@
 // n in [1, 10]
 //
 #define MAKE_LOG_OVERLOADS(name, level)                                        \
-    LOG_MAKE_OVERLOAD(1, name, level)                                          \
-    LOG_MAKE_OVERLOAD(2, name, level)                                          \
-    LOG_MAKE_OVERLOAD(3, name, level)                                          \
-    LOG_MAKE_OVERLOAD(4, name, level)                                          \
-    LOG_MAKE_OVERLOAD(5, name, level)                                          \
-    LOG_MAKE_OVERLOAD(6, name, level)                                          \
-    LOG_MAKE_OVERLOAD(7, name, level)                                          \
-    LOG_MAKE_OVERLOAD(8, name, level)                                          \
-    LOG_MAKE_OVERLOAD(9, name, level)                                          \
-    LOG_MAKE_OVERLOAD(10, name, level)
+    MAKE_LOG_OVERLOAD(1, name, level)                                          \
+    MAKE_LOG_OVERLOAD(2, name, level)                                          \
+    MAKE_LOG_OVERLOAD(3, name, level)                                          \
+    MAKE_LOG_OVERLOAD(4, name, level)                                          \
+    MAKE_LOG_OVERLOAD(5, name, level)                                          \
+    MAKE_LOG_OVERLOAD(6, name, level)                                          \
+    MAKE_LOG_OVERLOAD(7, name, level)                                          \
+    MAKE_LOG_OVERLOAD(8, name, level)                                          \
+    MAKE_LOG_OVERLOAD(9, name, level)                                          \
+    MAKE_LOG_OVERLOAD(10, name, level)
 
 namespace logger {
 
@@ -210,5 +210,5 @@ MAKE_LOG_OVERLOADS(error, levels::ERROR)
 #undef CHAIN_ARGS_8
 #undef CHAIN_ARGS_9
 #undef CHAIN_ARGS_10
-#undef LOG_MAKE_OVERLOAD
+#undef MAKE_LOG_OVERLOAD
 #undef MAKE_LOG_OVERLOADS
