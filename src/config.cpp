@@ -34,7 +34,7 @@ std::string dirpart(const std::string &path)
 
 std::vector<Server> parse_config(const std::string &path)
 {
-    logger::info("Parsing configs");
+    L_INFO("Parsing configs");
 
     std::vector<Server> servers;
     Location location = {};
@@ -43,6 +43,6 @@ std::vector<Server> parse_config(const std::string &path)
 
     servers.push_back(Server(root, location, "example.com", "0.0.0.0:8080"));
 
-    logger::info("Successfully parsed configs");
+    L_INFO("Successfully parsed configs");
     return servers;
 }
