@@ -78,7 +78,6 @@ INCS =	$(SRC_DIR)/ \
 
 ##begin: SRCS
 SRCS =	config.cpp \
-		logger.cpp \
 		main.cpp \
 		Server.cpp
 ##end: SRCS
