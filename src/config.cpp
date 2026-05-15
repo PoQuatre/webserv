@@ -37,7 +37,7 @@ std::vector<Server> parse_config(const std::string &path)
     L_INFO("Parsing configs");
 
     std::vector<Server> servers;
-    Location location = {};
+    Location location = { };
 
     const std::string root = dirpart(path);
 
