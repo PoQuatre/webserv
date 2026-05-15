@@ -122,7 +122,7 @@ bool Server::init(int32_t epollfd)
         return false;
     }
 
-    epoll_event ev = {};
+    epoll_event ev = { };
     ev.events = EPOLLIN;
     ev.data.fd = _sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
