@@ -97,6 +97,7 @@ namespace logger {
 namespace levels {
 
 #define LOG_LEVELS                                                             \
+    X(TRACE, trace)                                                            \
     X(DEBUG, debug)                                                            \
     X(INFO, info)                                                              \
     X(WARN, warn)                                                              \
@@ -162,7 +163,7 @@ inline std::ostream *&out_stream()
 inline levels::type &log_level()
 {
 #ifndef NDEBUG
-    static levels::type lvl = levels::DEBUG;
+    static levels::type lvl = levels::TRACE;
 #else
     static levels::type lvl = levels::INFO;
 #endif
@@ -184,6 +185,9 @@ inline void write_log(levels::type level, const std::string &msg)
     *out_stream() << "\x1b[2m" << time_buff << "\x1b[0m ";
 
     switch (level) {
+    case levels::TRACE:
+        *out_stream() << "\x1b[0;1;7;92m TRACE \x1b[0m ";
+        break;
     case levels::DEBUG:
         *out_stream() << "\x1b[0;1;7;95m DEBUG \x1b[0m ";
         break;
@@ -251,6 +255,9 @@ LOG_LEVELS
 
 #ifndef NDEBUG
 
+#define L_TRACE(format, ...)                                                   \
+    logger::trace(                                                             \
+        "\x1b[2m{}:{}\x1b[0m " format, __FILE__, __LINE__, ##__VA_ARGS__)
 #define L_INFO(format, ...)                                                    \
     logger::info(                                                              \
         "\x1b[2m{}:{}\x1b[0m " format, __FILE__, __LINE__, ##__VA_ARGS__)
@@ -266,6 +273,7 @@ LOG_LEVELS
 
 #else
 
+#define L_TRACE(format, ...) logger::trace(format, ##__VA_ARGS__)
 #define L_INFO(format, ...) logger::info(format, ##__VA_ARGS__)
 #define L_DEBUG(format, ...) logger::debug(format, ##__VA_ARGS__)
 #define L_WARN(format, ...) logger::warn(format, ##__VA_ARGS__)
