@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/15 10:06:12 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/15 18:22:32 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -37,7 +37,7 @@ std::vector<Server> parse_config(const std::string &path)
     L_DEBUG("Parsing configs");
 
     std::vector<Server> servers;
-    Location location = { };
+    Location location = {};
 
     const std::string root = dirpart(path);
 

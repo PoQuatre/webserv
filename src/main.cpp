@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/15 13:53:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/15 18:31:13 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@
 #include <iostream>
 #include <vector>
 
+#include "cli.hpp"
 #include "logger.hpp"
 #include "webserv.hpp"
 
@@ -102,10 +103,9 @@ void handle_client(int32_t epollfd, int32_t clientfd)
 
 int32_t main(int32_t ac, char **av)
 {
-    if (ac < 2) {
-        std::cerr << "Usage ./webserv <configuration>\n";
+    cli::ParsedArgs args = cli::parse_arguments(ac, av);
+    if (args.should_quit)
         return 1;
-    }
 
     L_INFO("Started webserv");
 

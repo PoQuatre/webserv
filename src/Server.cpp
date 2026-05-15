@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/15 10:21:15 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/15 19:14:32 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -122,7 +122,7 @@ bool Server::init(int32_t epollfd)
         return false;
     }
 
-    epoll_event ev = { };
+    epoll_event ev = {};
     ev.events = EPOLLIN;
     ev.data.fd = _sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
