@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/15 10:19:02 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/15 13:53:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@
 #include <iostream>
 #include <vector>
 
+#include "logger.hpp"
 #include "webserv.hpp"
 
 #define MAX_EVENTS 16

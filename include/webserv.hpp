@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:55:47 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 19:21:31 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/15 13:51:53 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,5 @@
 #include <vector>
 
 #include "Server.hpp"
-#include "logger.hpp"
 
 std::vector<Server> parse_config(const std::string &path);
