@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/14 22:12:25 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/15 10:19:02 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,13 +39,14 @@ bool is_sockfd(const std::vector<Server> &servers, int32_t fd)
 
 void accept_client(int32_t epollfd, int32_t sockfd)
 {
-    L_INFO("Accepting client");
 
     int32_t clientfd = accept(sockfd, NULL, NULL);
     if (clientfd == -1) {
-        L_ERROR("Failed to accept client");
+        L_WARN("Failed to accept client");
         return;
     }
+
+    L_DEBUG("Accepting client");
 
     fcntl(clientfd, F_SETFL, O_NONBLOCK);
 
@@ -57,7 +58,7 @@ void accept_client(int32_t epollfd, int32_t sockfd)
 
 void close_client(int32_t epollfd, int32_t clientfd)
 {
-    L_INFO("Closing client");
+    L_DEBUG("Closing client nb: {}", clientfd);
 
     epoll_ctl(epollfd, EPOLL_CTL_DEL, clientfd, NULL);
     close(clientfd);
@@ -70,31 +71,30 @@ void handle_client(int32_t epollfd, int32_t clientfd)
     char buf[4096];
     ssize_t nbytes = recv(clientfd, buf, sizeof(buf), 0);
     if (nbytes <= 0) {
-        L_ERROR("failed to read from client");
+        L_WARN("failed to read from client, got 0 bytes");
         close_client(epollfd, clientfd);
         return;
     }
 
-    L_INFO("Got {} bytes from client data: {}", nbytes, buf);
+    L_TRACE("Got {} bytes from client data: {}", nbytes, buf);
 
     // TODO: the real http handling should go here
     char *path = buf + 5;
     *strchr(path, ' ') = 0;
 
-    L_INFO("Got path: {}", path);
+    L_TRACE("Got path: {}", path);
     int32_t fd = open(path, O_RDONLY);
     if (fd == -1) {
-        L_ERROR("Failed to open path");
+        L_WARN("Failed to open path");
         close_client(epollfd, clientfd);
         return;
     }
 
-    L_INFO("Sending response");
+    L_TRACE("Sending response");
     send(clientfd, "HTTP/1.0 200 OK\r\n\r\n", 19, 0);
     sendfile(clientfd, fd, 0, 4096);
     close(fd);
     close_client(epollfd, clientfd);
-    L_INFO("Closing connection");
 }
 
 }
@@ -112,7 +112,7 @@ int32_t main(int32_t ac, char **av)
 
     // NOTE: the parameter of epoll_create doesn't mean anything since
     // linux 2.6.8 (or 14/08/2004)
-    L_INFO("Creating epoll instance");
+    L_DEBUG("Creating epoll instance");
     int32_t epollfd = epoll_create(42);
     if (epollfd == -1) {
         L_ERROR("Failed to create epoll instance");
@@ -132,12 +132,12 @@ int32_t main(int32_t ac, char **av)
         }
     }
 
-    L_INFO("Starting main wait loop");
+    L_DEBUG("Starting main wait loop");
 
     epoll_event events[MAX_EVENTS];
     while (true) {
 
-        L_INFO("Waiting for connections");
+        L_TRACE("Waiting for connections");
         int32_t nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if (nfds == -1) {
             L_ERROR("Failed to wait for epoll");
@@ -145,7 +145,7 @@ int32_t main(int32_t ac, char **av)
             return 1;
         }
 
-        L_INFO("Got {} connections ", nfds);
+        L_TRACE("Got {} connections", nfds);
         for (int32_t i = 0; i < nfds; ++i) {
             if (is_sockfd(servers, events[i].data.fd)) {
                 accept_client(epollfd, events[i].data.fd);
