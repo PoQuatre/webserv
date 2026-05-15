@@ -14,14 +14,12 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
-#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "Server.hpp"
 #include "logger.hpp"
 #include "webserv.hpp"
 namespace {
