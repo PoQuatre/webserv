@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 03:35:00 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/17 23:18:28 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,9 +20,9 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
-#include <iostream>
 #include <vector>
 
+#include "cli.hpp"
 #include "logger.hpp"
 #include "webserv.hpp"
 
@@ -56,7 +56,7 @@ bool init_signal_handlers(int32_t epollfd)
     (void)signal(SIGTERM, &signal_handler);
     (void)signal(SIGQUIT, &signal_handler);
 
-    epoll_event ev = { };
+    epoll_event ev = {};
     ev.events = EPOLLIN;
     ev.data.fd = g_signal_pipe[0];
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, g_signal_pipe[0], &ev) == -1) {
@@ -154,10 +154,9 @@ void handle_client(int32_t epollfd, int32_t clientfd)
 
 int32_t main(int32_t ac, char **av)
 {
-    if (ac < 2) {
-        std::cerr << "Usage ./webserv <configuration>\n";
+    cli::ParsedArgs args = cli::parse_arguments(ac, av);
+    if (args.should_quit)
         return 1;
-    }
 
     std::vector<Server> servers;
     if (!parse_config(servers, av[1]))
