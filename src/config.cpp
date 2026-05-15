@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/17 03:45:35 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/17 23:18:14 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -575,7 +575,7 @@ bool create_servers(config_node *root, std::vector<Server> &servers)
             if (!get_first_val(node_stack[i], "listen", addr)) {
                 L_ERROR("no listen");
             } else {
-                Location location = { };
+                Location location = {};
                 if (get_direct_child(
                         node_stack[i], "location", location_node)) {
                     if (get_first_val(location_node, "root", root_str)) {
@@ -585,7 +585,7 @@ bool create_servers(config_node *root, std::vector<Server> &servers)
                         valid = true;
                     }
                 } else {
-                    Location location = { };
+                    Location location = {};
                     servers.push_back(
                         Server(root_str, location, servername, addr));
                     valid = true;
@@ -604,7 +604,7 @@ bool create_servers(config_node *root, std::vector<Server> &servers)
 bool parse_config(std::vector<Server> &servers, const std::string &path)
 {
 
-    Location location = { };
+    Location location = {};
     std::vector<config_token> tokens;
     config_node *config_root = NULL;
     uint32_t error_count = 0;
