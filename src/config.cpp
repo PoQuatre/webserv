@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/16 19:34:05 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/16 21:52:30 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -82,7 +82,7 @@ std::string tkt(const config_token &tok)
 bool key_check_syn(config_token token)
 {
     std::size_t i;
-    std::string config_ok_special_char = "_-/\\$.";
+    std::string config_ok_special_char = "_-/\\$.[]";
 
     for (i = 0; i < token.value.size(); i++) {
         if (!std::isalnum(token.value[i])
@@ -378,6 +378,7 @@ bool config_create_leaf(config_node **root, std::vector<config_token> &tokens,
     try {
         node = new config_node();
     } catch (...) {
+        valid = false;
         return false;
     }
     node->parent = *root;
@@ -490,7 +491,12 @@ bool iter_on_tokens(config_node **root, std::vector<config_token> &tokens,
 bool token_to_tree(std::vector<config_token> &tokens, config_node **tree,
     bool recovery, int &deep, uint32_t &error_count)
 {
-    config_node *root = new config_node();
+    config_node *root;
+    try {
+        root = new config_node();
+    } catch (...) {
+        return false;
+    }
     config_node *og_root = root;
     config_token tok;
     config_token *token = &tok;
@@ -616,7 +622,6 @@ return true;
 
 bool create_servers(config_node *root, std::vector<Server> &servers, int deep)
 {
-    Location location = { };
     bool valid = false;
     std::vector<config_node *> node_stack = root->children;
 
@@ -627,13 +632,20 @@ bool create_servers(config_node *root, std::vector<Server> &servers, int deep)
             std::string addr;
             config_node *location_node = 0;
             if (!get_first_val(node_stack[i], "server_name", servername)
-                || !get_first_val(node_stack[i], "listen", addr)
-                || !get_direct_child(
-                    node_stack[i], "location", location_node)) {
+                || !get_first_val(node_stack[i], "listen", addr)) {
             } else {
-                // create_one_server(servers, node_stack[i], servername, addr);
-                if (get_first_val(location_node, "root", root_str)) {
-                    L_DEBUG("config-parser: server create");
+                Location location = { };
+                L_DEBUG("INSIDE {}", node_stack[i]->key);
+                if (get_direct_child(
+                        node_stack[i], "location", location_node)) {
+                    if (get_first_val(location_node, "root", root_str)) {
+                        L_DEBUG("config-parser: server create");
+                        servers.push_back(
+                            Server(root_str, location, servername, addr));
+                        valid = true;
+                    }
+                } else {
+                    Location location = { };
                     servers.push_back(
                         Server(root_str, location, servername, addr));
                     valid = true;
@@ -644,6 +656,7 @@ bool create_servers(config_node *root, std::vector<Server> &servers, int deep)
                 node_stack[i]->children.end());
         }
     }
+    L_INFO("{} server from config file", servers.size());
     (void)deep;
     return valid;
 }
