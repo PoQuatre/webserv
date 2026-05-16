@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/15 14:05:02 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/16 19:34:05 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,7 +17,6 @@
 #include <cctype>
 #include <cstddef>
 #include <fstream>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -54,8 +53,6 @@ struct config_node {
     bool strict;
     uint32_t line;
 };
-
-void debug_tree(config_node *tree, int i);
 
 std::string dirpart(const std::string &path)
 {
@@ -532,6 +529,7 @@ bool token_to_tree(std::vector<config_token> &tokens, config_node **tree,
     return true;
 }
 
+#ifndef NDEBUG
 void debug_tree(config_node *tree, int i)
 {
     if (!tree)
@@ -556,6 +554,7 @@ void debug_tree(config_node *tree, int i)
         i--;
     }
 }
+#endif
 
 bool get_first_val(config_node *node, const std::string &key, std::string &val)
 {
@@ -634,7 +633,7 @@ bool create_servers(config_node *root, std::vector<Server> &servers, int deep)
             } else {
                 // create_one_server(servers, node_stack[i], servername, addr);
                 if (get_first_val(location_node, "root", root_str)) {
-					L_DEBUG("config-parser: server create");
+                    L_DEBUG("config-parser: server create");
                     servers.push_back(
                         Server(root_str, location, servername, addr));
                     valid = true;
@@ -672,9 +671,9 @@ bool parse_config(
 
     const std::string root = dirpart(path);
 
-	#ifndef NDEBUG 
+#ifndef NDEBUG
     debug_tree(config_root, 0);
-	#endif // !
+#endif // !
     if (!create_servers(config_root, servers, 3)) {
         L_ERROR("Invalid configuration file no server scope");
         config_free_tree(config_root);
