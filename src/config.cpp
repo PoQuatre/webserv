@@ -672,7 +672,9 @@ bool parse_config(
 
     const std::string root = dirpart(path);
 
+	#ifndef NDEBUG 
     debug_tree(config_root, 0);
+	#endif // !
     if (!create_servers(config_root, servers, 3)) {
         L_ERROR("Invalid configuration file no server scope");
         config_free_tree(config_root);
