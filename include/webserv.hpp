@@ -20,4 +20,5 @@
 
 #include "Server.hpp"
 
-std::vector<Server> parse_config(const std::string &path);
+bool parse_config(
+    std::vector<Server> &servers, const std::string &path, bool recovery);
