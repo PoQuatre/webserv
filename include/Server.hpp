@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/14 19:32:19 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/16 23:13:59 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,6 +47,7 @@ public:
     ~Server();
 
     bool init(int32_t epollfd);
+    void shutdown(int32_t epollfd);
     int32_t get_sockfd() const;
 
 private:

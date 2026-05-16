@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/15 10:21:15 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/16 23:14:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -134,6 +134,14 @@ bool Server::init(int32_t epollfd)
     }
 
     return true;
+}
+
+void Server::shutdown(int32_t epollfd)
+{
+    L_DEBUG("Stopping server {}", _server_name);
+
+    epoll_ctl(epollfd, EPOLL_CTL_DEL, _sockfd, NULL);
+    close(_sockfd);
 }
 
 std::ostream &operator<<(std::ostream &os, const Location &location)
