@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/17 02:00:38 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/17 03:38:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,9 +34,11 @@ namespace {
     X(EQUAL, '=')                                                              \
     X(COM, '#')
 
+enum token_type {
 #define X(name, _) name,
-enum token_type { TOKEN_TYPE };
+    TOKEN_TYPE
 #undef X
+};
 
 enum node_type { ROOT, NODE, LEAF };
 
@@ -86,11 +88,14 @@ token_type config_get_token_type(config_token token)
 
 bool config_is_special_char(char c)
 {
-    return (0
-#define X(_, val) || c == (val)
+    switch (c) {
+#define X(_, val) case val:
         TOKEN_TYPE
 #undef X
-    );
+        return true;
+    default:
+        return false;
+    }
 }
 
 bool tokenize_config_file(
@@ -618,7 +623,7 @@ bool parse_config(std::vector<Server> &servers, const std::string &path)
 
 #ifndef NDEBUG
     debug_tree(config_root, 0);
-#endif // !
+#endif
     if (!create_servers(config_root, servers)) {
         L_ERROR("invalid configuration file no server scope");
         config_free_tree(config_root);

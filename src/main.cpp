@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 03:33:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/17 03:35:00 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -162,6 +162,7 @@ int32_t main(int32_t ac, char **av)
     std::vector<Server> servers;
     if (!parse_config(servers, av[1]))
         return 1;
+
     // NOTE: the parameter of epoll_create doesn't mean anything since
     // linux 2.6.8 (or 14/08/2004)
     L_DEBUG("Creating epoll instance");
