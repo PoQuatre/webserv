@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 23:18:28 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/17 23:19:12 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -154,6 +154,8 @@ void handle_client(int32_t epollfd, int32_t clientfd)
 
 int32_t main(int32_t ac, char **av)
 {
+    logger::print_date() = false;
+
     cli::ParsedArgs args = cli::parse_arguments(ac, av);
     if (args.should_quit)
         return 1;
@@ -162,6 +164,7 @@ int32_t main(int32_t ac, char **av)
     if (!parse_config(servers, av[1]))
         return 1;
 
+    logger::print_date() = true;
     // NOTE: the parameter of epoll_create doesn't mean anything since
     // linux 2.6.8 (or 14/08/2004)
     L_DEBUG("Creating epoll instance");
