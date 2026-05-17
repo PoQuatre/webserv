@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/17 03:45:35 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/17 17:57:09 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -237,7 +237,8 @@ bool create_location_node(config_node *&root, std::vector<config_token> &tokens,
         root = node;
         return true;
     }
-    if (token->type != tokens::WORD && token->line == line) {
+    if (token->type != tokens::WORD && token->type != tokens::BRACE_CLOSE
+        && token->line == line) {
         L_ERROR("unexpected '{}' (line {})", token->value, line);
         error_count++;
         config_skip_line(tokens, token->line);
@@ -292,7 +293,7 @@ bool create_node(config_node *&root, std::vector<config_token> &tokens,
         root = node;
         return true;
     }
-    if (token->type != tokens::WORD) {
+    if (token->type != tokens::WORD && token->type != tokens::BRACE_CLOSE) {
         L_ERROR("unexpected '{}' (line {})", token->value, line);
         error_count++;
         config_skip_line(tokens, token->line);
@@ -570,7 +571,7 @@ bool create_servers(config_node *root, std::vector<Server> &servers)
             std::string addr;
             config_node *location_node = 0;
             if (!get_first_val(node_stack[i], "server_name", servername)) {
-                L_ERROR("no server name");
+                L_ERROR("no server_name");
             }
             if (!get_first_val(node_stack[i], "listen", addr)) {
                 L_ERROR("no listen");
@@ -622,7 +623,7 @@ bool parse_config(std::vector<Server> &servers, const std::string &path)
     debug_tree(config_root, 0);
 #endif
     if (!create_servers(config_root, servers)) {
-        L_ERROR("invalid configuration file no server scope");
+        L_ERROR("invalid configuration file invalid/no server scope");
         config_free_tree(config_root);
         return false;
     }
