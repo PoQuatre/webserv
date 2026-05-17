@@ -160,9 +160,8 @@ int32_t main(int32_t ac, char **av)
     }
 
     std::vector<Server> servers;
-    if (!parse_config(servers, av[1], true))
+    if (!parse_config(servers, av[1]))
         return 1;
-
     // NOTE: the parameter of epoll_create doesn't mean anything since
     // linux 2.6.8 (or 14/08/2004)
     L_DEBUG("Creating epoll instance");
