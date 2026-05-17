@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 23:12:41 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/17 23:48:58 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -102,7 +102,8 @@ namespace levels {
     X(DEBUG, debug)                                                            \
     X(INFO, info)                                                              \
     X(WARN, warn)                                                              \
-    X(ERROR, error)
+    X(ERROR, error)                                                            \
+    X(NOTHING, nothing)
 
 enum type {
 #define X(name, _) name,
@@ -209,6 +210,8 @@ inline void write_log(levels::type level, const std::string &msg)
         break;
     case levels::ERROR:
         *out_stream() << "\x1b[0;1;7;31m ERROR \x1b[0m ";
+        break;
+    case levels::NOTHING:
         break;
     }
 

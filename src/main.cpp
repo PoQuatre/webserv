@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 23:19:12 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/17 23:52:04 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -56,7 +56,7 @@ bool init_signal_handlers(int32_t epollfd)
     (void)signal(SIGTERM, &signal_handler);
     (void)signal(SIGQUIT, &signal_handler);
 
-    epoll_event ev = { };
+    epoll_event ev = {};
     ev.events = EPOLLIN;
     ev.data.fd = g_signal_pipe[0];
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, g_signal_pipe[0], &ev) == -1) {
@@ -159,6 +159,11 @@ int32_t main(int32_t ac, char **av)
     cli::ParsedArgs args = cli::parse_arguments(ac, av);
     if (args.should_quit)
         return 1;
+
+    if (args.flags[cli::flags::SILENT])
+        logger::log_level() = logger::levels::NOTHING;
+    if (args.flags[cli::flags::VERBOSE])
+        logger::log_level() = logger::levels::TRACE;
 
     std::vector<Server> servers;
     if (!parse_config(servers, av[1]))
