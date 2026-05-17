@@ -56,7 +56,7 @@ bool init_signal_handlers(int32_t epollfd)
     (void)signal(SIGTERM, &signal_handler);
     (void)signal(SIGQUIT, &signal_handler);
 
-    epoll_event ev = {};
+    epoll_event ev = { };
     ev.events = EPOLLIN;
     ev.data.fd = g_signal_pipe[0];
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, g_signal_pipe[0], &ev) == -1) {
