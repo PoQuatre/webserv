@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/17 03:38:10 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/17 03:45:35 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,7 +26,9 @@
 
 namespace {
 
-#define TOKEN_TYPE                                                             \
+namespace tokens {
+
+#define TOKENS                                                                 \
     X(BRACE_OPEN, '{')                                                         \
     X(BRACE_CLOSE, '}')                                                        \
     X(WORD, ' ')                                                               \
@@ -34,17 +36,25 @@ namespace {
     X(EQUAL, '=')                                                              \
     X(COM, '#')
 
-enum token_type {
+enum type {
 #define X(name, _) name,
-    TOKEN_TYPE
+    TOKENS
 #undef X
 };
+
+const char *strings[] = {
+#define X(name, _) #name,
+    TOKENS
+#undef X
+};
+
+}
 
 enum node_type { ROOT, NODE, LEAF };
 
 struct config_token {
     std::string value;
-    token_type type;
+    tokens::type type;
     bool alive;
     uint32_t size;
     uint32_t line;
@@ -60,29 +70,16 @@ struct config_node {
     uint32_t line;
 };
 
-std::string get_token_type_string(const config_token &tok)
-{
-    switch (tok.type) {
-#define X(name, _)                                                             \
-    case name:                                                                 \
-        return #name;
-        TOKEN_TYPE
-#undef X
-    default:
-        return "WORD";
-    }
-}
-
-token_type config_get_token_type(config_token token)
+tokens::type config_get_token_type(config_token token)
 {
     switch (token.value[0]) {
 #define X(name, val)                                                           \
     case val:                                                                  \
-        return name;
-        TOKEN_TYPE
+        return tokens::name;
+        TOKENS
 #undef X
     default:
-        return WORD;
+        return tokens::WORD;
     }
 }
 
@@ -90,7 +87,7 @@ bool config_is_special_char(char c)
 {
     switch (c) {
 #define X(_, val) case val:
-        TOKEN_TYPE
+        TOKENS
 #undef X
         return true;
     default:
@@ -204,14 +201,14 @@ bool create_location_node(config_node *&root, std::vector<config_token> &tokens,
     node->line = line;
     if (!config_see_next_token(tokens, token, true))
         return true;
-    if (token->type == EQUAL) {
+    if (token->type == tokens::EQUAL) {
         node->strict = true;
         if (!config_see_next_token(tokens, token, true)) {
             delete node;
             return true;
         }
     }
-    if (token->type != WORD && token->type != BRACE_OPEN) {
+    if (token->type != tokens::WORD && token->type != tokens::BRACE_OPEN) {
         L_ERROR("location need one parameter (line {})", line);
         error_count++;
         valid = false;
@@ -219,12 +216,12 @@ bool create_location_node(config_node *&root, std::vector<config_token> &tokens,
         delete node;
         return true;
     }
-    if (token->type == WORD) {
+    if (token->type == tokens::WORD) {
         node->vals.push_back(token->value);
         if (!config_see_next_token(tokens, token, true))
             return true;
     }
-    if (token->type != BRACE_OPEN) {
+    if (token->type != tokens::BRACE_OPEN) {
         L_ERROR("special keyword 'location', need "
                 "OPEN_BRACE after arg (line {})",
             line);
@@ -240,7 +237,7 @@ bool create_location_node(config_node *&root, std::vector<config_token> &tokens,
         root = node;
         return true;
     }
-    if (token->type != WORD && token->line == line) {
+    if (token->type != tokens::WORD && token->line == line) {
         L_ERROR("unexpected '{}' (line {})", token->value, line);
         error_count++;
         config_skip_line(tokens, token->line);
@@ -276,7 +273,7 @@ bool create_node(config_node *&root, std::vector<config_token> &tokens,
         delete node;
         return true;
     }
-    if (token->type != BRACE_OPEN) {
+    if (token->type != tokens::BRACE_OPEN) {
         L_ERROR("special keyword '{}', need "
                 "OPEN_BRACE (line {})",
             node->key, line);
@@ -295,7 +292,7 @@ bool create_node(config_node *&root, std::vector<config_token> &tokens,
         root = node;
         return true;
     }
-    if (token->type != WORD) {
+    if (token->type != tokens::WORD) {
         L_ERROR("unexpected '{}' (line {})", token->value, line);
         error_count++;
         config_skip_line(tokens, token->line);
@@ -318,9 +315,9 @@ bool recovery(std::vector<config_token> &tokens, config_token *&token,
             return true;
         }
         line = token->line;
-        if (token->type == BRACE_OPEN) {
+        if (token->type == tokens::BRACE_OPEN) {
             depth++;
-        } else if (token->type == BRACE_CLOSE) {
+        } else if (token->type == tokens::BRACE_CLOSE) {
             depth--;
             if (depth == 0) {
                 break;
@@ -377,8 +374,8 @@ bool config_create_leaf(config_node *&root, std::vector<config_token> &tokens,
         delete node;
         return true;
     }
-    while (
-        (token->type == EQUAL || token->type == WORD) && token->line == line) {
+    while ((token->type == tokens::EQUAL || token->type == tokens::WORD)
+        && token->line == line) {
         node->vals.push_back(token->value);
         if (!config_see_next_token(tokens, token, false)) {
             delete node;
@@ -392,8 +389,8 @@ bool config_create_leaf(config_node *&root, std::vector<config_token> &tokens,
             return true;
         }
     }
-    if (token->type != END) {
-        if (token->type == BRACE_OPEN && token->line == line) {
+    if (token->type != tokens::END) {
+        if (token->type == tokens::BRACE_OPEN && token->line == line) {
             return recovery(tokens, token, node, line, error_count);
         }
         L_ERROR("no instruction end ';' (line {})", line);
@@ -406,9 +403,9 @@ bool config_create_leaf(config_node *&root, std::vector<config_token> &tokens,
 
     if (!config_see_next_token(tokens, token, false))
         return true;
-    if (token->type != WORD && token->type != BRACE_CLOSE) {
+    if (token->type != tokens::WORD && token->type != tokens::BRACE_CLOSE) {
         L_ERROR(
-            "extra {} (line {})", get_token_type_string(*token), token->line);
+            "extra {} (line {})", tokens::strings[token->type], token->line);
         error_count++;
         config_skip_line(tokens, line);
         valid = false;
@@ -437,7 +434,7 @@ bool iter_on_tokens(config_node *&root, std::vector<config_token> &tokens,
         if (!create_node(root, tokens, og_root, valid, token, error_count))
             return false;
         depth++;
-    } else if (token->type == BRACE_CLOSE) {
+    } else if (token->type == tokens::BRACE_CLOSE) {
         std::string old_token_value = token->value;
         if (!config_see_next_token(tokens, token, false))
             return true;
@@ -449,7 +446,7 @@ bool iter_on_tokens(config_node *&root, std::vector<config_token> &tokens,
         }
         depth--;
         root = root->parent;
-    } else if (token->type == BRACE_OPEN) {
+    } else if (token->type == tokens::BRACE_OPEN) {
         L_ERROR("opened an undefined scope (line {})", line);
         error_count++;
         config_skip_line(tokens, line);
