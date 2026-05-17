@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/15 18:01:28 by uanglade          #+#    #+#             */
-/*   Updated: 2026/05/15 19:15:17 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/17 23:00:39 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,26 +30,20 @@ void print_help()
                  "\t-s, --silent make the server silent\n";
 }
 
-bool parse_flags(cli::ParsedArgs &args, char *argument)
+bool parse_flags(cli::ParsedArgs &args, const std::string &argument)
 {
     std::string flags_triggers[3];
 
-    if (std::string(argument) == "--help") {
+    if (argument == "--help") {
         print_help();
         args.should_quit = true;
         return false;
     }
 
     if (argument[1] == '-') {
-        flags_triggers[0] = "test";
-        flags_triggers[1] = "silent";
-        flags_triggers[2] = "verbose";
-
         bool found_flag = false;
-        for (uint32_t i = 0;
-            i < sizeof(flags_triggers) / sizeof(*flags_triggers); i++) {
-
-            if (flags_triggers[i] == &argument[2]) {
+        for (uint32_t i = 0; i < cli::flags::COUNT; i++) {
+            if (cli::flags::long_flags[i] == argument.substr(2)) {
                 args.flags[i] = true;
                 found_flag = true;
             }
@@ -60,22 +54,18 @@ bool parse_flags(cli::ParsedArgs &args, char *argument)
             return false;
         }
     } else {
-        flags_triggers[0] = "t";
-        flags_triggers[1] = "s";
-        flags_triggers[2] = "v";
-
-        uint32_t i = 0;
-        while (argument[++i]) {
+        std::string::const_iterator cite = argument.end();
+        for (std::string::const_iterator cit = ++argument.begin(); cit != cite;
+            ++cit) {
             bool found_flag = false;
-            if (argument[i] == 'h') {
+            if (*cit == 'h') {
                 print_help();
                 args.should_quit = true;
                 return false;
             }
-            for (uint32_t j = 0;
-                j < sizeof(flags_triggers) / sizeof(*flags_triggers); j++) {
+            for (uint32_t j = 0; j < cli::flags::COUNT; j++) {
 
-                if (argument[i] == flags_triggers[j][0]) {
+                if (*cit == cli::flags::short_flags[j]) {
                     args.flags[j] = true;
                     found_flag = true;
                 }

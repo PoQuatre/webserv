@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/15 13:50:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/17 23:12:41 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -171,19 +171,28 @@ inline levels::type &log_level()
     return lvl;
 }
 
+inline bool &print_date()
+{
+    static bool print_date = true;
+
+    return print_date;
+}
+
 inline void write_log(levels::type level, const std::string &msg)
 {
     if (level < log_level())
         return;
 
-    char time_buff[30];
-    time_t now = time(0);
-    struct tm tstruct;
-    tstruct = *localtime(&now);
-    if (!strftime(time_buff, sizeof(time_buff), "%Y-%m-%d %X", &tstruct))
-        return;
+    if (print_date()) {
+        char time_buff[30];
+        time_t now = time(0);
+        struct tm tstruct;
+        tstruct = *localtime(&now);
+        if (!strftime(time_buff, sizeof(time_buff), "%Y-%m-%d %X", &tstruct))
+            return;
 
-    *out_stream() << "\x1b[2m" << time_buff << "\x1b[0m ";
+        *out_stream() << "\x1b[2m" << time_buff << "\x1b[0m ";
+    }
 
     switch (level) {
     case levels::TRACE:

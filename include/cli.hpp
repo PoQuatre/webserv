@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/15 17:57:29 by uanglade          #+#    #+#             */
-/*   Updated: 2026/05/15 18:30:45 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/17 22:47:41 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,18 +21,30 @@ namespace cli {
 namespace flags {
 
 #define CLI_FLAGS                                                              \
-    X(TEST)                                                                    \
-    X(SILENT)                                                                  \
-    X(VERBOSE)
+    X(TEST, "test", 't')                                                       \
+    X(SILENT, "silent", 's')                                                   \
+    X(VERBOSE, "verbose", 'v')
 
 enum type {
-#define X(name) name,
+#define X(name, __, _) name,
     CLI_FLAGS
 #undef X
 };
 
 static const char *strings[] = {
-#define X(name) #name,
+#define X(name, __, _) #name,
+    CLI_FLAGS
+#undef X
+};
+
+__attribute__((unused)) static const char *long_flags[] = {
+#define X(__, name, _) name,
+    CLI_FLAGS
+#undef X
+};
+
+__attribute__((unused)) static const char short_flags[] = {
+#define X(__, _, name) name,
     CLI_FLAGS
 #undef X
 };
