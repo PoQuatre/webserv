@@ -152,6 +152,7 @@ endif
 # **************************************************************************** #
 
 define update_sources
+	export LANG=C LANGUAGE=C LC_ALL=C; \
 	update_files() { \
 		start="$$1"; \
 		indent="$$2"; \
