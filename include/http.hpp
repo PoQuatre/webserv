@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/18 07:29:17 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/18 07:34:02 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,8 @@
 #include <stdint.h>
 
 #include <cstddef>
+#include <map>
+#include <string>
 
 #ifndef UNUSED
 #define UNUSED __attribute__((unused))
@@ -131,6 +133,14 @@ UNUSED
 static const std::size_t COUNT = sizeof(strings) / sizeof(*strings);
 
 }
+
+struct request {
+    methods::type method;
+    std::string uri;
+    versions::type version;
+    std::map<std::string, std::string> headers;
+    std::string body;
+};
 
 }
 
