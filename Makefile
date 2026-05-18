@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/14 22:54:08 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/18 08:00:25 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -77,17 +77,19 @@ INCS =	$(SRC_DIR)/ \
 # **************************************************************************** #
 
 ##begin: SRCS
-SRCS =	cli.cpp \
+SRCS =	Connection.cpp \
+		Server.cpp \
+		cli.cpp \
 		config.cpp \
-		main.cpp \
-		Server.cpp
+		main.cpp
 ##end: SRCS
 
 ##begin: HDRS
-HDRS =	include/cli.hpp \
+HDRS =	include/Connection.hpp \
+		include/Server.hpp \
+		include/cli.hpp \
 		include/http.hpp \
 		include/logger.hpp \
-		include/Server.hpp \
 		include/webserv.hpp
 ##end: HDRS
 
