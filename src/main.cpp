@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 23:52:04 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/18 08:01:32 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,11 +22,14 @@
 #include <cstring>
 #include <vector>
 
+#include "Connection.hpp"
 #include "cli.hpp"
 #include "logger.hpp"
 #include "webserv.hpp"
 
 #define MAX_EVENTS 16
+#define EPOLL_RDONLY (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
+#define EPOLL_RDWR (EPOLL_RDONLY | EPOLLOUT)
 
 namespace {
 
@@ -90,64 +93,109 @@ bool is_sockfd(const std::vector<Server> &servers, int32_t fd)
     return false;
 }
 
-void accept_client(int32_t epollfd, int32_t sockfd)
+void accept_client(
+    int32_t epollfd, int32_t sockfd, std::map<int32_t, Connection> &connections)
 {
-
     int32_t clientfd = accept(sockfd, NULL, NULL);
     if (clientfd == -1) {
-        L_WARN("Failed to accept client");
+        L_WARN("Failed to accept client: {}", strerror(errno));
         return;
     }
 
-    L_DEBUG("Accepting client");
+    L_DEBUG("Accepting client {}", clientfd);
 
     fcntl(clientfd, F_SETFL, O_NONBLOCK);
 
     epoll_event ev;
-    ev.events = EPOLLIN;
+    ev.events = EPOLL_RDONLY;
     ev.data.fd = clientfd;
     epoll_ctl(epollfd, EPOLL_CTL_ADD, clientfd, &ev);
+
+    connections[clientfd] = Connection(clientfd);
 }
 
-void close_client(int32_t epollfd, int32_t clientfd)
+void close_client(int32_t epollfd, int32_t clientfd, Connection &conn)
 {
-    L_DEBUG("Closing client nb: {}", clientfd);
+    L_DEBUG("Closing client {}", clientfd);
 
     epoll_ctl(epollfd, EPOLL_CTL_DEL, clientfd, NULL);
+    conn.reset();
     close(clientfd);
 }
 
-void handle_client(int32_t epollfd, int32_t clientfd)
+void process_client(
+    int32_t epollfd, int32_t fd, uint32_t evts, Connection &conn)
 {
-    L_INFO("Handling client");
+    bool close_conn = false;
 
-    char buf[4096];
-    ssize_t nbytes = recv(clientfd, buf, sizeof(buf), 0);
-    if (nbytes <= 0) {
-        L_WARN("failed to read from client, got 0 bytes");
-        close_client(epollfd, clientfd);
-        return;
+    if (evts & EPOLLIN) {
+        if (!conn.on_readable()) {
+            close_conn = true;
+        } else if (conn.is_parse_complete()) {
+            conn.enqueue_response(
+                "HTTP/1.0 200 OK\r\n\r\nThis is just a test,\nwe will "
+                "need to insert request handling here\n");
+
+            // FIXME: delete this comment when adding HTTP/1.1
+            // NOLINTNEXTLINE(bugprone-branch-clone) this temporary
+            if (!conn.on_writable()) {
+                close_conn = true;
+            } else if (conn.is_sending()) {
+                epoll_event ev = { };
+                ev.events = EPOLL_RDWR;
+                ev.data.fd = fd;
+                epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
+            } else {
+                close_conn = true;
+                // TODO: un-comment the line below when HTTP/1.1 is ready
+                // conn.reset();
+            }
+        }
     }
 
-    L_TRACE("Got {} bytes from client data: {}", nbytes, buf);
-
-    // TODO: the real http handling should go here
-    char *path = buf + 5;
-    *strchr(path, ' ') = 0;
-
-    L_TRACE("Got path: {}", path);
-    int32_t fd = open(path, O_RDONLY);
-    if (fd == -1) {
-        L_WARN("Failed to open path");
-        close_client(epollfd, clientfd);
-        return;
+    if (!close_conn && evts & EPOLLOUT) {
+        // FIXME: delete this comment when adding HTTP/1.1
+        // NOLINTNEXTLINE(bugprone-branch-clone) this temporary
+        if (!conn.on_writable()) {
+            close_conn = true;
+        } else if (!conn.is_sending()) {
+            close_conn = true;
+            // TODO: un-comment the lines below when HTTP/1.1 is ready
+            // epoll_event ev = { };
+            // ev.events = EPOLL_RDONLY;
+            // ev.data.fd = fd;
+            // epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
+            // conn.reset();
+        }
     }
 
-    L_TRACE("Sending response");
-    send(clientfd, "HTTP/1.0 200 OK\r\n\r\n", 19, 0);
-    sendfile(clientfd, fd, 0, 4096);
-    close(fd);
-    close_client(epollfd, clientfd);
+    if (evts & (EPOLLERR | EPOLLHUP | EPOLLRDHUP))
+        close_conn = true;
+
+    if (close_conn)
+        close_client(epollfd, fd, conn);
+}
+
+void process_io_events(int32_t epollfd, std::vector<Server> &servers,
+    std::map<int32_t, Connection> &connections, bool &running,
+    epoll_event (&events)[MAX_EVENTS], int32_t nfds)
+{
+    for (int32_t i = 0; i < nfds; ++i) {
+        int32_t fd = events[i].data.fd;
+
+        if (fd == g_signal_pipe[0]) {
+            drain_signal_pipe();
+            running = false;
+            continue;
+        }
+
+        if (is_sockfd(servers, fd)) {
+            accept_client(epollfd, fd, connections);
+            continue;
+        }
+
+        process_client(epollfd, fd, events[i].events, connections[fd]);
+    }
 }
 
 }
@@ -170,9 +218,9 @@ int32_t main(int32_t ac, char **av)
         return 1;
 
     logger::print_date() = true;
+    L_DEBUG("Creating epoll instance");
     // NOTE: the parameter of epoll_create doesn't mean anything since
     // linux 2.6.8 (or 14/08/2004)
-    L_DEBUG("Creating epoll instance");
     int32_t epollfd = epoll_create(42);
     if (epollfd == -1) {
         L_ERROR("Failed to create epoll instance: {}", strerror(errno));
@@ -193,10 +241,11 @@ int32_t main(int32_t ac, char **av)
 
     L_INFO("Started webserv");
 
+    std::map<int32_t, Connection> connections;
+
     epoll_event events[MAX_EVENTS];
     bool running = true;
     while (running) {
-
         L_TRACE("Waiting for connections");
         int32_t nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if (nfds == -1) {
@@ -209,18 +258,7 @@ int32_t main(int32_t ac, char **av)
         }
 
         L_TRACE("Got {} events", nfds);
-        for (int32_t i = 0; i < nfds; ++i) {
-            int32_t fd = events[i].data.fd;
-
-            if (fd == g_signal_pipe[0]) {
-                drain_signal_pipe();
-                running = false;
-            } else if (is_sockfd(servers, fd)) {
-                accept_client(epollfd, fd);
-            } else {
-                handle_client(epollfd, fd);
-            }
-        }
+        process_io_events(epollfd, servers, connections, running, events, nfds);
     }
 
     L_INFO("Stopped webserv");
