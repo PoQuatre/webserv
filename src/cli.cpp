@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/15 18:01:28 by uanglade          #+#    #+#             */
-/*   Updated: 2026/05/17 23:00:39 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/18 02:22:34 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -98,8 +98,7 @@ ParsedArgs parse_arguments(uint32_t ac, char **av)
     bool path_found = false;
 
     for (uint32_t i = 1; i < ac; i++) {
-        char *found = std::strchr(av[i], '-');
-        if (!found) {
+        if (av[i][0] != '-') {
             if (path_found) {
                 L_ERROR("Got two path: {}, {}", args.config_path, av[i]);
                 args.should_quit = true;
@@ -107,18 +106,10 @@ ParsedArgs parse_arguments(uint32_t ac, char **av)
             }
             args.config_path = av[i];
             path_found = true;
-        } else if (found == &av[i][0]) {
-            if (!parse_flags(args, av[i]))
-                return args;
-
-        } else {
-            L_ERROR("incorrect argument: {}", av[i]);
-            args.should_quit = true;
+        } else if (!parse_flags(args, av[i]))
             return args;
-        }
     }
 
     return args;
 }
-
 }
