@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/15 18:01:28 by uanglade          #+#    #+#             */
-/*   Updated: 2026/05/18 02:22:34 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/18 02:25:53 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -106,8 +106,9 @@ ParsedArgs parse_arguments(uint32_t ac, char **av)
             }
             args.config_path = av[i];
             path_found = true;
-        } else if (!parse_flags(args, av[i]))
+        } else if (!parse_flags(args, av[i])) {
             return args;
+        }
     }
 
     return args;
