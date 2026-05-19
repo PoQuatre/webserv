@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/18 07:34:02 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/19 06:26:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -143,6 +143,8 @@ struct request {
 };
 
 }
+
+std::ostream &operator<<(std::ostream &os, const http::request &req);
 
 #undef HTTP_METHODS
 #undef HTTP_VERSIONS

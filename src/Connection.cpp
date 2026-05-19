@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/18 07:35:30 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/19 06:29:28 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -65,6 +65,9 @@ bool Connection::on_readable()
             break;
         }
     }
+
+    if (progressed && _parse_state == PARSE_COMPLETE)
+        L_DEBUG("Client {} requested: {}", _fd, _request);
 
     return _parse_state != PARSE_ERROR;
 }
