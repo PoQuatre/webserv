@@ -81,6 +81,7 @@ SRCS =	Connection.cpp \
 		Server.cpp \
 		cli.cpp \
 		config.cpp \
+		http.cpp \
 		main.cpp
 ##end: SRCS
 
