@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/19 06:29:28 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/19 06:32:32 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -133,7 +133,7 @@ bool Connection::try_parse_request_line()
         _parse_state = PARSE_ERROR;
         return false;
     }
-    _request.uri = _recv_buf.substr(notsp, sp);
+    _request.uri = _recv_buf.substr(notsp, sp - notsp);
 
     notsp = _recv_buf.find_first_not_of(" \f\r\t\v", sp);
     if (notsp >= crlf && _request.method == http::methods::GET) {
