@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/18 08:00:25 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/19 08:57:18 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -136,8 +136,8 @@ ifeq ($(CAPTURE_STEPS),)
 ifeq ($(MAKELEVEL),0)
 CURRENT_STEP	:= 0
 NEXT_STEP		:= $(shell expr $(CURRENT_STEP) + 1)
-TOTAL_STEPS		:= $(shell CAPTURE_STEPS=1 $(MAKE) -n --no-print-directory \
-					$(MAKECMDGOALS) 2>/dev/null | grep -E -c '^#progress$$')
+TOTAL_STEPS		:= $(shell CAPTURE_STEPS=1 CXXFLAGS='$(call shell_escape,$(OLD_CXXFLAGS))' \
+					$(MAKE) -n --no-print-directory $(MAKECMDGOALS) | grep -E -c '^#progress$$')
 endif
 
 STEPS_WIDTH		:= $(shell printf '$(TOTAL_STEPS)' | wc -m)
@@ -249,7 +249,7 @@ ifeq ($(NOPRETTY),)
 		' ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ \n' \
 		'$(CLR_RESET)\n' \
 		'$(CLR_TEAL)NAME: $(CLR_YELLOW)$(NAME)$(if $(HASH),@$(HASH))\n' \
-		'$(CLR_TEAL)AUTHOR: $(CLR_YELLOW)$(AUTHOR)\n' \
+		'$(CLR_TEAL)AUTHORS: $(CLR_YELLOW)$(AUTHORS)\n' \
 		'$(if $(DATE),$(CLR_TEAL)DATE: $(CLR_YELLOW)$(DATE)\n)' \
 		'$(CLR_TEAL)CXX: $(CLR_YELLOW)$(CXX)\n' \
 		'$(CLR_TEAL)CXXFLAGS: $(CLR_YELLOW)$(CXXFLAGS)\n' \
