@@ -4,9 +4,6 @@ NamespaceIndentation: None
 ColumnLimit: 80
 SpaceInEmptyBlock: false
 SpacesInAngles: Leave
-BreakAfterAttributes: Always
-Macros:
-  - __unused=[[maybe_unused]]
 IncludeBlocks: Regroup
 BreakTemplateDeclarations: Yes
 IncludeCategories:
