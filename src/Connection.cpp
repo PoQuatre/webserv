@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/19 06:32:32 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/20 09:50:20 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -212,6 +212,15 @@ struct find_result {
 
 find_result find_header_end(const std::string &buf)
 {
+    if (!buf.empty() && buf[0] == '\n') {
+        find_result r = { 0, 1 };
+        return r;
+    }
+    if (buf.size() >= 2 && buf[0] == '\r' && buf[1] == '\n') {
+        find_result r = { 0, 2 };
+        return r;
+    }
+
     std::size_t len = buf.size();
     for (std::size_t i = 1; i < len; ++i) {
         if (buf[i] != '\n')
@@ -240,7 +249,8 @@ find_result find_header_end(const std::string &buf)
         }
     }
 
-    return (find_result) { std::string::npos, 0 };
+    find_result r = { std::string::npos, 0 };
+    return r;
 }
 
 }
