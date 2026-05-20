@@ -140,7 +140,7 @@ bool Connection::try_parse_request_line()
     if (notsp >= crlf && _request.method == http::methods::GET) {
         _request.version = http::versions::HTTP09;
         _recv_buf.erase(0, crlf + crlf_len);
-        _parse_state = READING_HEADERS;
+        _parse_state = PARSE_COMPLETE;
         return true;
     }
     if (notsp >= crlf) {
