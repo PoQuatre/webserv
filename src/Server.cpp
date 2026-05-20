@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/17 23:18:38 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/05/22 04:55:26 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,11 +19,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
 #include "logger.hpp"
 
-Server::Server(const std::string &root_path, const Location &root_location,
-    const std::string &server_name, const std::string &listen_addr)
+Server::Server(const std::string &root_path,
+    const std::vector<Location> &root_location, const std::string &server_name,
+    const std::string &listen_addr)
     : _root_location(root_location)
     , _root_path(root_path)
     , _server_name(server_name)
@@ -144,27 +146,37 @@ void Server::shutdown(int32_t epollfd)
     close(_sockfd);
 }
 
-std::ostream &operator<<(std::ostream &os, const Location &location)
+std::ostream &operator<<(
+    std::ostream &os, const std::vector<Location> &locations)
 {
-    os << "{";
-    os << "path: " << location.path << ", ";
-    os << "config: " << location.config << ", ";
-    os << "exact: " << std::boolalpha << location.exact << ", ";
+    Location location;
+    for (std::vector<Location>::const_iterator it = locations.begin();
+        it != locations.end(); it++) {
+        location = *it;
+        os << "{";
+        os << "path: " << location.path << ", ";
+        os << "config: " << location.config << ", ";
+        os << "exact: " << std::boolalpha << location.exact << ", ";
 
-    os << "children: [";
+        os << "children: [";
 
-    if (!location.children.empty()) {
-        for (size_t i = 0; i < location.children.size(); ++i) {
-            os << " " << location.children[i];
+        /*
+        if (!location.children.empty()) {
+            for (size_t i = 0; i < location.children.size(); ++i) {
+                os << " " << location.children[i];
 
-            if (i + 1 < location.children.size())
-                os << ",";
+                if (i + 1 < location.children.size())
+                    os << ",";
+            }
         }
+    */
+
+        os << "]";
+        if (it == locations.end() - 1)
+            os << "}\n";
+        else
+            os << "}\n\n";
     }
-
-    os << "]";
-    os << "}";
-
     return os;
 }
 

@@ -1,0 +1,972 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   config-parser.cpp                                  :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
+/*   Updated: 2026/05/22 06:49:03 by nlaporte         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "config-parser.hpp"
+
+#include <cstddef>
+#include <fstream>
+#include <stack>
+#include <string>
+#include <vector>
+
+#include "Server.hpp"
+#include "http.hpp"
+#include "logger.hpp"
+
+namespace {
+
+const char *strings[] = {
+#define X(_, __, ___, text, ____, _____, ______, _______, ________) #text,
+    KEYWORDS
+#undef X
+};
+
+const char *keywords_strs[] = {
+#define X(_, text, ___, __, ____, _____, ______, _______, ________) #text,
+    KEYWORDS
+#undef X
+};
+
+tokens::type config_get_token_type(config_token token)
+{
+    switch (token.value[0]) {
+#define X(name, val)                                                           \
+    case val:                                                                  \
+        return tokens::name;
+        TOKENS
+#undef X
+    default:
+        return tokens::WORD;
+    }
+}
+
+keywords::type config_get_token_keyword(const config_token &token) // NOLINT
+{
+    if (token.value.empty())
+        return keywords::UNKNOWN;
+#define X(name, val, _, __, ___, ____, _____, _______, ______)                 \
+    if ((val) == token.value)                                                  \
+        return keywords::name;
+    KEYWORDS
+#undef X
+    return keywords::UNKNOWN;
+}
+
+bool config_is_special_char(char c)
+{
+    switch (c) {
+#define X(_, val) case val:
+        TOKENS
+#undef X
+        return true;
+    default:
+        return false;
+    }
+}
+
+void push_configuration(const config_node &node,
+    std::map<keywords::type, std::vector<std::string> > &conf)
+{
+    for (std::vector<config_node *>::const_iterator it = node.children.begin();
+        it != node.children.end(); it++) {
+
+        if ((*it)->type == LEAF) {
+            conf.insert(std::pair<keywords::type, std::vector<std::string> >(
+                (*it)->keyword, (*it)->vals));
+        }
+    }
+}
+
+void set_location_value(const config_node &node, Config &location_conf)
+{
+    char *p;
+    switch (node.keyword) {
+    case keywords::ROOT:
+        location_conf.root = *(node.vals.begin());
+        break;
+    case keywords::AUTOINDEX:
+        location_conf.autoindex = (*node.vals.begin()) == "on";
+        break;
+    case keywords::CLIENT_MAX_BODY_SIZE:
+        location_conf.client_max_body_size
+            = std::strtol(node.vals.begin()->c_str(), &p, 10);
+        // TODO: handle error
+        break;
+    default:
+        return;
+    }
+}
+
+void create_location(
+    std::vector<config_node *>::const_iterator &node_it, Config &location_conf)
+{
+    char *p;
+
+    // iterate on children location node
+    for (std::vector<config_node *>::iterator it = (*node_it)->children.begin();
+        it != (*node_it)->children.end(); it++) {
+        if ((*it)->keyword == keywords::ERROR_PAGE) {
+            // node->value ERROR_PAGE
+            for (std::vector<std::string>::iterator it2 = (*it)->vals.begin();
+                it2 != (*it)->vals.end(); it2++) {
+                std::size_t code = std::strtol((*it2).c_str(), &p, 10);
+                if (code < 512 && code > 1)
+                    location_conf.error_pages[code]
+                        = &(*((*it)->vals.end() - 1));
+                // TODO: Handle bad code
+            }
+        }
+
+        set_location_value(**it, location_conf);
+
+        if ((*it)->keyword == keywords::LIMIT_EXCEPT) {
+            std::memset(location_conf.allowed_methods, 0,
+                sizeof(bool) * http::methods::COUNT);
+            // node->values LIMIT_EXCEPT
+            for (std::vector<std::string>::iterator it2 = (*it)->vals.begin();
+                it2 != (*it)->vals.end(); it2++) {
+                for (std::size_t i = 0; i < http::methods::COUNT; i++)
+                    if (*it2 == http::methods::strings[i]) {
+                        location_conf.allowed_methods[i] = 1;
+                    }
+            }
+        }
+    }
+}
+
+void create_all_location(const config_node &node, Config &inital_config,
+    std::vector<Location> &location_vector)
+{
+    // Iter on server children node
+    for (std::vector<config_node *>::const_iterator it = node.children.begin();
+        it != node.children.end(); it++) {
+
+        // Create new location from server configuration
+        if ((*it)->keyword == keywords::LOCATION) {
+            Config location_conf = inital_config;
+            Location location_struct;
+
+            location_struct.exact = (*it)->strict;
+            if ((*it)->vals.empty()) {
+                location_struct.path = "/";
+            } else {
+                location_struct.path = *(*it)->vals.begin();
+            }
+
+            create_location(it, location_conf);
+
+            location_struct.config = location_conf;
+            location_vector.push_back(location_struct);
+        }
+    }
+}
+
+bool node_already_present(std::vector<config_node *> &node,
+    const keywords::type &key, bool delete_node = false)
+{
+    if (key == keywords::ERROR_PAGE || key == keywords::SERVER_NAME)
+        return false;
+    for (std::vector<config_node *>::iterator it = node.begin();
+        it != node.end(); it++) {
+        if ((*it)->keyword == key) {
+            if (delete_node)
+                node.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+
+void initalize_server_config(
+    std::map<keywords::type, std::vector<std::string> > &server_conf,
+    Config &inital_config)
+{
+    // Configure error_pages on server config
+    if (server_conf.find(keywords::ERROR_PAGE) != server_conf.end()) {
+        std::vector<std::string> error_page_vec
+            = server_conf.find(keywords::ERROR_PAGE)->second;
+        for (std::vector<std::string>::iterator it2 = error_page_vec.begin();
+            it2 != error_page_vec.end(); it2++) {
+            char *p;
+            std::size_t code = std::strtol((*it2).c_str(), &p, 10);
+            // TODO: handle error
+            if (code < 512 && code > 1)
+                inital_config.error_pages[code]
+                    = &(*(error_page_vec.end() - 1));
+        }
+    }
+
+    if (server_conf.find(keywords::AUTOINDEX) != server_conf.end()) {
+        inital_config.autoindex
+            = *server_conf.find(keywords::AUTOINDEX)->second.begin() == "on";
+    } else {
+        inital_config.autoindex = false;
+    }
+
+    if (server_conf.find(keywords::CLIENT_MAX_BODY_SIZE) != server_conf.end()) {
+        char *p;
+        // TODO: handle error
+        inital_config.client_max_body_size
+            = std::strtol(server_conf.find(keywords::CLIENT_MAX_BODY_SIZE)
+                              ->second.begin()
+                              ->c_str(),
+                &p, 10);
+    } else {
+        inital_config.client_max_body_size = 0;
+    }
+}
+
+bool check_controversal_directive(
+    std::vector<config_node *> &node, const keywords::type &key, uint32_t line)
+{
+    if (key == keywords::PROXY_PASS) {
+        if (node_already_present(node, keywords::ROOT)) {
+            L_ERROR("directive 'proxy_pass' conflicting with 'root' (line {})",
+                line);
+            return true;
+        }
+        if (node_already_present(node, keywords::TRY_FILES)) {
+            L_ERROR(
+                "directive 'proxy_pass' conflicting with 'try_files' (line {})",
+                line);
+            return true;
+        }
+        if (node_already_present(node, keywords::AUTOINDEX)) {
+            L_ERROR(
+                "directive 'proxy_pass' conflicting with 'autoindex' (line {})",
+                line);
+            return true;
+        }
+        if (node_already_present(node, keywords::INDEX)) {
+            L_ERROR("directive 'proxy_pass' conflicting with 'index' (line {})",
+                line);
+            return true;
+        }
+    }
+    if ((key == keywords::ROOT || key == keywords::TRY_FILES
+            || key == keywords::AUTOINDEX || key == keywords::INDEX)
+        && node_already_present(node, keywords::PROXY_PASS)) {
+        L_ERROR("directive '{}' conflicting with 'proxy_pass' (line {})",
+            keywords_strs[key], line);
+        return true;
+    }
+    return false;
+}
+
+bool directive_is_in_valide_scope( // NOLINT
+    keywords::type root_keyword, keywords::type directive)
+{
+    if (root_keyword == keywords::GLOBAL && directive == keywords::HTTP)
+        return true;
+#define X(name, __, ___, ____, http, server, location, _______, ________)      \
+    if (root_keyword == keywords::HTTP && directive == keywords::name) {       \
+        return (http);                                                         \
+    }                                                                          \
+    if (root_keyword == keywords::SERVER && directive == keywords::name) {     \
+        return (server);                                                       \
+    }                                                                          \
+    if (root_keyword == keywords::LOCATION && directive == keywords::name) {   \
+        return (location);                                                     \
+    }
+    KEYWORDS
+#undef X
+    return false;
+}
+
+uint32_t get_max_args(const config_token &token)
+{
+    if (token.value.empty())
+        return 1;
+    switch (token.keyword) {
+#define X(name, _, arg, __, ___, ____, _____, _______, ______)                 \
+    case keywords::name:                                                       \
+        return arg;
+        KEYWORDS // NOLINT
+#undef X
+    }
+    return 1;
+}
+
+bool is_a_valid_val(
+    __attribute__((unused)) std::string &val, const keywords::type &type)
+{
+    switch (type) {
+#define X(name, _, __, ___, ____, _____, ______, check)                        \
+    case keywords::name:                                                       \
+        return CALL(check, val);                                               \
+        KEYWORDS
+#undef X
+    default:
+        return true;
+    }
+}
+}
+
+Parser::Parser(const std::string &path)
+    : _path(path)
+    , _root(NULL)
+    , _act_token(NULL)
+    , _err_count(0)
+    , _depth(0)
+    , _valid(true)
+{
+    L_TRACE("configuration file: {}", _path);
+}
+
+Parser::~Parser() { free_tree(_root); }
+
+void Parser::skip_line(const uint32_t &line)
+{
+    for (std::vector<config_token>::iterator it = _tokens.begin();
+        it != _tokens.end(); it++) {
+        if (line == it->line) {
+            it->alive = 0;
+        }
+        if (line < it->line)
+            break;
+    }
+}
+
+bool Parser::see_next_token()
+{
+    for (std::vector<config_token>::iterator it = _tokens.begin();
+        it != _tokens.end(); it++) {
+        if (it->alive) {
+            _act_token = &(*it);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Parser::consume_next_token()
+{
+    for (std::vector<config_token>::iterator it = _tokens.begin();
+        it != _tokens.end(); it++) {
+        if (it->alive) {
+            it->alive = 0;
+            _act_token = &(*it);
+            return true;
+        }
+    }
+    return false;
+}
+
+void Parser::config_set_alive_last_token()
+{
+    if (_tokens.empty())
+        return;
+    for (std::vector<config_token>::iterator ite = _tokens.end() - 1;
+        ite != _tokens.begin(); ite--) {
+        if (!ite->alive) {
+            ite->alive = 1;
+            return;
+        }
+    }
+}
+
+// ignoring undefined scope
+// scope_name is copy of token->str for prevent this value from being changed
+void Parser::skip_scope(
+    const std::string &scope_name, uint32_t line, const std::string &root_key)
+{
+    int depth = 1;
+    // Init recovery
+    while (_act_token->type != tokens::BRACE_OPEN) {
+        if (!consume_next_token()) {
+            return;
+        }
+    }
+
+    while (consume_next_token()) {
+        if (_act_token->type == tokens::BRACE_OPEN) {
+            depth++;
+        } else if (_act_token->type == tokens::BRACE_CLOSE) {
+            depth--;
+        }
+        if (depth == 0) {
+            L_ERROR("can't open '{}' scope (line {}), inside '{}' scope, line "
+                    "{} to {} "
+                    "ignored",
+                scope_name, line, root_key, line, _act_token->line);
+            skip_line(line);
+            _err_count++;
+            _valid = false;
+            return;
+        }
+    }
+}
+
+bool Parser::create_location_node()
+{
+    config_node *node;
+    uint32_t line = _act_token->line;
+
+    // check scope validity in scope
+    if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
+        skip_scope(_act_token->value, line, _root->key);
+        return true;
+    }
+
+    // See next token without consume them
+    if (!see_next_token())
+        return true;
+
+    // Initialize node
+    try {
+        node = new config_node();
+        node->strict = false;
+        node->key = "location";
+        node->line = line;
+        node->type = NODE;
+        node->parent = _root;
+        node->keyword = keywords::LOCATION;
+    } catch (...) {
+        return false;
+    }
+
+    // Manage no arg location
+    if (_act_token->type == tokens::BRACE_OPEN) {
+        consume_next_token();
+        _root->children.push_back(node);
+        _root = node;
+        _depth++;
+        return true;
+    }
+
+    //  Handle strict location
+    if (_act_token->type == tokens::EQUAL) {
+        node->strict = true;
+        consume_next_token();
+        // No other token, token_to_tree() handle scope error
+        if (!see_next_token()) {
+            delete node;
+            return true;
+        }
+    }
+
+    // if next token is bad, print an error and abort current line parsing
+    if (_act_token->type != tokens::WORD) {
+        if (node->strict)
+            L_ERROR("strict location need one parameter (line {})", line);
+        else
+            L_ERROR(
+                "location need one parameter or BRACE_OPEN (line {})", line);
+        _err_count++;
+        _valid = false;
+        skip_scope(_act_token->value, line, _root->key);
+        delete node;
+        return true;
+    }
+
+    // push last child
+    node->vals.push_back(_act_token->value);
+    consume_next_token();
+    if (!see_next_token()) {
+        delete node;
+        return true;
+    }
+
+    // verify is a new scope is opened
+    if (_act_token->type != tokens::BRACE_OPEN) {
+        L_ERROR("special keyword 'location', need "
+                "OPEN_BRACE after arg (line {})",
+            line);
+        config_set_alive_last_token();
+        skip_scope(_act_token->value, line, _root->key);
+        _err_count++;
+        _valid = false;
+        delete node;
+        return true;
+    }
+
+    // destroy BRACE_OPEN token
+    consume_next_token();
+    _depth++;
+    node->key = "location";
+    node->line = line;
+    node->type = NODE;
+    node->keyword = keywords::LOCATION;
+    node->parent = _root;
+
+    _root->children.push_back(node);
+    _root = node;
+    return true;
+}
+
+bool Parser::create_node()
+{
+    config_node *node;
+    uint32_t line;
+
+    line = _act_token->line;
+
+    // check scope validity in scope
+    if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
+        skip_scope(_act_token->value, line, _root->key);
+        return true;
+    }
+
+    // Initialize node
+    try {
+        node = new config_node();
+        node->key = _act_token->value;
+        node->type = NODE;
+        node->parent = _root;
+        node->keyword = _act_token->keyword;
+        node->line = line;
+    } catch (...) {
+        return false;
+    }
+
+    // http and server token must be followed directly by BRACE_OPEN
+    if (!see_next_token() || _act_token->type != tokens::BRACE_OPEN) {
+        L_ERROR("special keyword '{}', need "
+                "OPEN_BRACE (line {})",
+            node->key, line);
+        skip_line(line);
+        _valid = false;
+        _err_count++;
+        delete node;
+        return true;
+    }
+
+    // destroy BRACE_OPEN token
+    consume_next_token();
+    _depth++;
+    _root->children.push_back(node);
+    _root = node;
+    return true;
+}
+
+bool Parser::create_leaf()
+{
+    config_node *node;
+    config_token tmp_token;
+    uint32_t line = _act_token->line;
+
+    // Directive need word token identified from keywords to start
+    if (_act_token->type != tokens::WORD
+        || _act_token->keyword == keywords::UNKNOWN) {
+        tmp_token = *_act_token;
+        if (!see_next_token() || tmp_token.keyword != keywords::OPEN_SCOPE) {
+            L_ERROR("unknown directive '{}' (line {}) for all directive {}",
+                tmp_token.value, line, strings[tmp_token.keyword]);
+            skip_line(line);
+            _err_count++;
+            _valid = false;
+            return true;
+        }
+        skip_scope(tmp_token.value, tmp_token.line, _root->key);
+        _valid = false;
+        return true;
+    }
+
+    // Check for duplicate key
+    if (node_already_present(_root->children, _act_token->keyword, true)) {
+        L_WARN("directive '{}' (line {}) already present in node {} (line {}), "
+               "rewrite directive",
+            _act_token->value, line, _root->key, _root->line);
+    }
+
+    if (check_controversal_directive(
+            _root->children, _act_token->keyword, line)) {
+        skip_line(line);
+        _valid = false;
+        _err_count++;
+        return true;
+    }
+
+    // check  directive validity in scope
+    if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
+        L_ERROR("directive '{}' (line {}) is in a bad scope '{}' (line {}) {}",
+            _act_token->value, line, _root->key, _root->line,
+            strings[_act_token->keyword]);
+        skip_line(line);
+        _valid = false;
+        _err_count++;
+        return true;
+    }
+
+    // Initialize node
+    try {
+        node = new config_node();
+        node->key = _act_token->value;
+        node->keyword = _act_token->keyword;
+        node->type = LEAF;
+    } catch (...) {
+        return false;
+    }
+
+    tmp_token = *_act_token;
+    if (!see_next_token()) {
+        delete node;
+        return true;
+    }
+
+    // add value(s) to leaf
+    uint32_t ac = 0;
+    uint32_t limit = get_max_args(tmp_token);
+
+    while (_act_token->type == tokens::WORD) {
+        consume_next_token();
+        if (!is_a_valid_val(_act_token->value, tmp_token.keyword)) {
+            L_ERROR("'{}' is invalid value for '{}'", _act_token->value,
+                tmp_token.value);
+            _valid = false;
+            skip_line(line);
+            return true;
+        }
+        node->vals.push_back(_act_token->value);
+        ac++;
+        if (!see_next_token()) {
+            delete node;
+            return true;
+        }
+    }
+
+    if (ac > limit && _act_token->type != tokens::END) {
+        L_ERROR("directive '{}' can have up to {} argument(s) (line {}) {}",
+            node->key, limit, line, strings[tmp_token.keyword]);
+        skip_line(line);
+        _err_count++;
+        _valid = false;
+        node->children.clear();
+        delete node;
+        return true;
+    }
+
+    // check directive end
+    if (_act_token->type != tokens::END) {
+        if (_act_token->type == tokens::BRACE_OPEN
+            && _act_token->line == line) {
+            skip_scope(tmp_token.value, line, _root->key);
+            delete node;
+            return true;
+        }
+        L_ERROR("no instruction end ';' (line {})", line);
+        skip_line(line);
+        _err_count++;
+        _valid = false;
+        node->children.clear();
+        delete node;
+        return true;
+    }
+
+    // destroy END token
+    consume_next_token();
+
+    // check directive value(s) is not empty
+    if (node->vals.empty()) {
+        L_WARN("directive '{}' (line {}) has no value, directive ignored",
+            node->key, _act_token->line);
+        delete node;
+        return true;
+    }
+    node->parent = _root;
+    _root->children.push_back(node);
+    return true;
+}
+
+bool Parser::iter_on_tokens()
+{
+    uint32_t line;
+
+    if (!consume_next_token())
+        return false;
+
+    line = _act_token->line;
+    // redirects the creation of a node to the corresponding type
+    switch (_act_token->keyword) {
+    case keywords::LOCATION:
+        return create_location_node();
+
+    case keywords::HTTP:
+    case keywords::SERVER:
+        return create_node();
+
+    case keywords::OPEN_SCOPE:
+        skip_scope(_act_token->value, line, _root->key);
+        return true;
+
+    case keywords::CLOSE_SCOPE:
+        if (!_root->parent) {
+            L_ERROR(
+                "unexpected '}' all scopes are already closed (line {})", line);
+            _err_count++;
+            _valid = false;
+            skip_line(line);
+            return true;
+        }
+        _depth--;
+        _root = _root->parent;
+        return true;
+
+    default:
+        if (!create_leaf()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Parser::token_to_tree()
+{
+    L_DEBUG("TOKEN TO TREE tokens size {}", _tokens.size());
+    if (_tokens.empty()) {
+        return false;
+    }
+
+    while (iter_on_tokens()) { }
+
+    if (!_valid) {
+        // free_tree(tree);
+        return _valid;
+    }
+
+    if (_depth != 0) {
+        _err_count++;
+        L_ERROR("unexpected EOF missing '}' for close scope '{}' (opened "
+                "line {})",
+            _root->key, _root->line);
+        // free_tree(tree);
+        return false;
+    }
+
+    return true;
+}
+
+void Parser::delete_tree(config_node *root)
+{
+    if (!root)
+        return;
+    for (std::vector<config_node *>::iterator it = root->children.begin();
+        it != root->children.end(); it++)
+        delete_tree(*it);
+    root->children.clear();
+    delete root;
+}
+
+void Parser::free_tree(config_node *root)
+{
+    if (!root)
+        return;
+    while (root->parent)
+        root = root->parent;
+    delete_tree(root);
+}
+
+#ifndef NDEBUG
+void Parser::debug_tree(config_node *tree, int i)
+{
+    if (!tree)
+        return;
+    std::cout << "zizi";
+    for (int j = 0; j < i; j++)
+        std::cout << "\t";
+
+    if (tree->type == NODE || tree->type == ROOT) {
+        i++;
+    }
+    if (tree->key == "location" && tree->strict == 1)
+        std::cout << tree->key << " = ";
+    else
+        std::cout << tree->key << " ";
+    for (std::vector<std::string>::iterator it = tree->vals.begin();
+        it != tree->vals.end(); it++)
+        std::cout << *it << " ";
+    std::cout << "\n";
+
+    for (std::vector<config_node *>::iterator it = tree->children.begin();
+        it != tree->children.end(); it++) {
+        config_node *tmp = *it;
+        debug_tree(tmp, i);
+    }
+    if (tree->type == NODE || tree->type == ROOT) {
+        i--;
+    }
+}
+#endif
+
+bool Parser::tokenize()
+{
+    std::ifstream in_file;
+    std::string buf;
+    std::size_t len = 0;
+    std::size_t b_size;
+    std::size_t line_i = 1;
+    config_token tmp_token;
+
+    in_file.open(_path.c_str());
+    if (!in_file.is_open()) {
+        L_ERROR("Can't open config file {}", _path);
+        return false;
+    }
+    while (std::getline(in_file, buf)) {
+        b_size = buf.size();
+        for (std::size_t i = 0; b_size > i;) {
+            len = 0;
+            while (b_size > i && std::isspace(buf[i]))
+                i++;
+            while (b_size > i + len && !std::isspace(buf[i + len])
+                && !config_is_special_char(buf[i + len]))
+                len++;
+            if (buf[i] == '#') {
+                i = b_size;
+            } else if (len > 0) {
+                tmp_token.value = buf.substr(i, len);
+                tmp_token.alive = 1;
+                tmp_token.line = line_i;
+                tmp_token.type = config_get_token_type(tmp_token);
+                tmp_token.keyword = config_get_token_keyword(tmp_token);
+                _tokens.push_back(tmp_token);
+                i += len;
+            } else if (config_is_special_char(buf[i])) {
+                tmp_token.value = buf[i];
+                tmp_token.alive = 1;
+                tmp_token.line = line_i;
+                tmp_token.type = config_get_token_type(tmp_token);
+                tmp_token.keyword = config_get_token_keyword(tmp_token);
+                _tokens.push_back(tmp_token);
+                i++;
+            }
+        }
+        line_i++;
+    }
+    in_file.close();
+    return true;
+}
+
+bool Parser::parse_config()
+{
+    Location location = { };
+
+    if (!tokenize()) {
+        return false;
+    }
+
+    if (_tokens.empty()) {
+        L_ERROR("empty configuration file");
+        return false;
+    }
+
+    try {
+        _root = new config_node();
+        _root->key = "GLOBAL";
+        _root->type = ROOT;
+        _root->keyword = keywords::GLOBAL;
+    } catch (...) {
+        L_ERROR("Can't alloc inital node");
+        return false;
+    }
+
+    if (!token_to_tree()) {
+        L_ERROR("invalid configuration file {} error(s)", _err_count);
+        return false;
+    }
+#ifndef NDEBUG
+    debug_tree(_root, 0);
+#endif
+    return _valid;
+}
+
+std::vector<Server> Parser::get_all_servers() { return _servers; }
+
+void Parser::create_one_server(const config_node &node,
+    std::vector<Location> location_vector,
+    std::map<keywords::type, std::vector<std::string> > &server_conf)
+{
+    Config inital_config;
+
+    inital_config.root = "/";
+    inital_config.autoindex = false;
+    inital_config.client_max_body_size = 0;
+    std::memset(
+        (void *)inital_config.error_pages, 0, sizeof(std::string *) * 512);
+    std::memset(
+        inital_config.allowed_methods, 1, sizeof(bool) * http::methods::COUNT);
+
+    initalize_server_config(server_conf, inital_config);
+
+    create_all_location(node, inital_config, location_vector);
+
+    if (server_conf.find(keywords::ROOT) == server_conf.end())
+        L_WARN("No server root use '{}' as default", DEFAULT_ROOT);
+    if (server_conf.find(keywords::SERVER_NAME) == server_conf.end())
+        L_WARN("No server_name use '{}' as server_name", DEFAULT_SERVER_NAME);
+    if (server_conf.find(keywords::LISTEN) == server_conf.end())
+        L_WARN("No listen use '{}' as default ", DEFAULT_LISTEN);
+
+    Server n_server
+        = Server(server_conf.find(keywords::ROOT) != server_conf.end()
+                ? *server_conf.find(keywords::ROOT)->second.begin()
+                : DEFAULT_ROOT,
+            location_vector,
+            server_conf.find(keywords::SERVER_NAME) != server_conf.end()
+                ? *server_conf.find(keywords::SERVER_NAME)->second.begin()
+                : DEFAULT_SERVER_NAME,
+            server_conf.find(keywords::LISTEN) != server_conf.end()
+                ? *server_conf.find(keywords::LISTEN)->second.begin()
+                : DEFAULT_LISTEN);
+
+    _servers.push_back(n_server);
+}
+
+bool Parser::create_all_servers()
+{
+    std::map<keywords::type, std::vector<std::string> > global_conf;
+    std::map<keywords::type, std::vector<std::string> > http_conf;
+    std::map<keywords::type, std::vector<std::string> > server_conf;
+    std::vector<Location> location_vector;
+    std::stack<config_node *> node_stack;
+    config_node *node;
+
+    node_stack.push(_root);
+    while (!node_stack.empty()) {
+        node = node_stack.top();
+        node_stack.pop();
+
+        if (node->type == NODE || node->type == ROOT) {
+            for (std::vector<config_node *>::iterator it
+                = node->children.begin();
+                it != node->children.end(); it++) {
+                if ((*it)->type == NODE) {
+                    node_stack.push(*it);
+                }
+            }
+        }
+
+        switch (node->keyword) {
+        case keywords::GLOBAL:
+            push_configuration(*node, global_conf);
+            break;
+        case keywords::HTTP:
+            http_conf = global_conf;
+            push_configuration(*node, http_conf);
+            break;
+        case keywords::SERVER:
+            server_conf = http_conf;
+            push_configuration(*node, server_conf);
+            create_one_server(*node, location_vector, server_conf);
+            break;
+        default:
+            break;
+        }
+    }
+
+    if (_servers.empty()) {
+        L_ERROR(" no server configuration");
+        return false;
+    }
+    L_TRACE("{} server(s) create", _servers.size());
+    return true;
+}

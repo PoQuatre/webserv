@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/25 21:09:28 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/25 21:15:48 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,8 +24,8 @@
 
 #include "Connection.hpp"
 #include "cli.hpp"
-#include "logger.hpp"
 #include "config-parser.hpp"
+#include "logger.hpp"
 #include "webserv.hpp"
 
 #define MAX_EVENTS 16
@@ -206,12 +206,18 @@ int32_t main(int32_t ac, char **av)
     if (args.flags[cli::flags::VERBOSE])
         logger::log_level() = logger::levels::TRACE;
 
-    std::vector<Server> servers;
-    if (!parse_config(servers, av[1]))
+    Parser config(av[ac - 1]);
+    if (!config.parse_config()) {
         return 1;
+    }
+    if (!config.create_all_servers()) {
+        return 1;
+    }
+    std::vector<Server> servers = config.get_all_servers();
 
     logger::print_date() = true;
     L_DEBUG("Creating epoll instance");
+
     // NOTE: the parameter of epoll_create doesn't mean anything since
     // linux 2.6.8 (or 14/08/2004)
     int32_t epollfd = epoll_create(42);

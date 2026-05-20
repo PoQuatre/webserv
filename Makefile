@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/25 21:08:55 by nlaporte         ###   ########.fr        #
+#    Updated: 2026/05/25 21:15:29 by nlaporte         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -90,6 +90,7 @@ TEST_INCS =	$(INCS) \
 LIB_SRCS =	Connection.cpp \
 			HttpParser.cpp \
 			Server.cpp \
+			config-parser.cpp \
 			cli.cpp \
 			config.cpp \
 			http.cpp

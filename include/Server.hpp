@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/16 23:13:59 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 02:38:28 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,7 @@
 
 struct Config {
     const std::string *error_pages[512];
-    const std::string root;
+    std::string root;
     std::size_t client_max_body_size;
     bool autoindex;
     bool allowed_methods[http::methods::COUNT];
@@ -31,17 +31,19 @@ struct Config {
 std::ostream &operator<<(std::ostream &os, const Config &config);
 
 struct Location {
-    const std::string path;
-    const Config config;
+    std::string path;
+    Config config;
     std::vector<Location> children;
     bool exact;
 };
 
-std::ostream &operator<<(std::ostream &os, const Location &location);
+std::ostream &operator<<(
+    std::ostream &os, const std::vector<Location> &location);
 
 class Server {
 public:
-    Server(const std::string &root_path, const Location &root_location,
+    Server(const std::string &root_path,
+        const std::vector<Location> &root_location,
         const std::string &server_name, const std::string &listen_addr);
     Server(const Server &other);
     ~Server();
@@ -53,7 +55,7 @@ public:
 private:
     Server();
 
-    const Location _root_location;
+    const std::vector<Location> _root_location;
     const std::string _root_path;
     const std::string _server_name;
     struct sockaddr_in _sockaddr;
