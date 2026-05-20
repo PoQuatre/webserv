@@ -19,5 +19,9 @@ Checks: >
   -misc-unused-parameters,
   -bugprone-macro-parentheses,
 
+CheckOptions:
+  - key: readability-function-cognitive-complexity.IgnoreMacros
+    value: "true"
+
 WarningsAsErrors: ""
 HeaderFilterRegex: "^(?!.*/_deps/).*"
