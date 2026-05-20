@@ -1,0 +1,23 @@
+InheritParentConfig: true
+
+Checks: >
+  -bugprone-reserved-identifier,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
+  -cert-err58-cpp,
+  -bugprone-throwing-static-initialization,
+  -misc-use-anonymous-namespace,
+  -misc-use-internal-linkage,
+  -readability-simplify-boolean-expr,
+  -performance-enum-size,
+  -readability-use-concise-preprocessor-directives,
+  -readability-redundant-member-init,
+  -misc-override-with-different-visibility,
+  -misc-multiple-inheritance,
+  -readability-redundant-inline-specifier,
+  -readability-named-parameter,
+  -misc-unused-parameters,
+  -bugprone-macro-parentheses,
+
+WarningsAsErrors: ""
+HeaderFilterRegex: "^(?!.*/_deps/).*"
