@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 09:10:42 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/25 21:09:28 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,6 +25,7 @@
 #include "Connection.hpp"
 #include "cli.hpp"
 #include "logger.hpp"
+#include "config-parser.hpp"
 #include "webserv.hpp"
 
 #define MAX_EVENTS 16
