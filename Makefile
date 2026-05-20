@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/20 03:43:22 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/20 04:33:27 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -19,6 +19,7 @@
 NAME		= webserv
 TEST_NAME	= webserv_test
 AUTHORS		= uanglade, nlaporte & mle-flem
+TARGET		= $(if $(filter test,$(MAKECMDGOALS)),$(TEST_NAME),$(NAME))
 
 CXX				= c++
 OLD_CXXFLAGS	:= $(CXXFLAGS)
@@ -76,9 +77,8 @@ INC_DIR		= include
 INCS =	$(SRC_DIR)/ \
 		$(INC_DIR)/
 
-ifneq ($(filter test,$(MAKECMDGOALS)),)
-INCS	+= $(CRITERION_DIR)/include
-endif
+TEST_INCS =	$(INCS) \
+			$(CRITERION_DIR)/include/
 
 
 
@@ -86,14 +86,16 @@ endif
 #                                   Sources                                    #
 # **************************************************************************** #
 
-##begin: SRCS
-SRCS =	Connection.cpp \
-		Server.cpp \
-		cli.cpp \
-		config.cpp \
-		http.cpp \
+##begin: LIB_SRCS
+LIB_SRCS =	Connection.cpp \
+			Server.cpp \
+			cli.cpp \
+			config.cpp \
+			http.cpp
+##end: LIB_SRCS
+
+SRCS =	$(LIB_SRCS) \
 		main.cpp
-##end: SRCS
 
 ##begin: TEST_SRCS
 TEST_SRCS =	hello.cpp
@@ -110,6 +112,7 @@ HDRS =	include/Connection.hpp \
 
 OBJS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(SRCS:%.cpp=%.o))
 DEPS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(SRCS:%.cpp=%.d))
+LIB_OBJS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(LIB_SRCS:%.cpp=%.o))
 TEST_OBJS = $(addprefix $(BUILD_DIR)/$(TEST_DIR)/,$(TEST_SRCS:%.cpp=%.o))
 TEST_DEPS = $(addprefix $(BUILD_DIR)/$(TEST_DIR)/,$(TEST_SRCS:%.cpp=%.d))
 
@@ -195,12 +198,14 @@ define update_sources
 		indent="$$2"; \
 		varname="$$3"; \
 		ext="$$4"; \
+		exclude="$$5"; \
 		files="$$( \
 			find "$$start" -type f -name "$$ext" -not -path './_*' -not -path './_*/**' \
 			| awk -F/ '{ print NF "\t" $$0 }' \
 			| sort -n \
 			| cut -f2- \
 			| grep -vE '(^|/)_([^/]*$$|[^/]+/)' \
+			| { [ -n "$$exclude" ] && grep -vE "(^|/)($$exclude)$$" || cat; } \
 			| sed -e "s/^$${start}\//$${indent}/" -e '$$!s/$$/ \\\\/' -e "1s/^$${indent}/$${varname} =\t/" \
 			)"; \
 		awk -v files="$${files//$$'\n'/\\\n}" -v name="$$varname" ' \
@@ -211,7 +216,7 @@ define update_sources
 		' '$(MK_FILE)' > '$(MK_FILE).tmp' && \
 			mv '$(MK_FILE).tmp' '$(MK_FILE)'; \
 	}; \
-	update_files '$(SRC_DIR)' $$'\t\t' 'SRCS' '*.cpp'; \
+	update_files '$(SRC_DIR)' $$'\t\t\t' 'LIB_SRCS' '*.cpp' 'main\.cpp'; \
 	update_files '$(TEST_DIR)' $$'\t\t\t' 'TEST_SRCS' '*.cpp'; \
 	update_files '.' $$'\t\t' 'HDRS' '*.hpp'
 endef
@@ -264,27 +269,27 @@ endif
 # **************************************************************************** #
 
 .PHONY: all
-all: .header $(NAME)
+all: .header $(TARGET)
 
 .PHONY: strict
-strict: .header $(NAME)
+strict: .header $(TARGET)
 
 .PHONY: debug
-debug: .header $(NAME)
+debug: .header $(TARGET)
 
 .PHONY: debug-san
-debug-san: .header $(NAME)
+debug-san: .header $(TARGET)
 
 .PHONY: asan
-asan: .header $(NAME)
+asan: .header $(TARGET)
 
 .PHONY: ubsan
-ubsan: .header $(NAME)
+ubsan: .header $(TARGET)
 
 .PHONY: test
-test: .header $(TEST_NAME)
-	@$(call progress,$(CLR_BLUE)Running $(CLR_TEAL)$(TEST_NAME))
-	./$(TEST_NAME)
+test: .header $(TARGET)
+	@$(call progress,$(CLR_BLUE)Running $(CLR_TEAL)$(TARGET))
+	./$(TARGET)
 
 -include $(DEPS) $(TEST_DEPS)
 
@@ -325,11 +330,11 @@ $(NAME): $(OBJS)
 	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
 
-$(TEST_NAME): $(OBJS) $(TEST_OBJS) $(CRITERION_NAME)
+$(TEST_NAME): $(LIB_OBJS) $(TEST_OBJS) $(CRITERION_NAME)
 	@$(call progress,$(CLR_BLUE)Linking $(CLR_TEAL)$@)
 	@mkdir -p $(dir $(MK_CXXFLAGS))
 	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(TEST_OBJS) -Wl,-rpath='$(dir $(CRITERION_NAME))' -L'$(dir $(CRITERION_NAME))' -lcriterion
+	$(CXX) $(CXXFLAGS) -o $@ $(LIB_OBJS) $(TEST_OBJS) -Wl,-rpath='$(dir $(CRITERION_NAME))' -L'$(dir $(CRITERION_NAME))' -lcriterion
 
 $(BUILD_DIR)/$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),fclean)
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
@@ -339,7 +344,7 @@ $(BUILD_DIR)/$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),fclean)
 $(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBUILD),fclean)
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -std=c++11 $(DFLAGS) $(INCS:%=-I%) -o $@ -c $<
+	$(CXX) $(CXXFLAGS) -std=c++11 $(DFLAGS) $(TEST_INCS:%=-I%) -o $@ -c $<
 
 $(CRITERION_SRC):
 	@$(call progress,$(CLR_BLUE)Downloading $(CLR_TEAL)$(notdir $@))
@@ -412,4 +417,4 @@ lint-fix: .header
 
 .PHONY: .ci-args
 .ci-args:
-	@echo '$(CXXFLAGS) $(INCS:%=-I%)'
+	@echo '$(CXXFLAGS) $(TEST_INCS:%=-I%)'
