@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/20 10:00:19 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/20 10:00:43 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -277,7 +277,7 @@ bool Connection::try_parse_headers()
             ++crlf_len;
         }
 
-        std::size_t colon = _recv_buf.find(':');
+        std::size_t colon = _recv_buf.find(':', pos);
         if (colon > crlf) {
             L_WARN("Client {} is missing a colon in it's headers", _fd);
             _parse_state = PARSE_ERROR;
