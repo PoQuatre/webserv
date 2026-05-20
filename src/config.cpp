@@ -6,175 +6,22 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:44:31 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/22 09:11:10 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/25 21:06:47 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
+
+#include "config.hpp"
 
 #include <netinet/in.h>
 #include <sys/socket.h>
 
 #include <cctype>
-#include <cstddef>
-#include <cstdlib>
-#include <cstring>
 #include <fstream>
-#include <string>
-#include <vector>
 
-#include "Server.hpp"
 #include "logger.hpp"
 #include "webserv.hpp"
 
 namespace {
-
-#define CALL(macro, val) macro(val);
-#define STRING_CHECK(val)                                                      \
-    do {                                                                       \
-        return true;                                                           \
-    } while (0)
-#define BOOL_CHECK(val)                                                        \
-    do {                                                                       \
-        return ((val) == "on" || (val) == "off");                              \
-    } while (0)
-// sous type de int pour le temps et la taille
-#define INT_CHECK(val)                                                         \
-    do {                                                                       \
-        for (int i = 0; (val)[i]; i++) {                                       \
-            if (!std::isdigit((val)[i]))                                       \
-                return false;                                                  \
-        }                                                                      \
-        return true;                                                           \
-    } while (0)
-
-namespace tokens {
-
-#define TOKENS                                                                 \
-    X(BRACE_OPEN, '{')                                                         \
-    X(BRACE_CLOSE, '}')                                                        \
-    X(WORD, ' ')                                                               \
-    X(END, ';')                                                                \
-    X(EQUAL, '=')                                                              \
-    X(COM, '#')
-
-enum type {
-#define X(name, _) name,
-    TOKENS
-#undef X
-};
-
-}
-
-namespace keywords {
-
-// ENUM STRING MAX_ARG DOC (scope dep) HTTP SERVER LOCATION TYPE_WANTED
-#define KEYWORDS                                                               \
-    X(LOCATION, "location", 3,                                                 \
-        "https://nginx.org/en/docs/beginners_guide.html", 0, 1, 0,             \
-        STRING_CHECK)                                                          \
-    X(HTTP, "http", 1, "https://nginx.org/en/docs/beginners_guide.html", 0, 0, \
-        0, STRING_CHECK)                                                       \
-    X(SERVER, "server", 1, "https://nginx.org/en/docs/beginners_guide.html",   \
-        1, 0, 0, STRING_CHECK)                                                 \
-    X(OPEN_SCOPE, "{", 1, " ", 0, 0, 0, STRING_CHECK)                          \
-    X(CLOSE_SCOPE, "}", 1, " ", 0, 0, 0, STRING_CHECK)                         \
-    X(SERVER_NAME, "server_name", 4,                                           \
-        "https://nginx.org/en/docs/http/server_names.html", 0, 1, 0,           \
-        STRING_CHECK)                                                          \
-    X(LISTEN, "listen", 2,                                                     \
-        "https://nginx.org/en/docs/http/ngx_http_core_module.html#listen", 0,  \
-        1, 0, STRING_CHECK)                                                    \
-    X(ROOT, "root", 1,                                                         \
-        "https://nginx.org/en/docs/http/ngx_http_core_module.html#root", 1, 1, \
-        1, STRING_CHECK)                                                       \
-    X(INDEX, "index", 3,                                                       \
-        "https://docs.nginx.com/nginx/admin-guide/web-server/"                 \
-        "serving-static-content/",                                             \
-        1, 1, 1, STRING_CHECK)                                                 \
-    X(CHUNKED_TRANSFER_ENCODING, "chunked_transfer_encoding", 1,               \
-        "https://nginx.org/en/docs/http/"                                      \
-        "ngx_http_core_module.html#chunked_transfer_encoding",                 \
-        1, 1, 1, INT_CHECK)                                                    \
-    X(CLIENT_BODY_BUFFER_SIZE, "client_body_buffer_size", 1,                   \
-        "https://nginx.org/en/docs/http/"                                      \
-        "ngx_http_core_module.html#client_body_buffer_size",                   \
-        1, 1, 1, INT_CHECK)                                                    \
-    X(CLIENT_MAX_BODY_SIZE, "client_max_body_size", 1,                         \
-        "https://nginx.org/en/docs/http/"                                      \
-        "ngx_http_core_module.html#client_max_body_size",                      \
-        1, 1, 1, INT_CHECK)                                                    \
-    X(DISABLE_SYMLINKS, "disable_symlinks", 1,                                 \
-        "https://nginx.org/en/docs/http/"                                      \
-        "ngx_http_core_module.html#disable_symlinks",                          \
-        1, 1, 1, BOOL_CHECK)                                                   \
-    X(ERROR_PAGE, "error_page", 7,                                             \
-        "https://nginx.org/en/docs/http/ngx_http_core_module.html#error_page", \
-        1, 1, 1, STRING_CHECK)                                                 \
-    X(SENDFILE, "sendfile", 1,                                                 \
-        "https://nginx.org/en/docs/http/ngx_http_core_module.html#sendfile",   \
-        1, 1, 1, BOOL_CHECK)                                                   \
-    X(TRY_FILES, "try_files", 6,                                               \
-        "https://nginx.org/en/docs/http/ngx_http_core_module.html#try_files",  \
-        0, 0, 1, STRING_CHECK)                                                 \
-    X(PROXY_PASS, "proxy_pass", 1,                                             \
-        "https://nginx.org/en/docs/http/ngx_http_core_module.html#proxy_pass", \
-        0, 0, 1, STRING_CHECK)                                                 \
-    X(AUTOINDEX, "autoindex", 1,                                               \
-        "https://nginx.org/en/docs/http/ngx_http_autoindex_module.html", 1, 1, \
-        1, BOOL_CHECK)                                                         \
-    X(UNKNOWN, " ", 1,                                                         \
-        "https://nginx.org/en/docs/http/ngx_http_core_module.html", 0, 0, 0,   \
-        STRING_CHECK)
-
-enum type {
-#define X(name, _, __, ___, ____, _____, ______, _______) name,
-    KEYWORDS
-#undef X
-};
-}
-
-const char *strings[] = {
-#define X(_, __, ___, text, ____, _____, ______, _______) #text,
-    KEYWORDS
-#undef X
-};
-
-const char *stringss[] = {
-#define X(_, text, ___, __, ____, _____, ______, _______) #text,
-    KEYWORDS
-#undef X
-};
-
-enum node_type { ROOT, NODE, LEAF };
-
-struct config_token {
-    std::string value;
-    tokens::type type;
-    keywords::type keyword;
-    bool alive;
-    uint32_t size;
-    uint32_t line;
-};
-
-struct config_node {
-    node_type type;
-    keywords::type keyword;
-    std::string key;
-    std::vector<std::string> vals;
-    std::vector<config_node *> children;
-    config_node *parent;
-    bool strict;
-    uint32_t line;
-};
-
-struct config_webserv {
-    std::string root_path;
-    std::string error_page;
-    std::string index;
-    std::size_t client_max_body_size;
-    std::size_t client_max_buffer_size;
-    bool chunked_transfer_encoding;
-    bool autoindex;
-};
 
 tokens::type config_get_token_type(config_token token)
 {
@@ -189,7 +36,7 @@ tokens::type config_get_token_type(config_token token)
     }
 }
 
-keywords::type config_get_token_keyword(const config_token &token)
+keywords::type config_get_token_keyword(const config_token &token) // NOLINT
 {
     if (token.value.empty())
         return keywords::UNKNOWN;
@@ -201,15 +48,17 @@ keywords::type config_get_token_keyword(const config_token &token)
     return keywords::UNKNOWN;
 }
 
-uint32_t config_get_max_args(const config_token &token)
+uint32_t config_get_max_args(const config_token &token) // NOLINT
 {
     if (token.value.empty())
         return 1;
-#define X(_, val, arg, __, ___, ____, _____, _______)                          \
-    if ((val) == token.value)                                                  \
+    switch (token.keyword) {
+#define X(name, _, arg, __, ___, ____, _____, _______)                         \
+    case keywords::name:                                                       \
         return arg;
-    KEYWORDS
+        KEYWORDS // NOLINT
 #undef X
+    }
     return 1;
 }
 
@@ -234,16 +83,18 @@ bool config_directive_is_in_valide_scope( // NOLINT
     return false;
 }
 
-bool config_is_a_valid_val( // NOLINT
-    const std::string &val, const keywords::type &type)
+bool config_is_a_valid_val(
+    __attribute__((unused)) std::string &val, const keywords::type &type)
 {
+    switch (type) {
 #define X(name, _, __, ___, ____, _____, ______, check)                        \
-    if (type == keywords::name) {                                              \
-        CALL(check, val);                                                      \
-    }
-    KEYWORDS
+    case keywords::name:                                                       \
+        return CALL(check, val);                                               \
+        KEYWORDS
 #undef X
-    return true;
+    default:
+        return true;
+    }
 }
 
 bool config_is_special_char(char c)
@@ -501,6 +352,7 @@ bool create_location_node(config_node *&root, std::vector<config_token> &tokens,
         return true;
     }
 
+    // See next token without consume them
     if (!config_see_next_token(tokens, token, false))
         return true;
 
@@ -645,19 +497,18 @@ bool config_create_leaf(config_node *&root, std::vector<config_token> &tokens,
 
     // Directive need word token identified from keywords to start
     if (token->type != tokens::WORD || token->keyword == keywords::UNKNOWN) {
-        L_ERROR("unknown directive '{}' (line {}) for all directive {}",
-            token->value, line, strings[token->keyword]);
-        recovery(tokens, token, token->value, token->line, root->key);
-        // L_ERROR("unexpected '{}' (line {})", token->value, line);
-        valid = false;
-        error_count++;
-        /*
-        if (config_see_next_token(tokens, token, false)
-            && token->type == tokens::BRACE_OPEN) {
-            recovery(tokens, token, token->value, token->line, root->key);
-        } else
+        tmp_token = *token;
+        if (!config_see_next_token(tokens, token, false)
+            || tmp_token.keyword != keywords::OPEN_SCOPE) {
+            L_ERROR("unknown directive '{}' (line {}) for all directive {}",
+                tmp_token.value, line, strings[tmp_token.keyword]);
+            error_count++;
             config_skip_line(tokens, line);
-        */
+            valid = false;
+            return false;
+        }
+        recovery(tokens, token, tmp_token.value, tmp_token.line, root->key);
+        valid = false;
         return true;
     }
 
@@ -696,8 +547,8 @@ bool config_create_leaf(config_node *&root, std::vector<config_token> &tokens,
     } catch (...) {
         return false;
     }
-    tmp_token = *token;
 
+    tmp_token = *token;
     if (!config_see_next_token(tokens, token, false)) {
         delete node;
         return true;
@@ -765,7 +616,6 @@ bool config_create_leaf(config_node *&root, std::vector<config_token> &tokens,
 bool iter_on_tokens(config_node *&root, std::vector<config_token> &tokens,
     bool &valid, config_token *&token, int32_t &depth, uint32_t &error_count)
 {
-    // config_node *og_root = root;
     uint32_t line = token->line;
 
     if (!config_see_next_token(tokens, token, true))
@@ -994,7 +844,8 @@ bool parse_config(std::vector<Server> &servers, const std::string &path)
     debug_tree(config_tree, 0);
 #endif
 
-    create_configuration(config_tree, servers);
+    (void)create_configuration;
+    // create_configuration(config_tree, servers);
 
     if (servers.empty()) {
         L_ERROR("no server in configuration");
