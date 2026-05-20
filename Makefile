@@ -98,7 +98,7 @@ SRCS =	$(LIB_SRCS) \
 		main.cpp
 
 ##begin: TEST_SRCS
-TEST_SRCS =	hello.cpp
+TEST_SRCS =	http_parsing.cpp
 ##end: TEST_SRCS
 
 ##begin: HDRS
