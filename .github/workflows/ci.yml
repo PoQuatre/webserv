@@ -24,6 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Setup criterion
+        run: make setup-criterion
+
       - name: Get c++ flags
         id: flags
         run: echo "flags=$(make .ci-args)" >> $GITHUB_OUTPUT
@@ -42,3 +45,11 @@ jobs:
       - name: Fail fast?!
         if: steps.linter.outputs.checks-failed > 0
         run: exit 1
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build and run tests
+        run: make test

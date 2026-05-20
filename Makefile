@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/20 04:33:27 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/20 07:56:32 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -414,6 +414,9 @@ lint: .header
 lint-fix: .header
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
 	$(CLANG_TIDY) -p . --quiet --fix $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
+
+.PHONY: setup-criterion
+setup-criterion: .header $(CRITERION_NAME)
 
 .PHONY: .ci-args
 .ci-args:
