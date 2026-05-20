@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/20 09:50:20 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/20 10:00:19 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include <cstdlib>
+#include <cstring>
 
 #include "logger.hpp"
 
@@ -168,7 +169,8 @@ bool Connection::try_parse_method(std::size_t start, std::size_t end)
         *it = static_cast<char>(std::toupper(*it));
 
     for (std::size_t i = 0; i < http::methods::COUNT; ++i) {
-        if (std::equal(m_it, m_ite, http::methods::strings[i])) {
+        if ((end - start) == std::strlen(http::methods::strings[i])
+            && std::equal(m_it, m_ite, http::methods::strings[i])) {
             _request.method = static_cast<http::methods::type>(i);
             return true;
         }
@@ -191,7 +193,8 @@ bool Connection::try_parse_version(std::size_t start, std::size_t end)
         *it = static_cast<char>(std::toupper(*it));
 
     for (std::size_t i = 0; i < http::versions::COUNT; ++i) {
-        if (std::equal(v_it, v_ite, http::versions::strings[i])) {
+        if ((end - start) == std::strlen(http::versions::strings[i])
+            && std::equal(v_it, v_ite, http::versions::strings[i])) {
             _request.version = static_cast<http::versions::type>(i);
             return true;
         }
