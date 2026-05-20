@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/19 08:57:18 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/20 03:43:22 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -16,8 +16,9 @@
 #                                    Config                                    #
 # **************************************************************************** #
 
-NAME	= webserv
-AUTHORS	= uanglade, nlaporte & mle-flem
+NAME		= webserv
+TEST_NAME	= webserv_test
+AUTHORS		= uanglade, nlaporte & mle-flem
 
 CXX				= c++
 OLD_CXXFLAGS	:= $(CXXFLAGS)
@@ -33,7 +34,7 @@ CXXFLAGS	+= -Wpedantic -Wshadow -Wformat=2 -Wformat-security -Wundef \
 				-fno-common
 endif
 
-ifneq ($(filter debug debug-san asan ubsan,$(MAKECMDGOALS)),)
+ifneq ($(filter test debug debug-san asan ubsan,$(MAKECMDGOALS)),)
 CXXFLAGS	+= -g3 -fno-omit-frame-pointer
 CXXFLAGS	:= $(filter-out -DNDEBUG,$(CXXFLAGS))
 endif
@@ -50,25 +51,34 @@ CXXFLAGS	+= -fsanitize=undefined
 endif
 endif
 
-ifneq ($(or $(filter debug-san,$(MAKECMDGOALS)),$(and $(filter asan,$(MAKECMDGOALS)),$(filter ubsan,$(MAKECMDGOALS)))),)
+ifneq ($(or $(filter test debug-san,$(MAKECMDGOALS)),$(and $(filter asan,$(MAKECMDGOALS)),$(filter ubsan,$(MAKECMDGOALS)))),)
 CXXFLAGS	+= -fsanitize=address,undefined
 endif
 
-ifneq ($(filter debug-san asan ubsan,$(MAKECMDGOALS)),)
+ifneq ($(filter test debug-san asan ubsan,$(MAKECMDGOALS)),)
 CXXFLAGS	+= -fno-sanitize-recover=all
 endif
 
-CXXFLAGS	:= $(strip $(CXXFLAGS) $(OLD_CXXFLAGS))
+ifneq ($(filter test,$(MAKECMDGOALS)),)
+CXXFLAGS	+= -DTESTING
+endif
+
+CXXFLAGS		:= $(strip $(CXXFLAGS) $(OLD_CXXFLAGS))
 
 CLANG_FORMAT	:= $(shell command -v clang-format)
 CLANG_TIDY		:= $(shell command -v clang-tidy)
 
 SRC_DIR		= src
+TEST_DIR	= test
 BUILD_DIR	= build
 INC_DIR		= include
 
 INCS =	$(SRC_DIR)/ \
 		$(INC_DIR)/
+
+ifneq ($(filter test,$(MAKECMDGOALS)),)
+INCS	+= $(CRITERION_DIR)/include
+endif
 
 
 
@@ -85,6 +95,10 @@ SRCS =	Connection.cpp \
 		main.cpp
 ##end: SRCS
 
+##begin: TEST_SRCS
+TEST_SRCS =	hello.cpp
+##end: TEST_SRCS
+
 ##begin: HDRS
 HDRS =	include/Connection.hpp \
 		include/Server.hpp \
@@ -94,8 +108,30 @@ HDRS =	include/Connection.hpp \
 		include/webserv.hpp
 ##end: HDRS
 
-OBJS = $(addprefix $(BUILD_DIR)/,$(SRCS:%.cpp=%.o))
-DEPS = $(addprefix $(BUILD_DIR)/,$(SRCS:%.cpp=%.d))
+OBJS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(SRCS:%.cpp=%.o))
+DEPS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(SRCS:%.cpp=%.d))
+TEST_OBJS = $(addprefix $(BUILD_DIR)/$(TEST_DIR)/,$(TEST_SRCS:%.cpp=%.o))
+TEST_DEPS = $(addprefix $(BUILD_DIR)/$(TEST_DIR)/,$(TEST_SRCS:%.cpp=%.d))
+
+
+
+# **************************************************************************** #
+#                            External Dependencies                             #
+# **************************************************************************** #
+
+EXT_DIR = _deps
+
+CRITERION_VERSION		= 2.4.3
+CRITERION_URL.DEFAULT	= https://github.com/Snaipe/Criterion/releases/download/v$(CRITERION_VERSION)/criterion-$(CRITERION_VERSION).tar.xz
+CRITERION_URL.x86_64	= https://github.com/Snaipe/Criterion/releases/download/v$(CRITERION_VERSION)/criterion-$(CRITERION_VERSION)-linux-x86_64.tar.xz
+CRITERION_URL			= $(if $(CRITERION_URL.$(ARCH)),$(CRITERION_URL.$(ARCH)),$(CRITERION_URL.DEFAULT))
+CRITERION_HASH.DEFAULT	= 8ec64e482a70b3bfc1836ace0988b3316e6c3cfeac883fb5a674dcea5083ea16
+CRITERION_HASH.x86_64	= f1b3dd5186783dcdd63433c1facd3b4d6af5244a151057370b53bdda80f16121
+CRITERION_HASH			= $(if $(CRITERION_HASH.$(ARCH)),$(CRITERION_HASH.$(ARCH)),$(CRITERION_HASH.DEFAULT))
+
+CRITERION_DIR	= $(EXT_DIR)/criterion
+CRITERION_SRC	= $(EXT_DIR)/criterion-$(CRITERION_VERSION).tar.xz
+CRITERION_NAME	= $(CRITERION_DIR)/libcriterion.so
 
 
 
@@ -176,6 +212,7 @@ define update_sources
 			mv '$(MK_FILE).tmp' '$(MK_FILE)'; \
 	}; \
 	update_files '$(SRC_DIR)' $$'\t\t' 'SRCS' '*.cpp'; \
+	update_files '$(TEST_DIR)' $$'\t\t\t' 'TEST_SRCS' '*.cpp'; \
 	update_files '.' $$'\t\t' 'HDRS' '*.hpp'
 endef
 
@@ -199,6 +236,23 @@ else
 
 define progress
 	#progress
+endef
+
+endif
+
+ifeq ($(NOPRETTY),)
+
+define success_quiet
+	tmp=$$(mktemp); \
+	script -qec '$(1)' /dev/null >"$$tmp"; \
+	[ $$? -ne 0 ] && cat "$$tmp"; \
+	$(RM) "$$tmp"
+endef
+
+else
+
+define success_quiet
+	$(1)
 endef
 
 endif
@@ -227,7 +281,12 @@ asan: .header $(NAME)
 .PHONY: ubsan
 ubsan: .header $(NAME)
 
--include $(DEPS)
+.PHONY: test
+test: .header $(TEST_NAME)
+	@$(call progress,$(CLR_BLUE)Running $(CLR_TEAL)$(TEST_NAME))
+	./$(TEST_NAME)
+
+-include $(DEPS) $(TEST_DEPS)
 
 .PHONY: .header
 .header:
@@ -266,10 +325,52 @@ $(NAME): $(OBJS)
 	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),fclean)
+$(TEST_NAME): $(OBJS) $(TEST_OBJS) $(CRITERION_NAME)
+	@$(call progress,$(CLR_BLUE)Linking $(CLR_TEAL)$@)
+	@mkdir -p $(dir $(MK_CXXFLAGS))
+	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(TEST_OBJS) -Wl,-rpath='$(dir $(CRITERION_NAME))' -L'$(dir $(CRITERION_NAME))' -lcriterion
+
+$(BUILD_DIR)/$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),fclean)
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(INCS:%=-I%) -o $@ -c $<
+
+$(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBUILD),fclean)
+	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -std=c++11 $(DFLAGS) $(INCS:%=-I%) -o $@ -c $<
+
+$(CRITERION_SRC):
+	@$(call progress,$(CLR_BLUE)Downloading $(CLR_TEAL)$(notdir $@))
+	@mkdir -p '$(dir $@)'
+	curl -sSLo '$@' $(CRITERION_URL)
+	@$(call progress,$(CLR_BLUE)Checking $(CLR_TEAL)$(notdir $@))
+	echo '$(CRITERION_HASH) *$@' | sha256sum -c - >/dev/null
+
+
+ifeq ($(ARCH),x86_64)
+
+$(CRITERION_NAME): $(CRITERION_SRC)
+	@$(call progress,$(CLR_BLUE)Extracting $(CLR_TEAL)$(notdir $(CRITERION_SRC)))
+	@mkdir -p '$(CRITERION_DIR)'
+	tar -xJf '$(CRITERION_SRC)' -C '$(CRITERION_DIR)' --strip-components=1
+	@$(call progress,$(CLR_BLUE)Copying $(CLR_TEAL)$(notdir $@))
+	cp '$(CRITERION_DIR)/lib/$(notdir $@)'* '$(dir $@)'
+
+else
+
+$(CRITERION_NAME): $(CRITERION_SRC)
+	@$(call progress,$(CLR_BLUE)Extracting $(CLR_TEAL)$(notdir $(CRITERION_SRC)))
+	@mkdir -p '$(CRITERION_DIR)'
+	tar -xJf '$(CRITERION_SRC)' -C '$(CRITERION_DIR)' --strip-components=1
+	@$(call progress,$(CLR_BLUE)Configuring $(CLR_TEAL)$(notdir $@))
+	$(call success_quiet,cd '$(CRITERION_DIR)' && CXXFLAGS= meson setup build)
+	@$(call progress,$(CLR_BLUE)Making $(CLR_TEAL)$(notdir $@))
+	$(call success_quiet,cd '$(CRITERION_DIR)' && CXXFLAGS= meson compile -C build)
+	cp '$(CRITERION_DIR)/build/src/$(notdir $@)'* '$(dir $@)' 2>/dev/null || true
+
+endif
 
 .PHONY: clean
 clean: .header
@@ -279,7 +380,7 @@ clean: .header
 .PHONY: fclean
 fclean: .header clean
 	@$(call progress,$(CLR_BLUE)fclean $(CLR_TEAL)$(NAME))
-	$(RM) $(NAME)
+	$(RM) $(NAME) $(TEST_NAME)
 
 .PHONY: re
 re: fclean all
@@ -292,22 +393,22 @@ update-srcs: .header
 .PHONY: format
 format: .header
 	@$(call progress,$(CLR_BLUE)Checking formatting of $(CLR_TEAL)$(NAME))
-	$(CLANG_FORMAT) --dry-run --Werror $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS)
+	$(CLANG_FORMAT) --dry-run --Werror $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 
 .PHONY: format-fix
 format-fix: .header
 	@$(call progress,$(CLR_BLUE)Formatting $(CLR_TEAL)$(NAME))
-	$(CLANG_FORMAT) -i $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS)
+	$(CLANG_FORMAT) -i $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 
 .PHONY: lint
 lint: .header
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) -p . --quiet $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS)
+	$(CLANG_TIDY) -p . --quiet $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 
 .PHONY: lint-fix
 lint-fix: .header
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) -p . --quiet --fix $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS)
+	$(CLANG_TIDY) -p . --quiet --fix $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 
 .PHONY: .ci-args
 .ci-args:
