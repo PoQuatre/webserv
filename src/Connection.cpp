@@ -29,6 +29,7 @@ Connection::Connection()
     , _send_state(IDLE)
     , _content_length(0)
     , _header_end(0)
+    , _eof(false)
     , _request()
 {
 }
@@ -39,14 +40,18 @@ Connection::Connection(int32_t fd)
     , _send_state(IDLE)
     , _content_length(0)
     , _header_end(0)
+    , _eof(false)
     , _request()
 {
 }
 
 bool Connection::on_readable()
 {
-    if (!do_recv())
-        return false; // peer closed or unrecoverable
+    bool ok = do_recv();
+    // do_recv sets PARSE_ERROR on buffer overflow (hard stop).
+    // EOF (n==0) sets _eof and returns false — still let the parse loop run.
+    if (!ok && _parse_state == PARSE_ERROR)
+        return false;
 
     bool progressed = true;
     while (progressed && _parse_state != PARSE_COMPLETE
@@ -70,7 +75,7 @@ bool Connection::on_readable()
     if (progressed && _parse_state == PARSE_COMPLETE)
         L_DEBUG("Client {} requested: {}", _fd, _request);
 
-    return _parse_state != PARSE_ERROR;
+    return !_eof && _parse_state != PARSE_ERROR;
 }
 
 bool Connection::on_writable() { return do_send(); }
@@ -89,6 +94,7 @@ void Connection::reset()
     _send_state = IDLE;
     _content_length = 0;
     _header_end = 0;
+    _eof = false;
     _request = http::request();
 }
 
@@ -97,10 +103,13 @@ bool Connection::try_parse_request_line()
     std::size_t crlf_len = 1;
     std::size_t crlf = _recv_buf.find('\n');
     if (crlf == std::string::npos) {
-        L_TRACE("Client {}'s request line is not ready yet", _fd);
-        return false;
-    }
-    if (crlf > 0 && _recv_buf[crlf - 1] == '\r') {
+        if (!_eof) {
+            L_TRACE("Client {}'s request line is not ready yet", _fd);
+            return false;
+        }
+        crlf = _recv_buf.size();
+        crlf_len = 0;
+    } else if (crlf > 0 && _recv_buf[crlf - 1] == '\r') {
         --crlf;
         ++crlf_len;
     }
@@ -262,17 +271,24 @@ bool Connection::try_parse_headers()
 {
     find_result end = find_header_end(_recv_buf);
     if (end.pos == std::string::npos) {
-        L_TRACE("Client {}'s headers are not ready yet", _fd);
-        return false;
+        if (!_eof) {
+            L_TRACE("Client {}'s headers are not ready yet", _fd);
+            return false;
+        }
+        end.pos = _recv_buf.size();
+        end.len = 0;
     }
 
     std::size_t pos = _recv_buf.find_first_not_of(" \f\r\t\v");
     while (pos < end.pos) {
         std::size_t crlf_len = 1;
         std::size_t crlf = _recv_buf.find('\n', pos);
-        if (crlf == std::string::npos)
-            return false;
-        if (crlf > 0 && _recv_buf[crlf - 1] == '\r') {
+        if (crlf == std::string::npos) {
+            if (!_eof)
+                return false;
+            crlf = end.pos;
+            crlf_len = 0;
+        } else if (crlf > 0 && _recv_buf[crlf - 1] == '\r') {
             --crlf;
             ++crlf_len;
         }
@@ -348,6 +364,7 @@ bool Connection::do_recv()
     }
     if (n == 0) {
         L_TRACE("Client {} closed cleanly", _fd);
+        _eof = true;
         return false;
     }
 

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/20 09:57:39 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/20 11:34:55 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,6 +34,25 @@ static Connection make_conn(const std::string &raw)
     conn.on_readable();
     close(fds[0]);
     close(fds[1]);
+    return conn;
+}
+
+// Same as make_conn but closes the write end before reading so the connection
+// sees EOF after the data runs out.  Drives on_readable() until the parse
+// reaches a terminal state or the EOF signal stops further progress.
+static Connection make_conn_eof(const std::string &raw)
+{
+    logger::log_level() = logger::levels::NOTHING;
+    int fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0)
+        return Connection();
+    write(fds[1], raw.c_str(), raw.size());
+    close(fds[1]);
+    Connection conn(fds[0]);
+    while (!conn.is_parse_complete() && !conn.is_parse_error()
+        && conn.on_readable())
+        ;
+    close(fds[0]);
     return conn;
 }
 
@@ -132,14 +151,6 @@ Test(request_line, get_http09_no_version)
 Test(request_line, get_http09_lf_only)
 {
     Connection c = make_conn("GET /simple\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().version, http::versions::HTTP09);
-    cr_assert_eq(c.request().uri, "/simple");
-}
-
-Test(request_line, get_http09_no_lf)
-{
-    Connection c = make_conn("GET /simple");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().version, http::versions::HTTP09);
     cr_assert_eq(c.request().uri, "/simple");
@@ -344,4 +355,45 @@ Test(reset, second_request_after_reset)
 
     close(fds[0]);
     close(fds[1]);
+}
+
+// -----------------------------------------------------------------------------
+// EOF-terminated requests (write side closed without final newlines)
+// The server should accept these rather than treating them as errors.
+// -----------------------------------------------------------------------------
+
+// No \r\n after the request line — the peer closed the connection instead.
+Test(eof_terminated, request_line_no_crlf)
+{
+    Connection c = make_conn_eof("GET /path HTTP/1.1");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().method, http::methods::GET);
+    cr_assert_eq(c.request().uri, "/path");
+    cr_assert_eq(c.request().version, http::versions::HTTP11);
+}
+
+// Last header has no trailing \r\n and there is no blank-line separator.
+Test(eof_terminated, last_header_no_crlf)
+{
+    Connection c = make_conn_eof("GET / HTTP/1.1\r\nHost: localhost");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.count("host"), 1);
+}
+
+// Last header ends with \r\n but the blank-line header/body separator is absent.
+Test(eof_terminated, headers_no_blank_line)
+{
+    Connection c = make_conn_eof("GET / HTTP/1.1\r\nHost: localhost\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.count("host"), 1);
+}
+
+// Multiple headers, trailing \r\n on the last one, but no blank-line separator.
+Test(eof_terminated, multiple_headers_no_blank_line)
+{
+    Connection c = make_conn_eof(
+        "GET / HTTP/1.1\r\nHost: h\r\nAccept: text/html\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.count("host"), 1);
+    cr_assert_eq(c.request().headers.count("accept"), 1);
 }
