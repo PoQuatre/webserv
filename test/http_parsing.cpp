@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/21 20:34:15 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/21 20:34:30 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -31,7 +31,9 @@ static Connection make_conn(const std::string &raw)
         return Connection();
     write(fds[1], raw.c_str(), raw.size());
     Connection conn(fds[0]);
-    conn.on_readable();
+    while (!conn.is_parse_complete() && !conn.is_parse_error()
+        && conn.on_readable())
+        ;
     close(fds[0]);
     close(fds[1]);
     return conn;
