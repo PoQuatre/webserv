@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/20 11:34:55 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/21 20:34:15 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -362,7 +362,6 @@ Test(reset, second_request_after_reset)
 // The server should accept these rather than treating them as errors.
 // -----------------------------------------------------------------------------
 
-// No \r\n after the request line — the peer closed the connection instead.
 Test(eof_terminated, request_line_no_crlf)
 {
     Connection c = make_conn_eof("GET /path HTTP/1.1");
@@ -372,7 +371,6 @@ Test(eof_terminated, request_line_no_crlf)
     cr_assert_eq(c.request().version, http::versions::HTTP11);
 }
 
-// Last header has no trailing \r\n and there is no blank-line separator.
 Test(eof_terminated, last_header_no_crlf)
 {
     Connection c = make_conn_eof("GET / HTTP/1.1\r\nHost: localhost");
@@ -380,7 +378,6 @@ Test(eof_terminated, last_header_no_crlf)
     cr_assert_eq(c.request().headers.count("host"), 1);
 }
 
-// Last header ends with \r\n but the blank-line header/body separator is absent.
 Test(eof_terminated, headers_no_blank_line)
 {
     Connection c = make_conn_eof("GET / HTTP/1.1\r\nHost: localhost\r\n");
@@ -388,11 +385,10 @@ Test(eof_terminated, headers_no_blank_line)
     cr_assert_eq(c.request().headers.count("host"), 1);
 }
 
-// Multiple headers, trailing \r\n on the last one, but no blank-line separator.
 Test(eof_terminated, multiple_headers_no_blank_line)
 {
-    Connection c = make_conn_eof(
-        "GET / HTTP/1.1\r\nHost: h\r\nAccept: text/html\r\n");
+    Connection c
+        = make_conn_eof("GET / HTTP/1.1\r\nHost: h\r\nAccept: text/html\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
     cr_assert_eq(c.request().headers.count("accept"), 1);
