@@ -60,6 +60,7 @@ private:
 
     std::size_t _content_length;
     std::size_t _header_end;
+    bool _eof;
 
     http::request _request;
 
