@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:11 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 07:28:51 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 22:08:31 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -56,6 +56,7 @@ private:
     bool try_parse_version(std::size_t start, std::size_t end);
 
     bool try_parse_headers();
+    bool try_parse_header_field(std::size_t &pos, std::size_t end_pos);
 
     bool try_parse_body();
     bool try_parse_chunk();
