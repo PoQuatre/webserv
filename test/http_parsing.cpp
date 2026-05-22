@@ -72,10 +72,9 @@ Test(request_line, get_http11)
     cr_assert_eq(c.request().version, http::versions::HTTP11);
 }
 
-Test(request_line, post_http11)
+Test(request_line, post_http10)
 {
-    Connection c = make_conn("POST /submit HTTP/1.1\r\nHost: "
-                             "localhost\r\nContent-Length: 0\r\n\r\n");
+    Connection c = make_conn("POST /submit HTTP/1.0\r\nContent-Length: 0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::POST);
     cr_assert_eq(c.request().uri, "/submit");
@@ -91,49 +90,49 @@ Test(request_line, delete_http10)
 
 Test(request_line, put_method)
 {
-    Connection c = make_conn("PUT /res HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("PUT /res HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::PUT);
 }
 
 Test(request_line, patch_method)
 {
-    Connection c = make_conn("PATCH /res HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("PATCH /res HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::PATCH);
 }
 
 Test(request_line, head_method)
 {
-    Connection c = make_conn("HEAD / HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("HEAD / HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::HEAD);
 }
 
 Test(request_line, options_method)
 {
-    Connection c = make_conn("OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("OPTIONS * HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::OPTIONS);
 }
 
 Test(request_line, trace_method)
 {
-    Connection c = make_conn("TRACE / HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("TRACE / HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::TRACE);
 }
 
 Test(request_line, lowercase_method_normalized)
 {
-    Connection c = make_conn("get / HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("get / HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::GET);
 }
 
 Test(request_line, mixed_case_method_normalized)
 {
-    Connection c = make_conn("Post /x HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("Post /x HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::POST);
 }
@@ -164,7 +163,7 @@ Test(request_line, get_http09_lf_only)
 
 Test(request_line, unknown_method)
 {
-    Connection c = make_conn("BREW /coffee HTTP/1.1\r\n\r\n");
+    Connection c = make_conn("BREW /coffee HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_error());
 }
 
@@ -198,7 +197,7 @@ Test(request_line, invalid_version)
 
 Test(request_line, lf_only_line_ending)
 {
-    Connection c = make_conn("GET /path HTTP/1.1\nHost: localhost\n\n");
+    Connection c = make_conn("GET /path HTTP/1.0\nHost: localhost\n\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/path");
 }
@@ -209,22 +208,21 @@ Test(request_line, lf_only_line_ending)
 
 Test(uri, root_path)
 {
-    Connection c = make_conn("GET / HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("GET / HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/");
 }
 
 Test(uri, path_with_query)
 {
-    Connection c
-        = make_conn("GET /search?q=hello&page=2 HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("GET /search?q=hello&page=2 HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/search?q=hello&page=2");
 }
 
 Test(uri, path_with_fragment)
 {
-    Connection c = make_conn("GET /page#section HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("GET /page#section HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/page#section");
 }
@@ -235,14 +233,14 @@ Test(uri, path_with_fragment)
 
 Test(headers, single_header)
 {
-    Connection c = make_conn("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    Connection c = make_conn("GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
 }
 
 Test(headers, multiple_headers)
 {
-    Connection c = make_conn("GET / HTTP/1.1\r\n"
+    Connection c = make_conn("GET / HTTP/1.0\r\n"
                              "Host: example.com\r\n"
                              "Accept: text/html\r\n"
                              "Connection: keep-alive\r\n"
@@ -255,8 +253,7 @@ Test(headers, multiple_headers)
 
 Test(headers, keys_lowercased)
 {
-    Connection c
-        = make_conn("GET / HTTP/1.1\r\nContent-Type: text/html\r\n\r\n");
+    Connection c = make_conn("GET / HTTP/1.0\r\nContent-Type: text/html\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("content-type"), 1);
     cr_assert_eq(c.request().headers.count("Content-Type"), 0);
@@ -264,7 +261,7 @@ Test(headers, keys_lowercased)
 
 Test(headers, lf_only_terminator)
 {
-    Connection c = make_conn("GET / HTTP/1.1\nHost: h\n\n");
+    Connection c = make_conn("GET / HTTP/1.0\nHost: h\n\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
 }
@@ -275,8 +272,7 @@ Test(headers, lf_only_terminator)
 
 Test(body, content_length_body_present)
 {
-    Connection c = make_conn("POST /upload HTTP/1.1\r\n"
-                             "Host: h\r\n"
+    Connection c = make_conn("POST /upload HTTP/1.0\r\n"
                              "Content-Length: 5\r\n"
                              "\r\n"
                              "hello");
@@ -286,15 +282,14 @@ Test(body, content_length_body_present)
 
 Test(body, content_length_zero)
 {
-    Connection c
-        = make_conn("POST /x HTTP/1.1\r\nHost: h\r\nContent-Length: 0\r\n\r\n");
+    Connection c = make_conn("POST /x HTTP/1.0\r\nContent-Length: 0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert(c.request().body.empty());
 }
 
 Test(body, no_content_length_no_body)
 {
-    Connection c = make_conn("GET / HTTP/1.1\r\nHost: h\r\n\r\n");
+    Connection c = make_conn("GET / HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert(c.request().body.empty());
 }
@@ -305,7 +300,7 @@ Test(body, no_content_length_no_body)
 
 Test(no_headers, get_no_headers)
 {
-    Connection c = make_conn("GET / HTTP/1.1\r\n\r\n");
+    Connection c = make_conn("GET / HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert(c.request().headers.empty());
     cr_assert_eq(c.request().body.size(), 0);
@@ -313,7 +308,7 @@ Test(no_headers, get_no_headers)
 
 Test(no_headers, post_no_headers_no_body)
 {
-    Connection c = make_conn("POST /submit HTTP/1.1\r\n\r\n");
+    Connection c = make_conn("POST /submit HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert(c.request().headers.empty());
     cr_assert_eq(c.request().body.size(), 0);
@@ -321,7 +316,7 @@ Test(no_headers, post_no_headers_no_body)
 
 Test(no_headers, delete_no_headers)
 {
-    Connection c = make_conn("DELETE /res HTTP/1.1\r\n\r\n");
+    Connection c = make_conn("DELETE /res HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert(c.request().headers.empty());
     cr_assert_eq(c.request().body.size(), 0);
@@ -337,9 +332,9 @@ Test(reset, second_request_after_reset)
     int fds[2];
     cr_assert_eq(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
 
-    const std::string req1 = "GET /first HTTP/1.1\r\nHost: h\r\n\r\n";
+    const std::string req1 = "GET /first HTTP/1.0\r\n\r\n";
     const std::string req2
-        = "POST /second HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabc";
+        = "POST /second HTTP/1.0\r\nContent-Length: 3\r\n\r\nabc";
 
     write(fds[1], req1.c_str(), req1.size());
     Connection conn(fds[0]);
@@ -375,14 +370,14 @@ Test(eof_terminated, request_line_no_crlf)
 
 Test(eof_terminated, last_header_no_crlf)
 {
-    Connection c = make_conn_eof("GET / HTTP/1.1\r\nHost: localhost");
+    Connection c = make_conn_eof("GET / HTTP/1.0\r\nHost: localhost");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
 }
 
 Test(eof_terminated, headers_no_blank_line)
 {
-    Connection c = make_conn_eof("GET / HTTP/1.1\r\nHost: localhost\r\n");
+    Connection c = make_conn_eof("GET / HTTP/1.0\r\nHost: localhost\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
 }
@@ -390,7 +385,7 @@ Test(eof_terminated, headers_no_blank_line)
 Test(eof_terminated, multiple_headers_no_blank_line)
 {
     Connection c
-        = make_conn_eof("GET / HTTP/1.1\r\nHost: h\r\nAccept: text/html\r\n");
+        = make_conn_eof("GET / HTTP/1.0\r\nHost: h\r\nAccept: text/html\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
     cr_assert_eq(c.request().headers.count("accept"), 1);
