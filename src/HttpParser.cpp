@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/21 21:54:51 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 07:39:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,6 +24,7 @@ HttpParser::HttpParser()
     , _content_length(0)
     , _eof(false)
     , _request()
+    , _chunked(false)
 {
 }
 
@@ -50,6 +51,7 @@ void HttpParser::reset()
     _state = READING_REQUEST_LINE;
     _content_length = 0;
     _eof = false;
+    _chunked = false;
     _request = http::request();
 }
 
@@ -277,6 +279,7 @@ bool HttpParser::try_parse_headers()
             return false;
         }
 
+        // FIXME: trim LWS before/after key/val
         std::string key = _buf.substr(pos, colon - pos);
         std::string val = _buf.substr(colon + 1, crlf - colon);
 
@@ -292,13 +295,18 @@ bool HttpParser::try_parse_headers()
     L_TRACE("Got {} headers", _request.headers.size());
 
     _buf.erase(0, end.pos + end.len);
-    if (_request.headers.count("content-length")) {
+    if (_request.version == http::versions::HTTP11
+        && _request.headers.count("transfer-encoding")
+        && _request.headers["transfer-encoding"] == " chunked\r") {
+        _state = READING_BODY;
+        _chunked = true;
+    } else if (_request.headers.count("content-length")) {
         _content_length = static_cast<std::size_t>(
+            // FIXME: use strtol
             // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
             std::atoi(_request.headers["content-length"].c_str()));
         _state = (_content_length > 0) ? READING_BODY : COMPLETE;
     } else {
-        // FIXME: for HTTP/1.1 handle Transfer-Encoding: chunked
         _content_length = 0;
         _state = COMPLETE;
     }
@@ -311,6 +319,12 @@ bool HttpParser::try_parse_headers()
 
 bool HttpParser::try_parse_body()
 {
+    if (_chunked) {
+        while (try_parse_chunk())
+            ;
+        return _state != READING_BODY;
+    }
+
     if (_buf.size() < _content_length) {
         L_TRACE("Body not ready yet");
         return false;
@@ -320,5 +334,57 @@ bool HttpParser::try_parse_body()
     _request.body = _buf.substr(0, _content_length);
     _buf.erase(0, _content_length);
     _state = COMPLETE;
+    return true;
+}
+
+bool HttpParser::try_parse_chunk()
+{
+    std::size_t crlf_len = 1;
+    std::size_t crlf = _buf.find('\n');
+    if (crlf == std::string::npos) {
+        if (!_eof) {
+            L_TRACE("No chunk size ready to be received");
+            return false;
+        }
+        crlf = _buf.size();
+        crlf_len = 0;
+    } else if (crlf > 0 && _buf[crlf - 1] == '\r') {
+        --crlf;
+        ++crlf_len;
+    }
+
+    char *end;
+    uint64_t length = std::strtol(_buf.c_str(), &end, 16);
+    if (crlf != static_cast<std::size_t>(end - _buf.c_str())) {
+        L_ERROR("Failed to parse chunk size");
+        _state = ERROR;
+        return false;
+    }
+
+    std::size_t start = crlf + crlf_len;
+
+    crlf_len = 1;
+    crlf = _buf.find('\n', start + length);
+    if (crlf == std::string::npos) {
+        if (!_eof) {
+            L_TRACE("No chunk data ready to be received");
+            return false;
+        }
+        crlf = _buf.size();
+        crlf_len = 0;
+    } else if (crlf > 0 && _buf[crlf - 1] == '\r') {
+        --crlf;
+        ++crlf_len;
+    }
+
+    if (length == 0) {
+        L_TRACE("Request complete");
+        _state = COMPLETE;
+        _buf.erase(0, crlf + crlf_len);
+        return false;
+    }
+
+    _request.body.append(_buf, start, length);
+    _buf.erase(0, crlf + crlf_len);
     return true;
 }
