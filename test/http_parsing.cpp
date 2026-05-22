@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 09:01:42 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 09:09:09 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -317,6 +317,63 @@ Test(headers, key_internal_space_preserved)
     Connection c = make_conn("GET / HTTP/1.0\r\nX My: value\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("x my"), 1);
+}
+
+// -----------------------------------------------------------------------------
+// Header continuation lines (folded headers, RFC 2616 §2.2)
+// -----------------------------------------------------------------------------
+
+Test(headers, continuation_space)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\n"
+                             "X-Foo: first\r\n"
+                             " second\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "first second");
+}
+
+Test(headers, continuation_tab)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\n"
+                             "X-Foo: first\r\n"
+                             "\tsecond\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "first second");
+}
+
+Test(headers, continuation_multiple_lines)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\n"
+                             "X-Foo: one\r\n"
+                             " two\r\n"
+                             " three\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "one two three");
+}
+
+Test(headers, continuation_only_whitespace_skipped)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\n"
+                             "X-Foo: bar\r\n"
+                             "   \r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "bar");
+}
+
+Test(headers, continuation_does_not_affect_next_header)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\n"
+                             "X-Foo: first\r\n"
+                             " cont\r\n"
+                             "X-Bar: other\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "first cont");
+    cr_assert_eq(c.request().headers.at("x-bar"), "other");
 }
 
 // -----------------------------------------------------------------------------
