@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 07:04:02 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 09:01:42 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -266,6 +266,57 @@ Test(headers, lf_only_terminator)
     Connection c = make_conn("GET / HTTP/1.0\nHost: h\n\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
+}
+
+Test(headers, value_leading_space_trimmed)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\nX-Foo:   bar\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "bar");
+}
+
+Test(headers, value_leading_tab_trimmed)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\nX-Foo:\tbar\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "bar");
+}
+
+Test(headers, value_trailing_whitespace_trimmed)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\nX-Foo: bar   \r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "bar");
+}
+
+Test(headers, key_trailing_space_trimmed)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\nX-Foo : bar\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.count("x-foo"), 1);
+}
+
+Test(headers, value_internal_spaces_preserved)
+{
+    Connection c = make_conn(
+        "GET / HTTP/1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(
+        c.request().headers.at("content-type"), "text/html; charset=utf-8");
+}
+
+Test(headers, value_internal_tab_preserved)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\nX-Foo: bar\tbaz\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.at("x-foo"), "bar\tbaz");
+}
+
+Test(headers, key_internal_space_preserved)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\nX My: value\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().headers.count("x my"), 1);
 }
 
 // -----------------------------------------------------------------------------
