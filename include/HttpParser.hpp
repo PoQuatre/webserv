@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:11 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/21 21:12:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 07:28:51 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,6 +47,7 @@ private:
     std::size_t _content_length;
     bool _eof;
     http::request _request;
+    bool _chunked;
 
     bool run();
 
@@ -57,4 +58,5 @@ private:
     bool try_parse_headers();
 
     bool try_parse_body();
+    bool try_parse_chunk();
 };

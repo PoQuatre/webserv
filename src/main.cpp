@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/18 08:01:32 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 04:22:07 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -132,12 +132,10 @@ void process_client(
         if (!conn.on_readable()) {
             close_conn = true;
         } else if (conn.is_parse_complete()) {
-            conn.enqueue_response(
-                "HTTP/1.0 200 OK\r\n\r\nThis is just a test,\nwe will "
-                "need to insert request handling here\n");
+            conn.enqueue_response("HTTP/1.0 200 OK\r\nContent-Length: "
+                                  "66\r\n\r\nThis is just a test,\nwe will "
+                                  "need to insert request handling here\n");
 
-            // FIXME: delete this comment when adding HTTP/1.1
-            // NOLINTNEXTLINE(bugprone-branch-clone) this temporary
             if (!conn.on_writable()) {
                 close_conn = true;
             } else if (conn.is_sending()) {
@@ -146,26 +144,20 @@ void process_client(
                 ev.data.fd = fd;
                 epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
             } else {
-                close_conn = true;
-                // TODO: un-comment the line below when HTTP/1.1 is ready
-                // conn.reset();
+                conn.reset();
             }
         }
     }
 
     if (!close_conn && evts & EPOLLOUT) {
-        // FIXME: delete this comment when adding HTTP/1.1
-        // NOLINTNEXTLINE(bugprone-branch-clone) this temporary
         if (!conn.on_writable()) {
             close_conn = true;
         } else if (!conn.is_sending()) {
-            close_conn = true;
-            // TODO: un-comment the lines below when HTTP/1.1 is ready
-            // epoll_event ev = { };
-            // ev.events = EPOLL_RDONLY;
-            // ev.data.fd = fd;
-            // epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
-            // conn.reset();
+            epoll_event ev = { };
+            ev.events = EPOLL_RDONLY;
+            ev.data.fd = fd;
+            epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
+            conn.reset();
         }
     }
 
