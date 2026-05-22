@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 07:39:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 08:25:32 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -42,7 +42,8 @@ bool HttpParser::feed(const char *data, std::size_t len)
 void HttpParser::set_eof()
 {
     _eof = true;
-    run();
+    if (!_buf.empty())
+        run();
 }
 
 void HttpParser::reset()
