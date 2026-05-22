@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/21 20:34:30 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 07:04:02 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -74,7 +74,8 @@ Test(request_line, get_http11)
 
 Test(request_line, post_http10)
 {
-    Connection c = make_conn("POST /submit HTTP/1.0\r\nContent-Length: 0\r\n\r\n");
+    Connection c
+        = make_conn("POST /submit HTTP/1.0\r\nContent-Length: 0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::POST);
     cr_assert_eq(c.request().uri, "/submit");
@@ -253,7 +254,8 @@ Test(headers, multiple_headers)
 
 Test(headers, keys_lowercased)
 {
-    Connection c = make_conn("GET / HTTP/1.0\r\nContent-Type: text/html\r\n\r\n");
+    Connection c
+        = make_conn("GET / HTTP/1.0\r\nContent-Type: text/html\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("content-type"), 1);
     cr_assert_eq(c.request().headers.count("Content-Type"), 0);
@@ -389,4 +391,147 @@ Test(eof_terminated, multiple_headers_no_blank_line)
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().headers.count("host"), 1);
     cr_assert_eq(c.request().headers.count("accept"), 1);
+}
+
+// -----------------------------------------------------------------------------
+// HTTP/1.1 specific behavior
+// -----------------------------------------------------------------------------
+
+Test(http11, get_without_host_accepted)
+{
+    // NOTE: parser does not enforce the Host requirement from RFC 7230 5.4
+    Connection c = make_conn("GET / HTTP/1.1\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().version, http::versions::HTTP11);
+}
+
+Test(http11, get_with_host)
+{
+    Connection c
+        = make_conn("GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().version, http::versions::HTTP11);
+    cr_assert_eq(c.request().headers.count("host"), 1);
+}
+
+Test(http11, get_with_body_via_content_length)
+{
+    Connection c = make_conn("GET /search HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "Content-Length: 5\r\n"
+                             "\r\n"
+                             "query");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().body, "query");
+}
+
+Test(http11, post_with_content_length)
+{
+    Connection c = make_conn("POST /data HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "Content-Length: 4\r\n"
+                             "\r\n"
+                             "data");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().method, http::methods::POST);
+    cr_assert_eq(c.request().body, "data");
+}
+
+Test(http11, post_without_body_framing)
+{
+    Connection c = make_conn("POST /data HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().method, http::methods::POST);
+    cr_assert_eq(c.request().uri, "/data");
+}
+
+Test(http11, put_without_body_framing)
+{
+    Connection c = make_conn("PUT /res HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().method, http::methods::PUT);
+    cr_assert_eq(c.request().uri, "/res");
+}
+
+Test(http11, delete_without_body_framing)
+{
+    Connection c = make_conn("DELETE /res HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().method, http::methods::DELETE);
+    cr_assert_eq(c.request().uri, "/res");
+}
+
+// -----------------------------------------------------------------------------
+// Chunked Transfer-Encoding (HTTP/1.1)
+// -----------------------------------------------------------------------------
+
+Test(chunked, single_chunk)
+{
+    Connection c = make_conn("POST /upload HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "Transfer-Encoding: chunked\r\n"
+                             "\r\n"
+                             "5\r\n"
+                             "hello\r\n"
+                             "0\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().body, "hello");
+}
+
+Test(chunked, multiple_chunks)
+{
+    Connection c = make_conn("POST /upload HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "Transfer-Encoding: chunked\r\n"
+                             "\r\n"
+                             "5\r\n"
+                             "hello\r\n"
+                             "6\r\n"
+                             " world\r\n"
+                             "0\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().body, "hello world");
+}
+
+Test(chunked, empty_body)
+{
+    Connection c = make_conn("POST /upload HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "Transfer-Encoding: chunked\r\n"
+                             "\r\n"
+                             "0\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert(c.request().body.empty());
+}
+
+Test(chunked, hex_chunk_size)
+{
+    Connection c = make_conn("POST /upload HTTP/1.1\r\n"
+                             "Host: localhost\r\n"
+                             "Transfer-Encoding: chunked\r\n"
+                             "\r\n"
+                             "a\r\n"
+                             "0123456789\r\n"
+                             "0\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().body, "0123456789");
+}
+
+Test(chunked, not_applied_to_http10)
+{
+    Connection c = make_conn("GET / HTTP/1.0\r\n"
+                             "Transfer-Encoding: chunked\r\n"
+                             "\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert(c.request().body.empty());
 }
