@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/20 10:00:43 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/21 20:54:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,67 +15,33 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <cstdlib>
-#include <cstring>
-
 #include "logger.hpp"
 
 #define RECV_CHUNK 4096
-#define MAX_BUF_SIZE 8388608 // 8mb
 
 Connection::Connection()
     : _fd(-1)
-    , _parse_state(READING_REQUEST_LINE)
     , _send_state(IDLE)
-    , _content_length(0)
-    , _header_end(0)
-    , _eof(false)
-    , _request()
 {
 }
 
 Connection::Connection(int32_t fd)
     : _fd(fd)
-    , _parse_state(READING_REQUEST_LINE)
     , _send_state(IDLE)
-    , _content_length(0)
-    , _header_end(0)
-    , _eof(false)
-    , _request()
 {
 }
 
 bool Connection::on_readable()
 {
+    bool was_complete = _parser.is_complete();
     bool ok = do_recv();
-    // do_recv sets PARSE_ERROR on buffer overflow (hard stop).
-    // EOF (n==0) sets _eof and returns false — still let the parse loop run.
-    if (!ok && _parse_state == PARSE_ERROR)
+    if (!ok && _parser.is_error())
         return false;
 
-    bool progressed = true;
-    while (progressed && _parse_state != PARSE_COMPLETE
-        && _parse_state != PARSE_ERROR) {
-        progressed = false;
-        switch (_parse_state) {
-        case READING_REQUEST_LINE:
-            progressed = try_parse_request_line();
-            break;
-        case READING_HEADERS:
-            progressed = try_parse_headers();
-            break;
-        case READING_BODY:
-            progressed = try_parse_body();
-            break;
-        default:
-            break;
-        }
-    }
+    if (!was_complete && _parser.is_complete())
+        L_DEBUG("Client {} requested: {}", _fd, _parser.request());
 
-    if (progressed && _parse_state == PARSE_COMPLETE)
-        L_DEBUG("Client {} requested: {}", _fd, _request);
-
-    return !_eof && _parse_state != PARSE_ERROR;
+    return !_parser.is_eof() && !_parser.is_error();
 }
 
 bool Connection::on_writable() { return do_send(); }
@@ -88,288 +54,28 @@ void Connection::enqueue_response(const std::string &data)
 
 void Connection::reset()
 {
-    _recv_buf.clear();
     _send_buf.clear();
-    _parse_state = READING_REQUEST_LINE;
     _send_state = IDLE;
-    _content_length = 0;
-    _header_end = 0;
-    _eof = false;
-    _request = http::request();
-}
-
-bool Connection::try_parse_request_line()
-{
-    std::size_t crlf_len = 1;
-    std::size_t crlf = _recv_buf.find('\n');
-    if (crlf == std::string::npos) {
-        if (!_eof) {
-            L_TRACE("Client {}'s request line is not ready yet", _fd);
-            return false;
-        }
-        crlf = _recv_buf.size();
-        crlf_len = 0;
-    } else if (crlf > 0 && _recv_buf[crlf - 1] == '\r') {
-        --crlf;
-        ++crlf_len;
-    }
-
-    std::size_t notsp = _recv_buf.find_first_not_of(" \f\r\t\v", 0);
-    if (notsp >= crlf) {
-        L_WARN("Client {}'s request line is empty", _fd);
-        _parse_state = PARSE_ERROR;
-        return false;
-    }
-    std::size_t sp = _recv_buf.find_first_of(" \f\r\t\v", notsp);
-    if (sp >= crlf) {
-        L_WARN("Client {}'s request line only contains a method, maybe?", _fd);
-        _parse_state = PARSE_ERROR;
-        return false;
-    }
-    if (!try_parse_method(notsp, sp))
-        return false;
-
-    notsp = _recv_buf.find_first_not_of(" \f\r\t\v", sp);
-    if (notsp >= crlf) {
-        L_WARN("Client {}'s request line doesn't contain an URI", _fd);
-        _parse_state = PARSE_ERROR;
-        return false;
-    }
-    sp = _recv_buf.find_first_of(" \f\r\t\v", notsp);
-    if (_request.method == http::methods::GET) {
-        sp = std::min(sp, crlf);
-    } else if (sp >= crlf) {
-        L_WARN("Client {}'s request line is missing an HTTP version", _fd);
-        _parse_state = PARSE_ERROR;
-        return false;
-    }
-    _request.uri = _recv_buf.substr(notsp, sp - notsp);
-
-    notsp = _recv_buf.find_first_not_of(" \f\r\t\v", sp);
-    if (notsp >= crlf && _request.method == http::methods::GET) {
-        _request.version = http::versions::HTTP09;
-        _recv_buf.erase(0, crlf + crlf_len);
-        _parse_state = PARSE_COMPLETE;
-        return true;
-    }
-    if (notsp >= crlf) {
-        L_WARN("Client {}'s request line is missing an HTTP version", _fd);
-        _parse_state = PARSE_ERROR;
-        return false;
-    }
-    sp = _recv_buf.find_first_of(" \f\r\t\v", notsp);
-    sp = std::min(sp, crlf);
-    if (!try_parse_version(notsp, sp))
-        return false;
-
-    _recv_buf.erase(0, crlf + crlf_len);
-    _parse_state = READING_HEADERS;
-    return true;
-}
-
-bool Connection::try_parse_method(std::size_t start, std::size_t end)
-{
-    const std::string::iterator m_it
-        = _recv_buf.begin() + static_cast<ssize_t>(start);
-    const std::string::iterator m_ite
-        = _recv_buf.begin() + static_cast<ssize_t>(end);
-
-    for (std::string::iterator it = m_it; it != m_ite; ++it)
-        *it = static_cast<char>(std::toupper(*it));
-
-    for (std::size_t i = 0; i < http::methods::COUNT; ++i) {
-        if ((end - start) == std::strlen(http::methods::strings[i])
-            && std::equal(m_it, m_ite, http::methods::strings[i])) {
-            _request.method = static_cast<http::methods::type>(i);
-            return true;
-        }
-    }
-
-    L_WARN("Couldn't parse client {}'s request method: '{}'", _fd,
-        _recv_buf.substr(start, end - start));
-    _parse_state = PARSE_ERROR;
-    return false;
-}
-
-bool Connection::try_parse_version(std::size_t start, std::size_t end)
-{
-    const std::string::iterator v_it
-        = _recv_buf.begin() + static_cast<ssize_t>(start);
-    const std::string::iterator v_ite
-        = _recv_buf.begin() + static_cast<ssize_t>(end);
-
-    for (std::string::iterator it = v_it; it != v_ite; ++it)
-        *it = static_cast<char>(std::toupper(*it));
-
-    for (std::size_t i = 0; i < http::versions::COUNT; ++i) {
-        if ((end - start) == std::strlen(http::versions::strings[i])
-            && std::equal(v_it, v_ite, http::versions::strings[i])) {
-            _request.version = static_cast<http::versions::type>(i);
-            return true;
-        }
-    }
-
-    L_WARN("Couldn't parse client {}'s HTTP version: '{}'", _fd,
-        _recv_buf.substr(start, end - start));
-    _parse_state = PARSE_ERROR;
-    return false;
-}
-
-namespace {
-
-struct find_result {
-    std::size_t pos;
-    std::size_t len;
-};
-
-find_result find_header_end(const std::string &buf)
-{
-    if (!buf.empty() && buf[0] == '\n') {
-        find_result r = { 0, 1 };
-        return r;
-    }
-    if (buf.size() >= 2 && buf[0] == '\r' && buf[1] == '\n') {
-        find_result r = { 0, 2 };
-        return r;
-    }
-
-    std::size_t len = buf.size();
-    for (std::size_t i = 1; i < len; ++i) {
-        if (buf[i] != '\n')
-            continue;
-
-        if (buf[i - 1] == '\n') {
-            // could be \r\n\n or \n\n
-            if (i >= 2 && buf[i - 2] == '\r') {
-                find_result r = { i - 2, 3 };
-                return r;
-            }
-            // must be \n\n
-            find_result r = { i - 1, 2 };
-            return r;
-        }
-
-        if (buf[i - 1] == '\r' && i >= 2 && buf[i - 2] == '\n') {
-            // could be \r\n\r\n or \n\r\n
-            if (i >= 3 && buf[i - 3] == '\r') {
-                find_result r = { i - 3, 4 };
-                return r;
-            }
-            // must be \r\n\r\n
-            find_result r = { i - 2, 3 };
-            return r;
-        }
-    }
-
-    find_result r = { std::string::npos, 0 };
-    return r;
-}
-
-}
-
-bool Connection::try_parse_headers()
-{
-    find_result end = find_header_end(_recv_buf);
-    if (end.pos == std::string::npos) {
-        if (!_eof) {
-            L_TRACE("Client {}'s headers are not ready yet", _fd);
-            return false;
-        }
-        end.pos = _recv_buf.size();
-        end.len = 0;
-    }
-
-    std::size_t pos = _recv_buf.find_first_not_of(" \f\r\t\v");
-    while (pos < end.pos) {
-        std::size_t crlf_len = 1;
-        std::size_t crlf = _recv_buf.find('\n', pos);
-        if (crlf == std::string::npos) {
-            if (!_eof)
-                return false;
-            crlf = end.pos;
-            crlf_len = 0;
-        } else if (crlf > 0 && _recv_buf[crlf - 1] == '\r') {
-            --crlf;
-            ++crlf_len;
-        }
-
-        std::size_t colon = _recv_buf.find(':', pos);
-        if (colon > crlf) {
-            L_WARN("Client {} is missing a colon in it's headers", _fd);
-            _parse_state = PARSE_ERROR;
-            return false;
-        }
-
-        std::string key = _recv_buf.substr(pos, colon - pos);
-        std::string val = _recv_buf.substr(colon + 1, crlf - colon);
-
-        std::string::iterator ite = key.end();
-        for (std::string::iterator it = key.begin(); it != ite; ++it)
-            *it = static_cast<char>(std::tolower(*it));
-
-        _request.headers[key] = val;
-
-        pos = crlf + crlf_len;
-    }
-
-    L_TRACE("Got {} headers from client {}", _request.headers.size(), _fd);
-
-    _recv_buf.erase(0, end.pos + end.len);
-    if (_request.headers.count("content-length")) {
-        _content_length = static_cast<std::size_t>(
-            // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
-            std::atoi(_request.headers["content-length"].c_str()));
-        _parse_state = (_content_length > 0) ? READING_BODY : PARSE_COMPLETE;
-    } else {
-        // FIXME: for HTTP/1.1 handle Transfer-Encoding: chunked
-        _content_length = 0;
-        _parse_state = PARSE_COMPLETE;
-    }
-
-    if (_parse_state == PARSE_COMPLETE)
-        L_TRACE("No body to parse for client {}", _fd);
-
-    return true;
-}
-
-bool Connection::try_parse_body()
-{
-    if (_recv_buf.size() < _content_length) {
-        L_TRACE("Client {}'s body is not ready yet", _fd);
-        return false;
-    }
-
-    L_TRACE("Finished parsing client {}'s body", _fd);
-    _request.body = _recv_buf.substr(0, _content_length);
-    _recv_buf.erase(0, _content_length);
-    _parse_state = PARSE_COMPLETE;
-    return true;
+    _parser.reset();
 }
 
 bool Connection::do_recv()
 {
-    if (_recv_buf.size() >= MAX_BUF_SIZE) {
-        L_WARN("Client {} exceeded it's max request size", _fd);
-        _parse_state = PARSE_ERROR;
-        return false;
-    }
-
     char tmp[RECV_CHUNK];
     ssize_t n = recv(_fd, tmp, sizeof(tmp), 0);
 
     if (n > 0) {
         L_TRACE("Received {} bytes from client {}", n, _fd);
-        _recv_buf.append(tmp, static_cast<std::size_t>(n));
-        return true;
+        return _parser.feed(tmp, static_cast<std::size_t>(n));
     }
     if (n == 0) {
         L_TRACE("Client {} closed cleanly", _fd);
-        _eof = true;
+        _parser.set_eof();
         return false;
     }
 
     // n == -1: could be EAGAIN (no data) or a real error.
-    // Since epoll told use the fd was readable, treat -1 as "nothing available
+    // Since epoll told us the fd was readable, treat -1 as "nothing available
     // right now" and let epoll re-notify
     return true;
 }
@@ -388,6 +94,6 @@ bool Connection::do_send()
     }
 
     // n == 0: shouldn't happen but is fine
-    // n == -1: kernel buffer ful, or EAGAIN - epoll will re-fire EPOLLOUT
+    // n == -1: kernel buffer full, or EAGAIN - epoll will re-fire EPOLLOUT
     return true; // never an error, we rely on EPOLLERR/EPOLLHUP for that
 }
