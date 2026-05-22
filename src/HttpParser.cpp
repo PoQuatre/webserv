@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 22:09:18 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 22:28:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -197,13 +197,13 @@ bool HttpParser::try_parse_version(std::size_t start, std::size_t end)
 
 namespace {
 
-std::string trim_lws(const std::string &s)
+std::string trim_lws(const std::string &buf, std::size_t start, std::size_t end)
 {
-    std::size_t start = s.find_first_not_of(" \t");
-    if (start == std::string::npos)
+    std::size_t s = buf.find_first_not_of(" \t", start);
+    if (s == std::string::npos || s >= end)
         return "";
-    std::size_t end = s.find_last_not_of(" \t");
-    return s.substr(start, end - start + 1);
+    std::size_t e = buf.find_last_not_of(" \t", end - 1);
+    return buf.substr(s, e - s + 1);
 }
 
 struct find_result {
@@ -319,8 +319,8 @@ bool HttpParser::try_parse_header_field(std::size_t &pos, std::size_t end_pos)
         return false;
     }
 
-    std::string key = trim_lws(_buf.substr(pos, colon - pos));
-    std::string val = trim_lws(_buf.substr(colon + 1, crlf - colon - 1));
+    std::string key = trim_lws(_buf, pos, colon);
+    std::string val = trim_lws(_buf, colon + 1, crlf);
 
     pos = crlf + crlf_len;
 
@@ -334,7 +334,7 @@ bool HttpParser::try_parse_header_field(std::size_t &pos, std::size_t end_pos)
             --cont_crlf;
             ++cont_crlf_len;
         }
-        std::string cont = trim_lws(_buf.substr(pos, cont_crlf - pos));
+        std::string cont = trim_lws(_buf, pos, cont_crlf);
         if (!cont.empty()) {
             val += ' ';
             val += cont;
