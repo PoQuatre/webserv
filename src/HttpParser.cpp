@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 08:25:32 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 08:58:49 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -197,6 +197,15 @@ bool HttpParser::try_parse_version(std::size_t start, std::size_t end)
 
 namespace {
 
+std::string trim_lws(const std::string &s)
+{
+    std::size_t start = s.find_first_not_of(" \t");
+    if (start == std::string::npos)
+        return "";
+    std::size_t end = s.find_last_not_of(" \t");
+    return s.substr(start, end - start + 1);
+}
+
 struct find_result {
     std::size_t pos;
     std::size_t len;
@@ -280,9 +289,8 @@ bool HttpParser::try_parse_headers()
             return false;
         }
 
-        // FIXME: trim LWS before/after key/val
-        std::string key = _buf.substr(pos, colon - pos);
-        std::string val = _buf.substr(colon + 1, crlf - colon);
+        std::string key = trim_lws(_buf.substr(pos, colon - pos));
+        std::string val = trim_lws(_buf.substr(colon + 1, crlf - colon - 1));
 
         std::string::iterator ite = key.end();
         for (std::string::iterator it = key.begin(); it != ite; ++it)
@@ -298,7 +306,7 @@ bool HttpParser::try_parse_headers()
     _buf.erase(0, end.pos + end.len);
     if (_request.version == http::versions::HTTP11
         && _request.headers.count("transfer-encoding")
-        && _request.headers["transfer-encoding"] == " chunked\r") {
+        && _request.headers["transfer-encoding"] == "chunked") {
         _state = READING_BODY;
         _chunked = true;
     } else if (_request.headers.count("content-length")) {
