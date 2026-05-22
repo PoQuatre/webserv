@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 09:07:47 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 22:09:18 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -244,7 +244,7 @@ find_result find_header_end(const std::string &buf)
                 find_result r = { i - 3, 4 };
                 return r;
             }
-            // must be \r\n\r\n
+            // must be \n\r\n
             find_result r = { i - 2, 3 };
             return r;
         }
@@ -269,55 +269,9 @@ bool HttpParser::try_parse_headers()
     }
 
     std::size_t pos = _buf.find_first_not_of(" \f\r\t\v");
-    while (pos < end.pos) {
-        std::size_t crlf_len = 1;
-        std::size_t crlf = _buf.find('\n', pos);
-        if (crlf == std::string::npos) {
-            if (!_eof)
-                return false;
-            crlf = end.pos;
-            crlf_len = 0;
-        } else if (crlf > 0 && _buf[crlf - 1] == '\r') {
-            --crlf;
-            ++crlf_len;
-        }
-
-        std::size_t colon = _buf.find(':', pos);
-        if (colon > crlf) {
-            L_WARN("Header is missing a colon");
-            _state = ERROR;
+    while (pos < end.pos)
+        if (!try_parse_header_field(pos, end.pos))
             return false;
-        }
-
-        std::string key = trim_lws(_buf.substr(pos, colon - pos));
-        std::string val = trim_lws(_buf.substr(colon + 1, crlf - colon - 1));
-
-        pos = crlf + crlf_len;
-
-        while (pos < end.pos && (_buf[pos] == ' ' || _buf[pos] == '\t')) {
-            std::size_t cont_crlf_len = 1;
-            std::size_t cont_crlf = _buf.find('\n', pos);
-            if (cont_crlf == std::string::npos) {
-                cont_crlf = end.pos;
-                cont_crlf_len = 0;
-            } else if (cont_crlf > 0 && _buf[cont_crlf - 1] == '\r') {
-                --cont_crlf;
-                ++cont_crlf_len;
-            }
-            std::string cont = trim_lws(_buf.substr(pos, cont_crlf - pos));
-            if (!cont.empty()) {
-                val += ' ';
-                val += cont;
-            }
-            pos = cont_crlf + cont_crlf_len;
-        }
-
-        std::string::iterator ite = key.end();
-        for (std::string::iterator it = key.begin(); it != ite; ++it)
-            *it = static_cast<char>(std::tolower(*it));
-
-        _request.headers[key] = val;
-    }
 
     L_TRACE("Got {} headers", _request.headers.size());
 
@@ -341,6 +295,58 @@ bool HttpParser::try_parse_headers()
     if (_state == COMPLETE)
         L_TRACE("No body to parse");
 
+    return true;
+}
+
+bool HttpParser::try_parse_header_field(std::size_t &pos, std::size_t end_pos)
+{
+    std::size_t crlf_len = 1;
+    std::size_t crlf = _buf.find('\n', pos);
+    if (crlf == std::string::npos) {
+        if (!_eof)
+            return false;
+        crlf = end_pos;
+        crlf_len = 0;
+    } else if (crlf > 0 && _buf[crlf - 1] == '\r') {
+        --crlf;
+        ++crlf_len;
+    }
+
+    std::size_t colon = _buf.find(':', pos);
+    if (colon > crlf) {
+        L_WARN("Header is missing a colon");
+        _state = ERROR;
+        return false;
+    }
+
+    std::string key = trim_lws(_buf.substr(pos, colon - pos));
+    std::string val = trim_lws(_buf.substr(colon + 1, crlf - colon - 1));
+
+    pos = crlf + crlf_len;
+
+    while (pos < end_pos && (_buf[pos] == ' ' || _buf[pos] == '\t')) {
+        std::size_t cont_crlf_len = 1;
+        std::size_t cont_crlf = _buf.find('\n', pos);
+        if (cont_crlf == std::string::npos) {
+            cont_crlf = end_pos;
+            cont_crlf_len = 0;
+        } else if (cont_crlf > 0 && _buf[cont_crlf - 1] == '\r') {
+            --cont_crlf;
+            ++cont_crlf_len;
+        }
+        std::string cont = trim_lws(_buf.substr(pos, cont_crlf - pos));
+        if (!cont.empty()) {
+            val += ' ';
+            val += cont;
+        }
+        pos = cont_crlf + cont_crlf_len;
+    }
+
+    std::string::iterator ite = key.end();
+    for (std::string::iterator it = key.begin(); it != ite; ++it)
+        *it = static_cast<char>(std::tolower(*it));
+
+    _request.headers[key] = val;
     return true;
 }
 
