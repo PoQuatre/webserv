@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 04:22:07 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 08:26:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -238,7 +238,7 @@ int32_t main(int32_t ac, char **av)
     epoll_event events[MAX_EVENTS];
     bool running = true;
     while (running) {
-        L_TRACE("Waiting for connections");
+        L_TRACE("Waiting for events");
         int32_t nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
         if (nfds == -1) {
             // NOTE: epoll_wait interrupted by signal, loop again
