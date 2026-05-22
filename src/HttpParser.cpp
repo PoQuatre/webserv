@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 08:58:49 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/22 09:07:47 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -292,13 +292,31 @@ bool HttpParser::try_parse_headers()
         std::string key = trim_lws(_buf.substr(pos, colon - pos));
         std::string val = trim_lws(_buf.substr(colon + 1, crlf - colon - 1));
 
+        pos = crlf + crlf_len;
+
+        while (pos < end.pos && (_buf[pos] == ' ' || _buf[pos] == '\t')) {
+            std::size_t cont_crlf_len = 1;
+            std::size_t cont_crlf = _buf.find('\n', pos);
+            if (cont_crlf == std::string::npos) {
+                cont_crlf = end.pos;
+                cont_crlf_len = 0;
+            } else if (cont_crlf > 0 && _buf[cont_crlf - 1] == '\r') {
+                --cont_crlf;
+                ++cont_crlf_len;
+            }
+            std::string cont = trim_lws(_buf.substr(pos, cont_crlf - pos));
+            if (!cont.empty()) {
+                val += ' ';
+                val += cont;
+            }
+            pos = cont_crlf + cont_crlf_len;
+        }
+
         std::string::iterator ite = key.end();
         for (std::string::iterator it = key.begin(); it != ite; ++it)
             *it = static_cast<char>(std::tolower(*it));
 
         _request.headers[key] = val;
-
-        pos = crlf + crlf_len;
     }
 
     L_TRACE("Got {} headers", _request.headers.size());
