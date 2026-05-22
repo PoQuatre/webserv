@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/22 04:14:22 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/22 23:01:42 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -117,6 +117,10 @@ DEPS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(SRCS:%.cpp=%.d))
 LIB_OBJS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(LIB_SRCS:%.cpp=%.o))
 TEST_OBJS = $(addprefix $(BUILD_DIR)/$(TEST_DIR)/,$(TEST_SRCS:%.cpp=%.o))
 TEST_DEPS = $(addprefix $(BUILD_DIR)/$(TEST_DIR)/,$(TEST_SRCS:%.cpp=%.d))
+
+LINT_SRCS		= $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
+LINT_STAMPS		= $(addprefix $(BUILD_DIR)/lint/,$(addsuffix .ok,$(LINT_SRCS)))
+LINT_FIX_STAMPS	= $(addprefix $(BUILD_DIR)/lint-fix/,$(addsuffix .ok,$(LINT_SRCS)))
 
 
 
@@ -251,9 +255,11 @@ ifeq ($(NOPRETTY),)
 
 define success_quiet
 	tmp=$$(mktemp); \
-	script -qec '$(1)' /dev/null >"$$tmp"; \
-	[ $$? -ne 0 ] && cat "$$tmp"; \
-	$(RM) "$$tmp"
+	{ $(1); } >"$$tmp" 2>&1; \
+	ec=$$?; \
+	[ "$$ec" -ne 0 ] && cat "$$tmp"; \
+	$(RM) "$$tmp"; \
+	exit "$$ec"
 endef
 
 else
@@ -348,6 +354,18 @@ $(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBU
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++11 $(DFLAGS) $(TEST_INCS:%=-I%) -o $@ -c $<
 
+$(BUILD_DIR)/lint/%.ok: %
+	@mkdir -p $(dir $@)
+	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$<)
+	$(call success_quiet,$(CLANG_TIDY) -p . --quiet $<)
+	@touch $@
+
+$(BUILD_DIR)/lint-fix/%.ok: %
+	@mkdir -p $(dir $@)
+	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$<)
+	$(call success_quiet,$(CLANG_TIDY) -p . --quiet --fix $<)
+	@touch $@
+
 $(CRITERION_SRC):
 	@$(call progress,$(CLR_BLUE)Downloading $(CLR_TEAL)$(notdir $@))
 	@mkdir -p '$(dir $@)'
@@ -408,14 +426,10 @@ format-fix: .header
 	$(CLANG_FORMAT) -i $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 
 .PHONY: lint
-lint: .header
-	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) -p . --quiet $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
+lint: .header $(LINT_STAMPS)
 
 .PHONY: lint-fix
-lint-fix: .header
-	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$(NAME))
-	$(CLANG_TIDY) -p . --quiet --fix $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
+lint-fix: .header $(LINT_FIX_STAMPS)
 
 .PHONY: setup-criterion
 setup-criterion: .header $(CRITERION_NAME)
