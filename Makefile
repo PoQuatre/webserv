@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/20 07:56:32 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/22 04:14:22 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -291,7 +291,7 @@ ubsan: .header $(TARGET)
 .PHONY: test
 test: .header $(TARGET)
 	@$(call progress,$(CLR_BLUE)Running $(CLR_TEAL)$(TARGET))
-	./$(TARGET)
+	./$(TARGET) $(if $(TEST_VERBOSE),--verbose)
 
 -include $(DEPS) $(TEST_DEPS)
 
