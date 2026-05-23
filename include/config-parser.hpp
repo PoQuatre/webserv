@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/22 22:39:18 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/23 01:12:51 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,6 +30,9 @@ bool string_check(const std::string &string);
 bool bool_check(const std::string &string);
 bool time_check(const std::string &val);
 bool int_check(const std::string &string);
+bool size_check(const std::string &val);
+std::size_t convert_time_to_size_t(const std::string &val);
+std::size_t convert_string_to_size(const std::string &val);
 
 class Parser {
 public:

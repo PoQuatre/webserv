@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/25 21:15:29 by nlaporte         ###   ########.fr        #
+#    Updated: 2026/05/25 21:21:36 by nlaporte         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -100,7 +100,8 @@ SRCS =	$(LIB_SRCS) \
 		main.cpp
 
 ##begin: TEST_SRCS
-TEST_SRCS =	http_parsing.cpp
+TEST_SRCS =	http_parsing.cpp \
+			config_parsing.cpp
 ##end: TEST_SRCS
 
 ##begin: HDRS

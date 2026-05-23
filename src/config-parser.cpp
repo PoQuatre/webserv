@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/22 23:39:20 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/23 02:03:14 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,7 +25,9 @@
 #include "http.hpp"
 #include "logger.hpp"
 
+#ifndef TESTING
 namespace {
+#endif
 
 const char *strings[] = {
 #define X(_, __, ___, text, ____, _____, ______, _______, ________) #text,
@@ -130,7 +132,6 @@ bool time_check(const std::string &val)
     return valid;
 }
 
-/*
 std::size_t convert_time_to_size_t(const std::string &val)
 {
     int64_t i = 0;
@@ -141,42 +142,47 @@ std::size_t convert_time_to_size_t(const std::string &val)
     while (1) {
         i = std::strtol(str, &p, 10);
         if (i < 0)
-            return -1;
+            return 9;
         str = p;
-        if (!str)
+        if (!*str)
             return final_size + (i / 1000);
         if (str[1] && str[0] == 'm' && str[1] == 's') {
             final_size += (i / 1000);
             str += 2;
         } else {
-            switch ((val)[i]) {
+            switch (*str) {
             case 's':
                 final_size += i;
+                str++;
                 break;
             case 'm':
                 final_size += i * 60;
+                str++;
                 break;
             case 'h':
                 final_size += i * 3600;
+                str++;
                 break;
-            case 'd':
-            case 'w':
-            case 'M':
-            case 'y':
+                /*
+        case 'd':
+        case 'w':
+        case 'M':
+        case 'y':
+                */
             default:
                 return final_size;
             }
         }
-        if (!p)
+        if (!*p)
             return final_size;
     }
-    return -1;
+    return 0;
 }
-*/
 
 bool size_check(const std::string &val)
 {
-    uint32_t i;
+    (void)convert_time_to_size_t;
+    std::size_t i;
     for (i = 0; val[i]; i++) {
         if (!std::isdigit(val[i]))
             break;
@@ -194,17 +200,19 @@ bool size_check(const std::string &val)
 
 std::size_t convert_string_to_size(const std::string &val)
 {
-    std::size_t i;
+    int64_t i;
     char *p;
 
     i = std::strtol(val.c_str(), &p, 10);
     if (!p)
         return i;
+    if (INT64_MAX / 1048576 <= i)
+        return INT64_MAX;
     if (*p == 'k' || *p == 'K')
         return i;
     if (*p == 'm' || *p == 'M')
         return i * 1024;
-    if (*p == 'g' || *p == 'G')
+    if ((*p == 'g' || *p == 'G'))
         return i * 1048576;
     return 0;
 }
@@ -425,7 +433,10 @@ bool is_a_valid_val(std::string &val, const config_token &token)
             default : return true;
     }
 }
+
+#ifndef TESTING
 }
+#endif
 
 Parser::Parser(const std::string &path)
     : _path(path)
@@ -1031,8 +1042,10 @@ bool Parser::parse_config()
         L_ERROR("invalid configuration file {} error(s)", _err_count);
         return false;
     }
+#ifndef TESTING
     if (logger::log_level() == logger::levels::TRACE)
         debug_tree(_root, 0);
+#endif
     return _valid;
 }
 
