@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/23 02:03:14 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/23 02:16:54 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -113,10 +113,12 @@ bool time_check(const std::string &val)
             case 's':
             case 'm':
             case 'h':
+                /*
             case 'd':
             case 'w':
             case 'M':
             case 'y':
+*/
                 i++;
                 valid = true;
                 break;
