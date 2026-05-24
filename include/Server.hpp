@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/22 22:39:26 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/24 20:17:28 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,7 @@
 #include "http.hpp"
 
 struct Config {
-    const std::string *error_pages[512];
+    std::map<uint32_t, std::string> error_pages;
     std::string root;
     std::size_t client_max_body_size;
     bool autoindex;
