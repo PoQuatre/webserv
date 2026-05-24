@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/23 02:16:54 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/24 20:44:36 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -36,10 +36,19 @@ const char *strings[] = {
 };
 
 const char *keywords_strs[] = {
-#define X(_, text, ___, __, ____, _____, ______, _______, ________) #text,
+#define X(_, text, ___, __, ____, _____, ______, _______, ________) text,
     KEYWORDS
 #undef X
 };
+
+const int keywords_scope_rules[] = {
+#define X(_, _____, ___, __, http, server, location, _______, ________)        \
+    ((http) + ((server) << 1) + ((location) << 2)),
+    KEYWORDS
+#undef X
+};
+
+const std::size_t COUNT = sizeof(keywords_strs) / sizeof(*keywords_strs);
 
 tokens::type config_get_token_type(config_token token)
 {
@@ -47,21 +56,18 @@ tokens::type config_get_token_type(config_token token)
 #define X(name, val)                                                           \
     case val:                                                                  \
         return tokens::name;
-        TOKENS // NOLINT
+        TOKENS // NOLINT (bugprone-branch-clone) switch 2 identical branches
 #undef X
             default : return tokens::WORD;
     }
 }
 
-keywords::type config_get_token_keyword(const config_token &token) // NOLINT
+keywords::type config_get_token_keyword(const config_token &token)
 {
-    if (token.value.empty())
-        return keywords::UNKNOWN;
-#define X(name, val, _, __, ___, ____, _____, _______, ______)                 \
-    if ((val) == token.value)                                                  \
-        return keywords::name;
-    KEYWORDS
-#undef X
+    for (std::size_t i = 0; i < COUNT; i++) {
+        if (keywords_strs[i] == token.value)
+            return static_cast<keywords::type>(i);
+    }
     return keywords::UNKNOWN;
 }
 
@@ -105,7 +111,7 @@ bool time_check(const std::string &val)
         while (val[i] && std::isdigit(val[i])) {
             i++;
         }
-        if (i + 1 < val.length() && val[i] == 'm' && (val[i]) == 's') {
+        if (i + 1 < val.length() && val[i] == 'm' && (val[i + 1]) == 's') {
             valid = true;
             i += 2;
         } else {
@@ -122,10 +128,8 @@ bool time_check(const std::string &val)
                 i++;
                 valid = true;
                 break;
-            case 0:
-                return true;
             default:
-                return false;
+                return (!val[i]);
             }
         }
         if (i == val.length())
@@ -206,16 +210,14 @@ std::size_t convert_string_to_size(const std::string &val)
     char *p;
 
     i = std::strtol(val.c_str(), &p, 10);
-    if (!p)
+    if (!*p)
         return i;
-    if (INT64_MAX / 1048576 <= i)
-        return INT64_MAX;
     if (*p == 'k' || *p == 'K')
-        return i;
+        return (INT64_MAX / 1024 < i ? INT64_MAX : i * 1024);
     if (*p == 'm' || *p == 'M')
-        return i * 1024;
+        return (INT64_MAX / 1048576 < i ? INT64_MAX : i * 1048576);
     if ((*p == 'g' || *p == 'G'))
-        return i * 1048576;
+        return (INT64_MAX / 1073741824 < i ? INT64_MAX : i * 1073741824);
     return 0;
 }
 
@@ -277,10 +279,9 @@ void create_location(
             for (std::vector<std::string>::iterator it2 = (*it)->vals.begin();
                 it2 != (*it)->vals.end(); it2++) {
                 std::size_t code = std::strtol((*it2).c_str(), &p, 10);
-                if (code < 512 && code > 1)
-                    location_conf.error_pages[code]
-                        = &(*((*it)->vals.end() - 1));
-                // TODO: Handle bad code
+                if (code < 512 && code > 1) {
+                    location_conf.error_pages[code] = *((*it)->vals.end() - 1);
+                }
             }
         }
 
@@ -356,10 +357,9 @@ void initalize_server_config(
             it2 != error_page_vec.end(); it2++) {
             char *p;
             std::size_t code = std::strtol((*it2).c_str(), &p, 10);
-            // TODO: handle error
-            if (code < 512 && code > 1)
-                inital_config.error_pages[code]
-                    = &(*(error_page_vec.end() - 1));
+            if (code < 512 && code > 1) {
+                inital_config.error_pages[code] = *(error_page_vec.end() - 1);
+            }
         }
     }
 
@@ -389,24 +389,24 @@ void initalize_server_config(
     }
 }
 
-bool directive_is_in_valide_scope( // NOLINT
+bool directive_is_in_valide_scope(
     keywords::type root_keyword, keywords::type directive)
 {
-    if (root_keyword == keywords::GLOBAL && directive == keywords::HTTP)
+    if (directive == keywords::HTTP && keywords::GLOBAL == root_keyword)
         return true;
-#define X(name, __, ___, ____, http, server, location, _______, ________)      \
-    if (root_keyword == keywords::HTTP && directive == keywords::name) {       \
-        return (http);                                                         \
-    }                                                                          \
-    if (root_keyword == keywords::SERVER && directive == keywords::name) {     \
-        return (server);                                                       \
-    }                                                                          \
-    if (root_keyword == keywords::LOCATION && directive == keywords::name) {   \
-        return (location);                                                     \
+    switch (root_keyword) {
+    case keywords::HTTP:
+        return (1 & keywords_scope_rules[directive]);
+
+    case keywords::SERVER:
+        return (2 & keywords_scope_rules[directive]);
+
+    case keywords::LOCATION:
+        return (4 & keywords_scope_rules[directive]);
+
+    default:
+        return false;
     }
-    KEYWORDS
-#undef X
-    return false;
 }
 
 uint32_t get_max_args(const config_token &token)
@@ -417,7 +417,7 @@ uint32_t get_max_args(const config_token &token)
 #define X(name, _, arg, __, ___, ____, _____, _______, ______)                 \
     case keywords::name:                                                       \
         return arg;
-        KEYWORDS // NOLINT
+        KEYWORDS // NOLINT (bugprone-branch-clone) switch 2 identical branches
 #undef X
     }
     return 1;
@@ -430,7 +430,7 @@ bool is_a_valid_val(std::string &val, const config_token &token)
 #define X(name, _, _______, __, ___, ____, _____, check, ______)               \
     case keywords::name:                                                       \
         return check(val);
-        KEYWORDS // NOLINT
+        KEYWORDS // NOLINT (bugprone-branch-clone) switch 2 identical branches
 #undef X
             default : return true;
     }
@@ -506,7 +506,7 @@ void Parser::config_set_alive_last_token()
 // ignoring undefined scope
 // scope_name is copy of token->str for prevent this value from being changed
 void Parser::skip_scope(
-    const std::string &scope_name, uint32_t line, const std::string &root_key)
+    const std::string &scope_name, uint32_t line, bool print_err)
 {
     int depth = 1;
     // Init recovery
@@ -523,10 +523,9 @@ void Parser::skip_scope(
             depth--;
         }
         if (depth == 0) {
-            L_ERROR("can't open '{}' scope (line {}), inside '{}' scope, line "
-                    "{} to {} "
-                    "ignored",
-                scope_name, line, root_key, line, _act_token->line);
+            if (print_err)
+                L_ERROR("unrecognized scope '{}' (line {}), ignored",
+                    scope_name, line);
             skip_line(line);
             _err_count++;
             _valid = false;
@@ -542,13 +541,23 @@ bool Parser::create_location_node()
 
     // check scope validity in scope
     if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
-        skip_scope(_act_token->value, line, _root->key);
+        L_ERROR("scope '{}' (line {}) is in a bad scope '{}' (line {}) {}",
+            _act_token->value, line, _root->key, _root->line);
+        skip_scope(_act_token->value, line);
         return true;
     }
 
     // See next token without consume them
     if (!see_next_token())
         return true;
+
+    // Manage no arg location
+    if (_act_token->type == tokens::BRACE_OPEN) {
+        L_ERROR("location directive requires a path (line {}) {}", line,
+            strings[keywords::LOCATION]);
+        skip_scope("location", line, false);
+        return true;
+    }
 
     // Initialize node
     try {
@@ -560,15 +569,6 @@ bool Parser::create_location_node()
         node->keyword = keywords::LOCATION;
     } catch (...) {
         return false;
-    }
-
-    // Manage no arg location
-    if (_act_token->type == tokens::BRACE_OPEN) {
-        consume_next_token();
-        _root->children.push_back(node);
-        _root = node;
-        _depth++;
-        return true;
     }
 
     //  Handle strict location
@@ -594,7 +594,7 @@ bool Parser::create_location_node()
                 "location need one parameter or BRACE_OPEN (line {})", line);
         _err_count++;
         _valid = false;
-        skip_scope(_act_token->value, line, _root->key);
+        skip_scope(_act_token->value, line);
         delete node;
         return true;
     }
@@ -613,7 +613,7 @@ bool Parser::create_location_node()
                 "OPEN_BRACE after arg (line {})",
             line);
         config_set_alive_last_token();
-        skip_scope(_act_token->value, line, _root->key);
+        skip_scope(_act_token->value, line);
         _err_count++;
         _valid = false;
         delete node;
@@ -685,7 +685,9 @@ bool Parser::create_node()
 
     // check scope validity in scope
     if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
-        skip_scope(_act_token->value, line, _root->key);
+        L_ERROR("scope '{}' (line {}) is in a bad scope '{}' (line {}) {}",
+            _act_token->value, line, _root->key, _root->line);
+        skip_scope(_act_token->value, line, false);
         return true;
     }
 
@@ -732,14 +734,13 @@ bool Parser::create_leaf()
         || _act_token->keyword == keywords::UNKNOWN) {
         tmp_token = *_act_token;
         if (!see_next_token() || tmp_token.keyword != keywords::OPEN_SCOPE) {
-            L_ERROR("unknown directive '{}' (line {}) for all directive {}",
-                tmp_token.value, line, strings[tmp_token.keyword]);
+            L_ERROR("unknown directive '{}' (line {})", tmp_token.value, line);
             skip_line(line);
             _err_count++;
             _valid = false;
             return true;
         }
-        skip_scope(tmp_token.value, tmp_token.line, _root->key);
+        skip_scope(tmp_token.value, tmp_token.line);
         _valid = false;
         return true;
     }
@@ -823,7 +824,7 @@ bool Parser::create_leaf()
     if (_act_token->type != tokens::END) {
         if (_act_token->type == tokens::BRACE_OPEN
             && _act_token->line == line) {
-            skip_scope(tmp_token.value, line, _root->key);
+            skip_scope(tmp_token.value, line);
             delete node;
             return true;
         }
@@ -869,7 +870,7 @@ bool Parser::iter_on_tokens()
         return create_node();
 
     case keywords::OPEN_SCOPE:
-        skip_scope(_act_token->value, line, _root->key);
+        skip_scope(_act_token->value, line);
         return true;
 
     case keywords::CLOSE_SCOPE:
@@ -1063,8 +1064,6 @@ void Parser::create_one_server(const config_node &node,
     inital_config.autoindex = false;
     inital_config.client_max_body_size = 0;
     std::memset(
-        (void *)inital_config.error_pages, 0, sizeof(std::string *) * 512);
-    std::memset(
         inital_config.allowed_methods, 1, sizeof(bool) * http::methods::COUNT);
 
     initalize_server_config(server_conf, inital_config);
@@ -1072,11 +1071,11 @@ void Parser::create_one_server(const config_node &node,
     create_all_location(node, inital_config, location_vector);
 
     if (server_conf.find(keywords::ROOT) == server_conf.end())
-        L_WARN("No server root use '{}' as default", DEFAULT_ROOT);
+        L_WARN("No server root using '{}' as the default", DEFAULT_ROOT);
     if (server_conf.find(keywords::SERVER_NAME) == server_conf.end())
-        L_WARN("No server_name use '{}' as server_name", DEFAULT_SERVER_NAME);
+        L_WARN("No server name using '{}' as the default", DEFAULT_SERVER_NAME);
     if (server_conf.find(keywords::LISTEN) == server_conf.end())
-        L_WARN("No listen use '{}' as default ", DEFAULT_LISTEN);
+        L_WARN("No listen address, using '{}' as the default ", DEFAULT_LISTEN);
 
     Server n_server
         = Server(server_conf.find(keywords::ROOT) != server_conf.end()
@@ -1139,6 +1138,6 @@ bool Parser::create_all_servers()
         L_ERROR(" no server configuration");
         return false;
     }
-    L_TRACE("{} server(s) create", _servers.size());
+    L_TRACE("{} server(s) created", _servers.size());
     return true;
 }

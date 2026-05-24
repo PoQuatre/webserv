@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/22 04:55:26 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/25 20:46:45 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <vector>
 
 #include "logger.hpp"
@@ -67,7 +68,7 @@ Server::Server(const std::string &root_path,
 Server::Server(const Server &other)
     : _root_location(other._root_location)
     , _root_path(other._root_path)
-    , _server_name(other._root_path)
+    , _server_name(other._server_name)
     , _sockaddr(other._sockaddr)
     , _sockaddr6(other._sockaddr6)
     , _sockfd(-1)
@@ -196,10 +197,10 @@ std::ostream &operator<<(std::ostream &os, const Config &config)
     os << "autoindex: " << std::boolalpha << config.autoindex << ", ";
     os << "client max body size: " << config.client_max_body_size << ", ";
     os << "error pages: [";
-    for (uint32_t i = 0; i < 512; i++) {
-        if (config.error_pages[i]) {
-            os << i << ": " << config.error_pages[i] << ", ";
-        }
+    for (std::map<uint32_t, std::string>::const_iterator it
+        = config.error_pages.begin();
+        it != config.error_pages.end(); it++) {
+        os << (it)->first << ": " << it->second << ", ";
     }
     os << "]";
     os << "}";

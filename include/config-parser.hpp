@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/23 01:12:51 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/24 20:34:34 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,8 +47,8 @@ private:
     void skip_line(const uint32_t &line);
     bool see_next_token();
     bool consume_next_token();
-    void skip_scope(const std::string &scope_name, uint32_t line,
-        const std::string &root_key);
+    void skip_scope(
+        const std::string &scope_name, uint32_t line, bool print_err = true);
     bool create_location_node();
     bool create_node();
     bool create_leaf();
