@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 09:09:09 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/23 14:26:37 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -402,6 +402,40 @@ Test(body, no_content_length_no_body)
     Connection c = make_conn("GET / HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert(c.request().body.empty());
+}
+
+Test(body, content_length_non_numeric)
+{
+    Connection c
+        = make_conn("POST /x HTTP/1.0\r\nContent-Length: abc\r\n\r\nbody");
+    cr_assert(c.is_parse_error());
+}
+
+Test(body, content_length_trailing_garbage)
+{
+    Connection c
+        = make_conn("POST /x HTTP/1.0\r\nContent-Length: 5abc\r\n\r\nhello");
+    cr_assert(c.is_parse_error());
+}
+
+Test(body, content_length_empty_value)
+{
+    Connection c = make_conn("POST /x HTTP/1.0\r\nContent-Length: \r\n\r\n");
+    cr_assert(c.is_parse_error());
+}
+
+Test(body, content_length_overflow)
+{
+    Connection c = make_conn(
+        "POST /x HTTP/1.0\r\nContent-Length: 99999999999999999999999\r\n\r\n");
+    cr_assert(c.is_parse_error());
+}
+
+Test(body, content_length_negative)
+{
+    Connection c
+        = make_conn("POST /x HTTP/1.0\r\nContent-Length: -1\r\n\r\nbody");
+    cr_assert(c.is_parse_error());
 }
 
 // -----------------------------------------------------------------------------

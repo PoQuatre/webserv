@@ -6,12 +6,13 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/22 22:28:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/24 15:27:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "HttpParser.hpp"
 
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 
@@ -282,10 +283,22 @@ bool HttpParser::try_parse_headers()
         _state = READING_BODY;
         _chunked = true;
     } else if (_request.headers.count("content-length")) {
+        const std::string &cl_str = _request.headers["content-length"];
+        if (cl_str.empty() || cl_str[0] == '-') {
+            L_WARN("Invalid content-length: '{}'", cl_str);
+            _state = ERROR;
+            return false;
+        }
+
+        char *end_ptr;
+        errno = 0;
         _content_length = static_cast<std::size_t>(
-            // FIXME: use strtol
-            // NOLINTNEXTLINE(cert-err34-c,bugprone-unchecked-string-to-number-conversion)
-            std::atoi(_request.headers["content-length"].c_str()));
+            std::strtoull(cl_str.c_str(), &end_ptr, 10));
+        if (end_ptr == cl_str.c_str() || *end_ptr != '\0' || errno == ERANGE) {
+            L_WARN("Invalid content-length: '{}'", cl_str);
+            _state = ERROR;
+            return false;
+        }
         _state = (_content_length > 0) ? READING_BODY : COMPLETE;
     } else {
         _content_length = 0;
