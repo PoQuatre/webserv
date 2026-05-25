@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/22 02:38:28 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/22 22:39:26 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "config-parser-def.hpp"
 #include "http.hpp"
 
 struct Config {
@@ -34,7 +35,7 @@ struct Location {
     std::string path;
     Config config;
     std::vector<Location> children;
-    bool exact;
+    location::type exact;
 };
 
 std::ostream &operator<<(
