@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/25 20:46:45 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/25 21:51:04 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -200,7 +200,7 @@ std::ostream &operator<<(std::ostream &os, const Config &config)
     for (std::map<uint32_t, std::string>::const_iterator it
         = config.error_pages.begin();
         it != config.error_pages.end(); it++) {
-        os << (it)->first << ": " << it->second << ", ";
+        os << it->first << ": " << it->second << ", ";
     }
     os << "]";
     os << "}";

@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/25 21:21:36 by nlaporte         ###   ########.fr        #
+#    Updated: 2026/05/25 21:37:03 by nlaporte         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -92,7 +92,6 @@ LIB_SRCS =	Connection.cpp \
 			Server.cpp \
 			config-parser.cpp \
 			cli.cpp \
-			config.cpp \
 			http.cpp
 ##end: LIB_SRCS
 
