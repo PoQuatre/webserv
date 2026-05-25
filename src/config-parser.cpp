@@ -6,19 +6,22 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/22 06:49:03 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/22 23:39:20 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "config-parser.hpp"
 
+#include <cctype>
 #include <cstddef>
+#include <cstdlib>
 #include <fstream>
 #include <stack>
 #include <string>
 #include <vector>
 
 #include "Server.hpp"
+#include "config-parser-def.hpp"
 #include "http.hpp"
 #include "logger.hpp"
 
@@ -42,10 +45,9 @@ tokens::type config_get_token_type(config_token token)
 #define X(name, val)                                                           \
     case val:                                                                  \
         return tokens::name;
-        TOKENS
+        TOKENS // NOLINT
 #undef X
-    default:
-        return tokens::WORD;
+            default : return tokens::WORD;
     }
 }
 
@@ -59,6 +61,152 @@ keywords::type config_get_token_keyword(const config_token &token) // NOLINT
     KEYWORDS
 #undef X
     return keywords::UNKNOWN;
+}
+
+location::type config_get_location_type(const std::string &t_str)
+{
+#define X(val, str)                                                            \
+    if (t_str == (str)) {                                                      \
+        return location::val;                                                  \
+    }
+    LOCATION_TYPE
+#undef X
+    return location::CLASSIC;
+}
+
+bool string_check(const std::string &val)
+{
+    (void)val;
+    return true;
+}
+
+bool int_check(const std::string &val)
+{
+    for (int i = 0; val[i]; i++) {
+        if (!std::isdigit(val[i]))
+            return false;
+    }
+    return true;
+}
+
+bool bool_check(const std::string &string)
+{
+    return (string == "on" || string == "off");
+}
+
+bool time_check(const std::string &val)
+{
+    bool valid = false;
+    uint32_t i = 0;
+
+    while (1) {
+        while (val[i] && std::isdigit(val[i])) {
+            i++;
+        }
+        if (i + 1 < val.length() && val[i] == 'm' && (val[i]) == 's') {
+            valid = true;
+            i += 2;
+        } else {
+            switch (val[i]) {
+            case 's':
+            case 'm':
+            case 'h':
+            case 'd':
+            case 'w':
+            case 'M':
+            case 'y':
+                i++;
+                valid = true;
+                break;
+            case 0:
+                return true;
+            default:
+                return false;
+            }
+        }
+        if (i == val.length())
+            return valid;
+    }
+    return valid;
+}
+
+/*
+std::size_t convert_time_to_size_t(const std::string &val)
+{
+    int64_t i = 0;
+    std::size_t final_size = 0;
+    const char *str = val.c_str();
+    char *p;
+
+    while (1) {
+        i = std::strtol(str, &p, 10);
+        if (i < 0)
+            return -1;
+        str = p;
+        if (!str)
+            return final_size + (i / 1000);
+        if (str[1] && str[0] == 'm' && str[1] == 's') {
+            final_size += (i / 1000);
+            str += 2;
+        } else {
+            switch ((val)[i]) {
+            case 's':
+                final_size += i;
+                break;
+            case 'm':
+                final_size += i * 60;
+                break;
+            case 'h':
+                final_size += i * 3600;
+                break;
+            case 'd':
+            case 'w':
+            case 'M':
+            case 'y':
+            default:
+                return final_size;
+            }
+        }
+        if (!p)
+            return final_size;
+    }
+    return -1;
+}
+*/
+
+bool size_check(const std::string &val)
+{
+    uint32_t i;
+    for (i = 0; val[i]; i++) {
+        if (!std::isdigit(val[i]))
+            break;
+    }
+    if (!val[i])
+        return true;
+    if ((val[i] == 'k' || val[i] == 'K') && i + 1 == (val.size()))
+        return true;
+    if ((val[i] == 'm' || val[i] == 'M') && i + 1 == (val.size()))
+        return true;
+    if ((val[i] == 'g' || val[i] == 'G') && i + 1 == (val.length()))
+        return true;
+    return (std::isdigit(val[i]));
+}
+
+std::size_t convert_string_to_size(const std::string &val)
+{
+    std::size_t i;
+    char *p;
+
+    i = std::strtol(val.c_str(), &p, 10);
+    if (!p)
+        return i;
+    if (*p == 'k' || *p == 'K')
+        return i;
+    if (*p == 'm' || *p == 'M')
+        return i * 1024;
+    if (*p == 'g' || *p == 'G')
+        return i * 1048576;
+    return 0;
 }
 
 bool config_is_special_char(char c)
@@ -155,7 +303,7 @@ void create_all_location(const config_node &node, Config &inital_config,
             Config location_conf = inital_config;
             Location location_struct;
 
-            location_struct.exact = (*it)->strict;
+            location_struct.exact = (*it)->location_type;
             if ((*it)->vals.empty()) {
                 location_struct.path = "/";
             } else {
@@ -213,53 +361,22 @@ void initalize_server_config(
     }
 
     if (server_conf.find(keywords::CLIENT_MAX_BODY_SIZE) != server_conf.end()) {
-        char *p;
-        // TODO: handle error
-        inital_config.client_max_body_size
-            = std::strtol(server_conf.find(keywords::CLIENT_MAX_BODY_SIZE)
-                              ->second.begin()
-                              ->c_str(),
-                &p, 10);
+        std::vector<std::string> vals
+            = server_conf.find(keywords::CLIENT_MAX_BODY_SIZE)->second;
+        inital_config.client_max_body_size = 0;
+        for (std::vector<std::string>::iterator it = vals.begin();
+            it != vals.end(); it++) {
+            if (convert_string_to_size(*it) > 0) {
+                inital_config.client_max_body_size
+                    += convert_string_to_size(*it);
+            } else {
+                inital_config.client_max_body_size = 0;
+                break;
+            }
+        }
     } else {
         inital_config.client_max_body_size = 0;
     }
-}
-
-bool check_controversal_directive(
-    std::vector<config_node *> &node, const keywords::type &key, uint32_t line)
-{
-    if (key == keywords::PROXY_PASS) {
-        if (node_already_present(node, keywords::ROOT)) {
-            L_ERROR("directive 'proxy_pass' conflicting with 'root' (line {})",
-                line);
-            return true;
-        }
-        if (node_already_present(node, keywords::TRY_FILES)) {
-            L_ERROR(
-                "directive 'proxy_pass' conflicting with 'try_files' (line {})",
-                line);
-            return true;
-        }
-        if (node_already_present(node, keywords::AUTOINDEX)) {
-            L_ERROR(
-                "directive 'proxy_pass' conflicting with 'autoindex' (line {})",
-                line);
-            return true;
-        }
-        if (node_already_present(node, keywords::INDEX)) {
-            L_ERROR("directive 'proxy_pass' conflicting with 'index' (line {})",
-                line);
-            return true;
-        }
-    }
-    if ((key == keywords::ROOT || key == keywords::TRY_FILES
-            || key == keywords::AUTOINDEX || key == keywords::INDEX)
-        && node_already_present(node, keywords::PROXY_PASS)) {
-        L_ERROR("directive '{}' conflicting with 'proxy_pass' (line {})",
-            keywords_strs[key], line);
-        return true;
-    }
-    return false;
 }
 
 bool directive_is_in_valide_scope( // NOLINT
@@ -296,17 +413,16 @@ uint32_t get_max_args(const config_token &token)
     return 1;
 }
 
-bool is_a_valid_val(
-    __attribute__((unused)) std::string &val, const keywords::type &type)
+bool is_a_valid_val(std::string &val, const config_token &token)
 {
-    switch (type) {
-#define X(name, _, __, ___, ____, _____, ______, check)                        \
+    (void)val;
+    switch (token.keyword) {
+#define X(name, _, _______, __, ___, ____, _____, check, ______)               \
     case keywords::name:                                                       \
-        return CALL(check, val);                                               \
-        KEYWORDS
+        return check(val);
+        KEYWORDS // NOLINT
 #undef X
-    default:
-        return true;
+            default : return true;
     }
 }
 }
@@ -424,7 +540,6 @@ bool Parser::create_location_node()
     // Initialize node
     try {
         node = new config_node();
-        node->strict = false;
         node->key = "location";
         node->line = line;
         node->type = NODE;
@@ -444,8 +559,10 @@ bool Parser::create_location_node()
     }
 
     //  Handle strict location
-    if (_act_token->type == tokens::EQUAL) {
-        node->strict = true;
+    // if (_act_token->value == "=" || _act_token->value == "~") {
+
+    node->location_type = config_get_location_type(_act_token->value);
+    if (node->location_type != location::CLASSIC) {
         consume_next_token();
         // No other token, token_to_tree() handle scope error
         if (!see_next_token()) {
@@ -456,8 +573,9 @@ bool Parser::create_location_node()
 
     // if next token is bad, print an error and abort current line parsing
     if (_act_token->type != tokens::WORD) {
-        if (node->strict)
-            L_ERROR("strict location need one parameter (line {})", line);
+        if (node->location_type != location::CLASSIC)
+            L_ERROR("{} location need one parameter (line {})",
+                location::strings[node->location_type], line);
         else
             L_ERROR(
                 "location need one parameter or BRACE_OPEN (line {})", line);
@@ -501,6 +619,48 @@ bool Parser::create_location_node()
     _root->children.push_back(node);
     _root = node;
     return true;
+}
+
+bool Parser::check_controversal_directive(
+    std::vector<config_node *> &node, const keywords::type &key, uint32_t line)
+{
+    if (key == keywords::PROXY_PASS) {
+        if (node_already_present(node, keywords::ROOT)) {
+            L_ERROR("directive 'proxy_pass' conflicting with 'root' (line {})",
+                line);
+            _err_count++;
+            return true;
+        }
+        if (node_already_present(node, keywords::TRY_FILES)) {
+            L_ERROR(
+                "directive 'proxy_pass' conflicting with 'try_files' (line {})",
+                line);
+            _err_count++;
+            return true;
+        }
+        if (node_already_present(node, keywords::AUTOINDEX)) {
+            L_ERROR(
+                "directive 'proxy_pass' conflicting with 'autoindex' (line {})",
+                line);
+            _err_count++;
+            return true;
+        }
+        if (node_already_present(node, keywords::INDEX)) {
+            L_ERROR("directive 'proxy_pass' conflicting with 'index' (line {})",
+                line);
+            _err_count++;
+            return true;
+        }
+    }
+    if ((key == keywords::ROOT || key == keywords::TRY_FILES
+            || key == keywords::AUTOINDEX || key == keywords::INDEX)
+        && node_already_present(node, keywords::PROXY_PASS)) {
+        L_ERROR("directive '{}' conflicting with 'proxy_pass' (line {})",
+            keywords_strs[key], line);
+        _err_count++;
+        return true;
+    }
+    return false;
 }
 
 bool Parser::create_node()
@@ -619,11 +779,12 @@ bool Parser::create_leaf()
 
     while (_act_token->type == tokens::WORD) {
         consume_next_token();
-        if (!is_a_valid_val(_act_token->value, tmp_token.keyword)) {
+        if (!is_a_valid_val(_act_token->value, tmp_token)) {
             L_ERROR("'{}' is invalid value for '{}'", _act_token->value,
                 tmp_token.value);
             _valid = false;
             skip_line(line);
+            _err_count++;
             return true;
         }
         node->vals.push_back(_act_token->value);
@@ -765,20 +926,18 @@ void Parser::free_tree(config_node *root)
     delete_tree(root);
 }
 
-#ifndef NDEBUG
 void Parser::debug_tree(config_node *tree, int i)
 {
     if (!tree)
         return;
-    std::cout << "zizi";
     for (int j = 0; j < i; j++)
         std::cout << "\t";
 
     if (tree->type == NODE || tree->type == ROOT) {
         i++;
     }
-    if (tree->key == "location" && tree->strict == 1)
-        std::cout << tree->key << " = ";
+    if (tree->key == "location")
+        std::cout << tree->key << " " << location::strings[tree->location_type];
     else
         std::cout << tree->key << " ";
     for (std::vector<std::string>::iterator it = tree->vals.begin();
@@ -795,7 +954,6 @@ void Parser::debug_tree(config_node *tree, int i)
         i--;
     }
 }
-#endif
 
 bool Parser::tokenize()
 {
@@ -873,9 +1031,8 @@ bool Parser::parse_config()
         L_ERROR("invalid configuration file {} error(s)", _err_count);
         return false;
     }
-#ifndef NDEBUG
-    debug_tree(_root, 0);
-#endif
+    if (logger::log_level() == logger::levels::TRACE)
+        debug_tree(_root, 0);
     return _valid;
 }
 
