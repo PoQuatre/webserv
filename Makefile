@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/25 21:37:03 by nlaporte         ###   ########.fr        #
+#    Updated: 2026/05/26 16:29:50 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -131,21 +131,23 @@ LINT_FIX_STAMPS	= $(addprefix $(BUILD_DIR)/lint-fix/,$(addsuffix .ok,$(LINT_SRCS
 
 EXT_DIR = _deps
 
-# TODO: update version when https://github.com/Snaipe/Criterion/pull/596 is merged
-CRITERION_VERSION		= 56d9eb4a1c16349ba80539172a05c328724cf68b
-CRITERION_URL			= https://github.com/Snaipe/Criterion/archive/$(CRITERION_VERSION).tar.gz
-CRITERION_HASH			= 26854771518b3a97aa9fac81606ed8ee86b99e0746dd9743148f2052d4127f1a
+# TODO: update version on next stable release
+CRITERION_VERSION		= c9869401dceb3f90e4a370928268d41f6ecbdc8f
 
-# TODO: uncomment when https://github.com/Snaipe/Criterion/pull/596 is merged
-# CRITERION_URL.DEFAULT	= https://github.com/Snaipe/Criterion/releases/download/v$(CRITERION_VERSION)/criterion-$(CRITERION_VERSION).tar.xz
-# CRITERION_URL.x86_64	= https://github.com/Snaipe/Criterion/releases/download/v$(CRITERION_VERSION)/criterion-$(CRITERION_VERSION)-linux-x86_64.tar.xz
-# CRITERION_URL			= $(if $(CRITERION_URL.$(ARCH)),$(CRITERION_URL.$(ARCH)),$(CRITERION_URL.DEFAULT))
+# TODO: remove on next stable release
+CRITERION_URL			= https://github.com/Snaipe/Criterion/archive/$(CRITERION_VERSION).tar.gz
+CRITERION_HASH			= 9dfddc00fdbd15472d62478fc3b11c2fd4fdcfcb7c428ef3b0da5bccb4f9c84a
+
+# TODO: uncomment on next stable release
+# CRITERION_URL.DEFAULT		= https://github.com/Snaipe/Criterion/releases/download/v$(CRITERION_VERSION)/criterion-$(CRITERION_VERSION).tar.xz
+# CRITERION_URL.x86_64		= https://github.com/Snaipe/Criterion/releases/download/v$(CRITERION_VERSION)/criterion-$(CRITERION_VERSION)-linux-x86_64.tar.xz
+# CRITERION_URL				= $(if $(CRITERION_URL.$(ARCH)),$(CRITERION_URL.$(ARCH)),$(CRITERION_URL.DEFAULT))
 # CRITERION_HASH.DEFAULT	= 8ec64e482a70b3bfc1836ace0988b3316e6c3cfeac883fb5a674dcea5083ea16
-# CRITERION_HASH.x86_64	= f1b3dd5186783dcdd63433c1facd3b4d6af5244a151057370b53bdda80f16121
+# CRITERION_HASH.x86_64		= f1b3dd5186783dcdd63433c1facd3b4d6af5244a151057370b53bdda80f16121
 # CRITERION_HASH			= $(if $(CRITERION_HASH.$(ARCH)),$(CRITERION_HASH.$(ARCH)),$(CRITERION_HASH.DEFAULT))
 
 CRITERION_DIR	= $(EXT_DIR)/criterion
-# TODO: change tarball extension when https://github.com/Snaipe/Criterion/pull/596 is merged
+# TODO: change tarball extension on next stable release
 CRITERION_SRC	= $(EXT_DIR)/criterion-$(CRITERION_VERSION).tar.gz
 CRITERION_NAME	= $(CRITERION_DIR)/libcriterion.so
 
@@ -381,7 +383,7 @@ $(CRITERION_SRC):
 	echo '$(CRITERION_HASH) *$@' | sha256sum -c - >/dev/null
 
 
-# TODO: remove the force src build when https://github.com/Snaipe/Criterion/pull/596 is merged
+# TODO: remove the force src build on next stable release
 ifeq ($(ARCH) force src build,x86_64)
 
 $(CRITERION_NAME): $(CRITERION_SRC)
