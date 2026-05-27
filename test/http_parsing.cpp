@@ -166,30 +166,35 @@ Test(request_line, unknown_method)
 {
     Connection c = make_conn("BREW /coffee HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::NOT_IMPLEMENTED);
 }
 
 Test(request_line, empty_line)
 {
     Connection c = make_conn("\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(request_line, method_only)
 {
     Connection c = make_conn("GET\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(request_line, non_get_missing_version)
 {
     Connection c = make_conn("POST /x\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(request_line, invalid_version)
 {
     Connection c = make_conn("GET / HTTP/2.0\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 // -----------------------------------------------------------------------------
@@ -384,18 +389,21 @@ Test(uri_validation, empty_uri_is_error)
 {
     Connection c = make_conn("GET # HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(uri_validation, bare_word_no_slash_is_error)
 {
     Connection c = make_conn("GET foo HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(uri_validation, empty_scheme_is_error)
 {
     Connection c = make_conn("GET ://host/path HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(uri_validation, asterisk_form_valid)
@@ -409,6 +417,7 @@ Test(uri_validation, asterisk_with_extra_chars_is_error)
 {
     Connection c = make_conn("GET *path HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(uri_validation, absolute_form_path_extracted)
@@ -776,6 +785,7 @@ Test(body, content_length_non_numeric)
     Connection c
         = make_conn("POST /x HTTP/1.0\r\nContent-Length: abc\r\n\r\nbody");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(body, content_length_trailing_garbage)
@@ -783,12 +793,14 @@ Test(body, content_length_trailing_garbage)
     Connection c
         = make_conn("POST /x HTTP/1.0\r\nContent-Length: 5abc\r\n\r\nhello");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(body, content_length_empty_value)
 {
     Connection c = make_conn("POST /x HTTP/1.0\r\nContent-Length: \r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(body, content_length_overflow)
@@ -796,6 +808,7 @@ Test(body, content_length_overflow)
     Connection c = make_conn(
         "POST /x HTTP/1.0\r\nContent-Length: 99999999999999999999999\r\n\r\n");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 Test(body, content_length_negative)
@@ -803,6 +816,7 @@ Test(body, content_length_negative)
     Connection c
         = make_conn("POST /x HTTP/1.0\r\nContent-Length: -1\r\n\r\nbody");
     cr_assert(c.is_parse_error());
+    cr_assert_eq(c.parse_error_code(), http::status::BAD_REQUEST);
 }
 
 // -----------------------------------------------------------------------------
