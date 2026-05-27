@@ -6,12 +6,13 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/24 03:12:15 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/27 10:50:19 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
+#include <regex.h>
 #include <stdint.h>
 
 #include <string>
@@ -203,6 +204,7 @@ struct config_node {
     node_type type;
     keywords::type keyword;
     location::type location_type;
+    regex_t location_regexp;
     std::string key;
     std::vector<std::string> vals;
     std::vector<config_node *> children;

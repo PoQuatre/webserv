@@ -6,15 +6,18 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/27 09:16:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 10:51:44 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "config-parser.hpp"
 
+#include <regex.h>
+
 #include <cctype>
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <stack>
 #include <string>
@@ -314,7 +317,7 @@ void create_all_location(const config_node &node, Config &inital_config,
             Config location_conf = inital_config;
             Location location_struct;
 
-            location_struct.exact = (*it)->location_type;
+            location_struct.regexp = (*it)->location_regexp;
             if ((*it)->vals.empty()) {
                 location_struct.path = "/";
             } else {
@@ -389,7 +392,7 @@ void initalize_server_config(
     }
 }
 
-bool directive_is_in_valide_scope(
+bool directive_is_in_valid_scope(
     keywords::type root_keyword, keywords::type directive)
 {
     if (directive == keywords::HTTP && keywords::GLOBAL == root_keyword)
@@ -539,7 +542,7 @@ bool Parser::create_location_node()
     uint32_t line = _act_token->line;
 
     // check scope validity in scope
-    if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
+    if (!directive_is_in_valid_scope(_root->keyword, _act_token->keyword)) {
         L_ERROR("scope '{}' (line {}) is in a bad scope '{}' (line {}) {}",
             _act_token->value, line, _root->key, _root->line);
         skip_scope(_act_token->value, line);
@@ -570,9 +573,7 @@ bool Parser::create_location_node()
         return false;
     }
 
-    //  Handle strict location
-    // if (_act_token->value == "=" || _act_token->value == "~") {
-
+    //  Handle location type
     node->location_type = config_get_location_type(_act_token->value);
     if (node->location_type != location::CLASSIC) {
         consume_next_token();
@@ -596,6 +597,36 @@ bool Parser::create_location_node()
         skip_scope(_act_token->value, line);
         delete node;
         return true;
+    }
+
+    // Create regexp
+    int code;
+    switch (node->location_type) {
+    case location::CASE_INSENSITIVE:
+        code = regcomp(&node->location_regexp, _act_token->value.c_str(),
+            REG_EXTENDED | REG_ICASE);
+        break;
+    case location::CASE_SENSITIVE:
+        code = regcomp(
+            &node->location_regexp, _act_token->value.c_str(), REG_EXTENDED);
+        break;
+    case location::STRICT:
+        code = regcomp(&node->location_regexp,
+            ("$" + _act_token->value + "^").c_str(), REG_EXTENDED);
+        break;
+    case location::PRIO:
+        code = regcomp(&node->location_regexp,
+            ("^" + _act_token->value).c_str(), REG_EXTENDED);
+        break;
+    default:
+        code = 0;
+        break;
+    }
+    if (code != 0) {
+        L_ERROR("location node invalid regexp (line {}) {}", node->line,
+            strerror(errno));
+        delete node;
+        return false;
     }
 
     // push last child
@@ -683,7 +714,7 @@ bool Parser::create_node()
     line = _act_token->line;
 
     // check scope validity in scope
-    if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
+    if (!directive_is_in_valid_scope(_root->keyword, _act_token->keyword)) {
         L_ERROR("scope '{}' (line {}) is in a bad scope '{}' (line {}) {}",
             _act_token->value, line, _root->key, _root->line);
         skip_scope(_act_token->value, line, true);
@@ -760,7 +791,7 @@ bool Parser::create_leaf()
     }
 
     // check  directive validity in scope
-    if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
+    if (!directive_is_in_valid_scope(_root->keyword, _act_token->keyword)) {
         L_ERROR("directive '{}' (line {}) is in a bad scope '{}' (line {}) {}",
             _act_token->value, line, _root->key, _root->line,
             strings[_act_token->keyword]);
@@ -927,6 +958,8 @@ void Parser::delete_tree(config_node *root)
     for (std::vector<config_node *>::iterator it = root->children.begin();
         it != root->children.end(); it++)
         delete_tree(*it);
+    if (root->location_type != location::CLASSIC)
+        regfree(&root->location_regexp);
     root->children.clear();
     delete root;
 }
