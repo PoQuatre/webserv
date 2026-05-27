@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/23 14:26:37 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 07:14:19 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -307,6 +307,100 @@ Test(uri, lone_percent_kept_literal)
     Connection c = make_conn("GET /a% HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/a%");
+}
+
+// -----------------------------------------------------------------------------
+// URI validation
+// -----------------------------------------------------------------------------
+
+Test(uri_validation, empty_uri_is_error)
+{
+    Connection c = make_conn("GET # HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_error());
+}
+
+Test(uri_validation, bare_word_no_slash_is_error)
+{
+    Connection c = make_conn("GET foo HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_error());
+}
+
+Test(uri_validation, empty_scheme_is_error)
+{
+    Connection c = make_conn("GET ://host/path HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_error());
+}
+
+Test(uri_validation, asterisk_form_valid)
+{
+    Connection c = make_conn("OPTIONS * HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "*");
+}
+
+Test(uri_validation, asterisk_with_extra_chars_is_error)
+{
+    Connection c = make_conn("GET *path HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_error());
+}
+
+Test(uri_validation, absolute_form_path_extracted)
+{
+    Connection c = make_conn(
+        "GET http://example.com/path HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/path");
+    cr_assert(c.request().query.empty());
+}
+
+Test(uri_validation, absolute_form_with_query)
+{
+    Connection c = make_conn("GET http://example.com/search?q=hello "
+                             "HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/search");
+    cr_assert_eq(c.request().query.at("q"), "hello");
+}
+
+Test(uri_validation, absolute_form_no_path_defaults_to_root)
+{
+    Connection c = make_conn(
+        "GET http://example.com HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/");
+}
+
+Test(uri_validation, absolute_form_query_without_path)
+{
+    Connection c = make_conn(
+        "GET http://example.com?q=1 HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/");
+    cr_assert_eq(c.request().query.at("q"), "1");
+}
+
+Test(uri_validation, absolute_form_with_port)
+{
+    Connection c = make_conn("GET http://example.com:8080/path "
+                             "HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/path");
+}
+
+Test(uri_validation, absolute_form_fragment_stripped)
+{
+    Connection c = make_conn("GET http://example.com/path#section "
+                             "HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/path");
+}
+
+Test(uri_validation, https_scheme_accepted)
+{
+    Connection c = make_conn(
+        "GET https://example.com/secure HTTP/1.1\r\nHost: example.com\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/secure");
 }
 
 // -----------------------------------------------------------------------------
