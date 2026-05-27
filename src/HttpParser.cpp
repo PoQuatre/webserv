@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 07:26:57 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 21:31:18 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,6 +26,7 @@ HttpParser::HttpParser()
     , _eof(false)
     , _request()
     , _chunked(false)
+    , _error_code(http::status::OK)
 {
 }
 
@@ -33,7 +34,7 @@ bool HttpParser::feed(const char *data, std::size_t len)
 {
     if (_buf.size() >= MAX_BUF_SIZE) {
         L_WARN("Request exceeded max size");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
     _buf.append(data, len);
@@ -79,6 +80,12 @@ bool HttpParser::run()
     return _state != ERROR;
 }
 
+void HttpParser::set_err(http::status::type code)
+{
+    _state = ERROR;
+    _error_code = code;
+}
+
 bool HttpParser::try_parse_request_line()
 {
     std::size_t crlf_len = 1;
@@ -98,13 +105,13 @@ bool HttpParser::try_parse_request_line()
     std::size_t notsp = _buf.find_first_not_of(" \f\r\t\v", 0);
     if (notsp >= crlf) {
         L_WARN("Request line is empty");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
     std::size_t sp = _buf.find_first_of(" \f\r\t\v", notsp);
     if (sp >= crlf) {
         L_WARN("Request line only contains a method");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
     if (!try_parse_method(notsp, sp))
@@ -113,7 +120,7 @@ bool HttpParser::try_parse_request_line()
     notsp = _buf.find_first_not_of(" \f\r\t\v", sp);
     if (notsp >= crlf) {
         L_WARN("Request line doesn't contain a URI");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
     sp = _buf.find_first_of(" \f\r\t\v", notsp);
@@ -121,7 +128,7 @@ bool HttpParser::try_parse_request_line()
         sp = std::min(sp, crlf);
     } else if (sp >= crlf) {
         L_WARN("Request line is missing an HTTP version");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
     if (!try_parse_uri(notsp, sp))
@@ -136,7 +143,7 @@ bool HttpParser::try_parse_request_line()
     }
     if (notsp >= crlf) {
         L_WARN("Request line is missing an HTTP version");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
     sp = _buf.find_first_of(" \f\r\t\v", notsp);
@@ -167,9 +174,8 @@ bool HttpParser::try_parse_method(std::size_t start, std::size_t end)
         }
     }
 
-    L_WARN(
-        "Couldn't parse request method: '{}'", _buf.substr(start, end - start));
-    _state = ERROR;
+    L_WARN("Unsupported method: '{}'", _buf.substr(start, end - start));
+    set_err(http::status::NOT_IMPLEMENTED);
     return false;
 }
 
@@ -246,7 +252,7 @@ bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
 
     if (start >= end) {
         L_WARN("Empty URI");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
 
@@ -260,7 +266,7 @@ bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
         std::size_t sep = _buf.find("://", start);
         if (sep == std::string::npos || sep == start || sep + 3 > end) {
             L_WARN("Invalid URI: '{}'", _buf.substr(start, end - start));
-            _state = ERROR;
+            set_err(http::status::BAD_REQUEST);
             return false;
         }
 
@@ -327,9 +333,8 @@ bool HttpParser::try_parse_version(std::size_t start, std::size_t end)
         }
     }
 
-    L_WARN(
-        "Couldn't parse HTTP version: '{}'", _buf.substr(start, end - start));
-    _state = ERROR;
+    L_WARN("Unknown HTTP version: '{}'", _buf.substr(start, end - start));
+    set_err(http::status::BAD_REQUEST);
     return false;
 }
 
@@ -411,7 +416,7 @@ bool HttpParser::try_parse_headers()
         if (!try_parse_header_field(pos, end.pos))
             return false;
 
-    L_TRACE("Got {} headers", _request.headers.size());
+    L_TRACE("Parsed {} headers", _request.headers.size());
 
     _buf.erase(0, end.pos + end.len);
     if (_request.version == http::versions::HTTP11
@@ -423,7 +428,7 @@ bool HttpParser::try_parse_headers()
         const std::string &cl_str = _request.headers["content-length"];
         if (cl_str.empty() || cl_str[0] == '-') {
             L_WARN("Invalid content-length: '{}'", cl_str);
-            _state = ERROR;
+            set_err(http::status::BAD_REQUEST);
             return false;
         }
 
@@ -433,7 +438,7 @@ bool HttpParser::try_parse_headers()
             std::strtoull(cl_str.c_str(), &end_ptr, 10));
         if (end_ptr == cl_str.c_str() || *end_ptr != '\0' || errno == ERANGE) {
             L_WARN("Invalid content-length: '{}'", cl_str);
-            _state = ERROR;
+            set_err(http::status::BAD_REQUEST);
             return false;
         }
         _state = (_content_length > 0) ? READING_BODY : COMPLETE;
@@ -465,7 +470,7 @@ bool HttpParser::try_parse_header_field(std::size_t &pos, std::size_t end_pos)
     std::size_t colon = _buf.find(':', pos);
     if (colon > crlf) {
         L_WARN("Header is missing a colon");
-        _state = ERROR;
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
 
@@ -526,7 +531,7 @@ bool HttpParser::try_parse_chunk()
     std::size_t crlf = _buf.find('\n');
     if (crlf == std::string::npos) {
         if (!_eof) {
-            L_TRACE("No chunk size ready to be received");
+            L_TRACE("Chunk size not ready yet");
             return false;
         }
         crlf = _buf.size();
@@ -539,8 +544,8 @@ bool HttpParser::try_parse_chunk()
     char *end;
     uint64_t length = std::strtol(_buf.c_str(), &end, 16);
     if (crlf != static_cast<std::size_t>(end - _buf.c_str())) {
-        L_ERROR("Failed to parse chunk size");
-        _state = ERROR;
+        L_WARN("Invalid chunk size");
+        set_err(http::status::BAD_REQUEST);
         return false;
     }
 
@@ -550,7 +555,7 @@ bool HttpParser::try_parse_chunk()
     crlf = _buf.find('\n', start + length);
     if (crlf == std::string::npos) {
         if (!_eof) {
-            L_TRACE("No chunk data ready to be received");
+            L_TRACE("Chunk data not ready yet");
             return false;
         }
         crlf = _buf.size();
