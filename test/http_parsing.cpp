@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 07:14:19 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 07:24:07 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -307,6 +307,73 @@ Test(uri, lone_percent_kept_literal)
     Connection c = make_conn("GET /a% HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/a%");
+}
+
+// -----------------------------------------------------------------------------
+// URI canonicalization
+// -----------------------------------------------------------------------------
+
+Test(uri, dot_segment_removed)
+{
+    Connection c = make_conn("GET /a/./b HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/a/b");
+}
+
+Test(uri, dot_dot_goes_up)
+{
+    Connection c = make_conn("GET /a/b/../c HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/a/c");
+}
+
+Test(uri, dot_dot_at_end_adds_trailing_slash)
+{
+    Connection c = make_conn("GET /a/b/.. HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/a/");
+}
+
+Test(uri, dot_at_end_adds_trailing_slash)
+{
+    Connection c = make_conn("GET /a/b/. HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/a/b/");
+}
+
+Test(uri, traversal_above_root_clamped)
+{
+    Connection c = make_conn("GET /../../etc/passwd HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/etc/passwd");
+}
+
+Test(uri, traversal_to_root)
+{
+    Connection c = make_conn("GET /../.. HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/");
+}
+
+Test(uri, double_slashes_merged)
+{
+    Connection c = make_conn("GET //a//b HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/a/b");
+}
+
+Test(uri, trailing_slash_preserved)
+{
+    Connection c = make_conn("GET /a/b/ HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/a/b/");
+}
+
+Test(uri, encoded_dot_dot_resolved)
+{
+    Connection c = make_conn("GET /a/%2E%2E/b HTTP/1.0\r\n\r\n");
+    cr_assert(c.is_parse_complete());
+    cr_assert_eq(c.request().uri, "/b");
 }
 
 // -----------------------------------------------------------------------------
