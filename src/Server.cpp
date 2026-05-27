@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/25 21:51:04 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/27 05:47:14 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,8 +16,10 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <vector>
@@ -87,8 +89,7 @@ bool Server::init(int32_t epollfd)
     int32_t domain = _is_ipv6 ? AF_INET6 : AF_INET;
     _sockfd = socket(domain, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (_sockfd == -1) {
-        L_ERROR("Failed to create socket");
-        perror("socket");
+        L_ERROR("Failed to create socket: {}", std::strerror(errno));
         return false;
     }
 
@@ -97,8 +98,7 @@ bool Server::init(int32_t epollfd)
     int32_t opt = 1;
     if (setsockopt(_sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))
         == -1) {
-        L_ERROR("Failed to set socket options");
-        perror("setsockopt");
+        L_ERROR("Failed to set socket options: {}", std::strerror(errno));
         close(_sockfd);
         _sockfd = -1;
         return false;
@@ -108,8 +108,7 @@ bool Server::init(int32_t epollfd)
                               : reinterpret_cast<sockaddr *>(&_sockaddr);
     socklen_t addrlen = _is_ipv6 ? sizeof(_sockaddr6) : sizeof(_sockaddr);
     if (bind(_sockfd, addr, addrlen) == -1) {
-        L_ERROR("Failed to bind socket");
-        perror("bind");
+        L_ERROR("Failed to bind socket: {}", strerror(errno));
         close(_sockfd);
         _sockfd = -1;
         return false;
@@ -118,8 +117,7 @@ bool Server::init(int32_t epollfd)
     L_INFO("Listening on address: {}", addr);
 
     if (listen(_sockfd, SOMAXCONN) == -1) {
-        L_ERROR("Failed to listen on socket");
-        perror("listen");
+        L_ERROR("Failed to listen on socket: {}", strerror(errno));
         close(_sockfd);
         _sockfd = -1;
         return false;
@@ -129,8 +127,8 @@ bool Server::init(int32_t epollfd)
     ev.events = EPOLLIN;
     ev.data.fd = _sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
-        L_ERROR("Failed to add socket {} to epoll instance", _sockfd);
-        perror("epoll_ctl: _sockfd");
+        L_ERROR("Failed to add socket {} to epoll instance: {}", _sockfd,
+            strerror(errno));
         close(_sockfd);
         _sockfd = -1;
         return false;
