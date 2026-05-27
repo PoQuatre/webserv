@@ -36,6 +36,7 @@ public:
 
     bool is_parse_complete() const { return _parser.is_complete(); }
     bool is_parse_error() const { return _parser.is_error(); }
+    http::status::type parse_error_code() const { return _parser.error_code(); }
     bool is_sending() const { return _send_state == SENDING; }
 
     const http::request &request() const { return _parser.request(); }
