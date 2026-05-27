@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:11 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 04:44:37 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 21:22:17 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -37,6 +37,8 @@ public:
     bool is_error() const { return _state == ERROR; }
     bool is_eof() const { return _eof; }
 
+    http::status::type error_code() const { return _error_code; }
+
     const http::request &request() const { return _request; }
 
     void reset();
@@ -48,8 +50,10 @@ private:
     bool _eof;
     http::request _request;
     bool _chunked;
+    http::status::type _error_code;
 
     bool run();
+    void set_err(http::status::type code);
 
     bool try_parse_request_line();
     bool try_parse_method(std::size_t start, std::size_t end);
