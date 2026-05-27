@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 07:00:53 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 07:17:55 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -201,10 +201,43 @@ std::string decode_percent(const std::string &buf, std::size_t start,
 bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
 {
     end = std::min(end, _buf.find('#', start));
+
+    if (start >= end) {
+        L_WARN("Empty URI");
+        _state = ERROR;
+        return false;
+    }
+
+    if (_buf[start] == '*' && start + 1 == end) {
+        _request.uri = "*";
+        return true;
+    }
+
+    if (_buf[start] != '/') {
+        // absolute-form: scheme://authority[/path][?query]
+        std::size_t sep = _buf.find("://", start);
+        if (sep == std::string::npos || sep == start || sep + 3 > end) {
+            L_WARN("Invalid URI: '{}'", _buf.substr(start, end - start));
+            _state = ERROR;
+            return false;
+        }
+
+        std::size_t auth_end = _buf.find_first_of("/?", sep + 3);
+        if (auth_end == std::string::npos || auth_end >= end) {
+            _request.uri = "/";
+            return true;
+        }
+
+        if (_buf[auth_end] == '?') {
+            _request.uri = "/";
+            return try_parse_query(auth_end + 1, end);
+        }
+
+        start = auth_end;
+    }
+
     std::size_t path_end = std::min(end, _buf.find('?', start));
-
     _request.uri = decode_percent(_buf, start, path_end, false);
-
     if (path_end < end)
         return try_parse_query(path_end + 1, end);
     return true;
