@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 07:17:55 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 07:26:57 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -196,6 +196,48 @@ std::string decode_percent(const std::string &buf, std::size_t start,
     return result;
 }
 
+std::string canonicalize_path(const std::string &path)
+{
+    std::string out;
+    out.reserve(path.size() + 1);
+    std::size_t len = path.size();
+    bool add_trailing = false;
+
+    for (std::size_t i = 0; i < len;) {
+        if (path[i] == '/') {
+            ++i;
+            continue;
+        }
+
+        std::size_t j = path.find('/', i);
+        if (j == std::string::npos)
+            j = len;
+        std::size_t seg_len = j - i;
+
+        if (seg_len == 2 && path[i] == '.' && path[i + 1] == '.') {
+            std::size_t slash = out.rfind('/');
+            if (slash != std::string::npos)
+                out.erase(slash);
+            add_trailing = (j == len);
+        } else if (seg_len == 1 && path[i] == '.') {
+            add_trailing = (j == len);
+        } else {
+            out += '/';
+            out.append(path, i, seg_len);
+            add_trailing = false;
+        }
+
+        i = j;
+    }
+
+    if (len > 0 && path[len - 1] == '/')
+        add_trailing = true;
+    if (out.empty() || add_trailing)
+        out += '/';
+
+    return out;
+}
+
 }
 
 bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
@@ -237,7 +279,8 @@ bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
     }
 
     std::size_t path_end = std::min(end, _buf.find('?', start));
-    _request.uri = decode_percent(_buf, start, path_end, false);
+    _request.uri
+        = canonicalize_path(decode_percent(_buf, start, path_end, false));
     if (path_end < end)
         return try_parse_query(path_end + 1, end);
     return true;
