@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/24 15:27:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/27 07:00:53 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -124,7 +124,8 @@ bool HttpParser::try_parse_request_line()
         _state = ERROR;
         return false;
     }
-    _request.uri = _buf.substr(notsp, sp - notsp);
+    if (!try_parse_uri(notsp, sp))
+        return false;
 
     notsp = _buf.find_first_not_of(" \f\r\t\v", sp);
     if (notsp >= crlf && _request.method == http::methods::GET) {
@@ -170,6 +171,66 @@ bool HttpParser::try_parse_method(std::size_t start, std::size_t end)
         "Couldn't parse request method: '{}'", _buf.substr(start, end - start));
     _state = ERROR;
     return false;
+}
+
+namespace {
+
+std::string decode_percent(const std::string &buf, std::size_t start,
+    std::size_t end, bool plus_as_space)
+{
+    std::string result;
+    result.reserve(end - start);
+    for (std::size_t i = start; i < end; ++i) {
+        if (plus_as_space && buf[i] == '+') {
+            result += ' ';
+        } else if (buf[i] == '%' && i + 2 < end
+            && std::isxdigit(static_cast<unsigned char>(buf[i + 1]))
+            && std::isxdigit(static_cast<unsigned char>(buf[i + 2]))) {
+            char hex[3] = { buf[i + 1], buf[i + 2], '\0' };
+            result += static_cast<char>(std::strtol(hex, NULL, 16));
+            i += 2;
+        } else {
+            result += buf[i];
+        }
+    }
+    return result;
+}
+
+}
+
+bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
+{
+    end = std::min(end, _buf.find('#', start));
+    std::size_t path_end = std::min(end, _buf.find('?', start));
+
+    _request.uri = decode_percent(_buf, start, path_end, false);
+
+    if (path_end < end)
+        return try_parse_query(path_end + 1, end);
+    return true;
+}
+
+bool HttpParser::try_parse_query(std::size_t start, std::size_t end)
+{
+    std::size_t pos = start;
+    while (pos < end) {
+        std::size_t amp = std::min(end, _buf.find('&', pos));
+        std::size_t eq = _buf.find('=', pos);
+
+        if (eq < amp) {
+            std::string key = decode_percent(_buf, pos, eq, true);
+            std::string val = decode_percent(_buf, eq + 1, amp, true);
+            if (!key.empty())
+                _request.query[key] = val;
+        } else {
+            std::string key = decode_percent(_buf, pos, amp, true);
+            if (!key.empty())
+                _request.query[key] = "";
+        }
+
+        pos = amp + 1;
+    }
+    return true;
 }
 
 bool HttpParser::try_parse_version(std::size_t start, std::size_t end)
