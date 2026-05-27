@@ -6,13 +6,14 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/24 20:17:28 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/27 09:49:02 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
 #include <netinet/in.h>
+#include <regex.h>
 
 #include <iostream>
 #include <string>
@@ -35,7 +36,7 @@ struct Location {
     std::string path;
     Config config;
     std::vector<Location> children;
-    location::type exact;
+    regex_t regexp;
 };
 
 std::ostream &operator<<(
