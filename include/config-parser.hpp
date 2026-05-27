@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/24 20:34:34 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/27 04:42:38 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -44,7 +44,7 @@ public:
 
 private:
     Parser();
-    void skip_line(const uint32_t &line);
+    void skip_line();
     bool see_next_token();
     bool consume_next_token();
     void skip_scope(

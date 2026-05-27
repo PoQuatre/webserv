@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/24 20:44:36 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/27 09:16:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -453,16 +453,19 @@ Parser::Parser(const std::string &path)
 
 Parser::~Parser() { free_tree(_root); }
 
-void Parser::skip_line(const uint32_t &line)
+void Parser::skip_line()
 {
-    for (std::vector<config_token>::iterator it = _tokens.begin();
-        it != _tokens.end(); it++) {
-        if (line == it->line) {
-            it->alive = 0;
+    while (_act_token->type != tokens::END
+        && _act_token->type != tokens::BRACE_CLOSE
+        && _act_token->type != tokens::BRACE_OPEN) {
+        if (!consume_next_token()) {
+            break;
         }
-        if (line < it->line)
+        if (!see_next_token())
             break;
     }
+    if (_act_token->type == tokens::END)
+        consume_next_token();
 }
 
 bool Parser::see_next_token()
@@ -508,25 +511,21 @@ void Parser::config_set_alive_last_token()
 void Parser::skip_scope(
     const std::string &scope_name, uint32_t line, bool print_err)
 {
-    int depth = 1;
-    // Init recovery
-    while (_act_token->type != tokens::BRACE_OPEN) {
-        if (!consume_next_token()) {
-            return;
-        }
-    }
+    int depth = 0;
+    bool has_start = false;
 
     while (consume_next_token()) {
         if (_act_token->type == tokens::BRACE_OPEN) {
+            has_start = true;
             depth++;
         } else if (_act_token->type == tokens::BRACE_CLOSE) {
             depth--;
         }
-        if (depth == 0) {
+        if (depth == 0 && has_start) {
             if (print_err)
-                L_ERROR("unrecognized scope '{}' (line {}), ignored",
-                    scope_name, line);
-            skip_line(line);
+                L_ERROR("invalid scope '{}' from line {}, to line {}, has "
+                        "been ignored",
+                    scope_name, line, _act_token->line);
             _err_count++;
             _valid = false;
             return;
@@ -555,7 +554,7 @@ bool Parser::create_location_node()
     if (_act_token->type == tokens::BRACE_OPEN) {
         L_ERROR("location directive requires a path (line {}) {}", line,
             strings[keywords::LOCATION]);
-        skip_scope("location", line, false);
+        skip_scope("location", line, true);
         return true;
     }
 
@@ -687,7 +686,7 @@ bool Parser::create_node()
     if (!directive_is_in_valide_scope(_root->keyword, _act_token->keyword)) {
         L_ERROR("scope '{}' (line {}) is in a bad scope '{}' (line {}) {}",
             _act_token->value, line, _root->key, _root->line);
-        skip_scope(_act_token->value, line, false);
+        skip_scope(_act_token->value, line, true);
         return true;
     }
 
@@ -708,7 +707,7 @@ bool Parser::create_node()
         L_ERROR("special keyword '{}', need "
                 "OPEN_BRACE (line {})",
             node->key, line);
-        skip_line(line);
+        skip_line();
         _valid = false;
         _err_count++;
         delete node;
@@ -733,14 +732,14 @@ bool Parser::create_leaf()
     if (_act_token->type != tokens::WORD
         || _act_token->keyword == keywords::UNKNOWN) {
         tmp_token = *_act_token;
-        if (!see_next_token() || tmp_token.keyword != keywords::OPEN_SCOPE) {
+        if (!see_next_token() || _act_token->keyword != keywords::OPEN_SCOPE) {
             L_ERROR("unknown directive '{}' (line {})", tmp_token.value, line);
-            skip_line(line);
+            skip_line();
             _err_count++;
             _valid = false;
             return true;
         }
-        skip_scope(tmp_token.value, tmp_token.line);
+        skip_scope(tmp_token.value, tmp_token.line, true);
         _valid = false;
         return true;
     }
@@ -754,7 +753,7 @@ bool Parser::create_leaf()
 
     if (check_controversal_directive(
             _root->children, _act_token->keyword, line)) {
-        skip_line(line);
+        skip_line();
         _valid = false;
         _err_count++;
         return true;
@@ -765,7 +764,7 @@ bool Parser::create_leaf()
         L_ERROR("directive '{}' (line {}) is in a bad scope '{}' (line {}) {}",
             _act_token->value, line, _root->key, _root->line,
             strings[_act_token->keyword]);
-        skip_line(line);
+        skip_line();
         _valid = false;
         _err_count++;
         return true;
@@ -791,13 +790,13 @@ bool Parser::create_leaf()
     uint32_t ac = 0;
     uint32_t limit = get_max_args(tmp_token);
 
-    while (_act_token->type == tokens::WORD) {
+    while (_act_token->type == tokens::WORD && ac < limit) {
         consume_next_token();
         if (!is_a_valid_val(_act_token->value, tmp_token)) {
             L_ERROR("'{}' is invalid value for '{}'", _act_token->value,
                 tmp_token.value);
             _valid = false;
-            skip_line(line);
+            skip_line();
             _err_count++;
             return true;
         }
@@ -809,10 +808,10 @@ bool Parser::create_leaf()
         }
     }
 
-    if (ac > limit && _act_token->type != tokens::END) {
+    if (ac >= limit && _act_token->type != tokens::END) {
         L_ERROR("directive '{}' can have up to {} argument(s) (line {}) {}",
             node->key, limit, line, strings[tmp_token.keyword]);
-        skip_line(line);
+        skip_line();
         _err_count++;
         _valid = false;
         node->children.clear();
@@ -829,7 +828,7 @@ bool Parser::create_leaf()
             return true;
         }
         L_ERROR("no instruction end ';' (line {})", line);
-        skip_line(line);
+        skip_line();
         _err_count++;
         _valid = false;
         node->children.clear();
@@ -870,7 +869,8 @@ bool Parser::iter_on_tokens()
         return create_node();
 
     case keywords::OPEN_SCOPE:
-        skip_scope(_act_token->value, line);
+        config_set_alive_last_token();
+        skip_scope(_act_token->value, line, true);
         return true;
 
     case keywords::CLOSE_SCOPE:
@@ -879,7 +879,7 @@ bool Parser::iter_on_tokens()
                 "unexpected '}' all scopes are already closed (line {})", line);
             _err_count++;
             _valid = false;
-            skip_line(line);
+            skip_line();
             return true;
         }
         _depth--;
