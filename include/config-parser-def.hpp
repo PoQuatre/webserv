@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/28 06:51:10 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/30 05:34:16 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,6 +28,8 @@ namespace tokens {
     X(BRACE_OPEN, '{')                                                         \
     X(BRACE_CLOSE, '}')                                                        \
     X(END, ';')                                                                \
+    X(D_QUOTE, '"')                                                            \
+    X(S_QUOTE, '\'')                                                           \
     X(WORD, ' ')
 
 enum type {
