@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/27 10:26:59 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/28 02:38:45 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -155,7 +155,7 @@ std::ostream &operator<<(
         os << "{";
         os << "path: " << location.path << ", ";
         os << "config: " << location.config << ", ";
-        // os << "exact: " << std::boolalpha << location.regexp << ", ";
+        os << "exact: " << std::boolalpha << location.type << ", ";
 
         os << "children: [";
 

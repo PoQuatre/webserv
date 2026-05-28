@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/27 09:49:02 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/28 02:41:32 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,7 +35,7 @@ std::ostream &operator<<(std::ostream &os, const Config &config);
 struct Location {
     std::string path;
     Config config;
-    std::vector<Location> children;
+    location::type type;
     regex_t regexp;
 };
 
