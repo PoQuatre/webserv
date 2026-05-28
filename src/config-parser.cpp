@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/28 02:49:48 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/31 04:11:09 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,11 +14,13 @@
 
 #include <regex.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 #include <stack>
 #include <string>
 #include <vector>
@@ -996,9 +998,79 @@ void Parser::debug_tree(config_node *tree, int i)
     }
 }
 
+int32_t Parser::create_token(std::string &buf, const std::size_t &i,
+    std::size_t len, std::size_t &line_i)
+{
+    config_token tmp_token;
+    char *p;
+    std::size_t size = buf.length();
+
+    tmp_token.alive = 1;
+    tmp_token.line = line_i;
+    if (buf[i] == '\'' || buf[i] == '"') {
+        p = std::find(&buf[i + 1], &buf[size], buf[i]);
+        if (!p) {
+            L_ERROR("unclosed quote line {}", line_i);
+            return -1;
+        }
+        len = p - &buf[i];
+#if ALLOW_MULTILINE_STRING == 0
+        char *p2;
+        p2 = std::find(&buf[i + 1], &buf[size], '\n');
+        if (!ALLOW_MULTILINE_STRING && p > p2) {
+            std::size_t old_line = line_i;
+            while (p2 && *p2 == '\n') {
+                p2 = std::find(p2 + 1, p, '\n');
+                line_i++;
+            }
+            L_WARN("newline encountered in string literal (line {}), "
+                   "recovered at line {}",
+                old_line, line_i);
+            return static_cast<int32_t>(len) + 1;
+        }
+#endif
+        if (len - 1 > 0) {
+            tmp_token.value = buf.substr(i + 1, len - 1);
+            tmp_token.type = tokens::WORD;
+            tmp_token.keyword = keywords::UNKNOWN;
+            _tokens.push_back(tmp_token);
+            for (std::size_t j = i + 1; j < i + len - 1; j++) {
+                if (buf[j] == '\n')
+                    line_i++;
+            }
+            return static_cast<int32_t>(len) + 1;
+        }
+#if ALLOW_EMPTY_STRING == 1
+        tmp_token.value = "";
+        tmp_token.type = tokens::WORD;
+        tmp_token.keyword = keywords::UNKNOWN;
+        _tokens.push_back(tmp_token);
+#else
+        L_WARN("empty string at line {} ignored", line_i);
+#endif
+        return 2;
+    }
+    if (len > 0) {
+        tmp_token.value = buf.substr(i, len);
+        tmp_token.type = config_get_token_type(tmp_token);
+        tmp_token.keyword = config_get_token_keyword(tmp_token);
+        _tokens.push_back(tmp_token);
+        return static_cast<int32_t>(len);
+    }
+    if (config_is_special_char(buf[i])) {
+        tmp_token.value = buf[i];
+        tmp_token.type = config_get_token_type(tmp_token);
+        tmp_token.keyword = config_get_token_keyword(tmp_token);
+        _tokens.push_back(tmp_token);
+        return 1;
+    }
+    return 0;
+}
+
 bool Parser::tokenize()
 {
     std::ifstream in_file;
+    std::stringstream ss;
     std::string buf;
     std::size_t len = 0;
     std::size_t b_size;
@@ -1010,36 +1082,32 @@ bool Parser::tokenize()
         L_ERROR("Can't open config file {}", _path);
         return false;
     }
-    while (std::getline(in_file, buf)) {
-        b_size = buf.size();
-        for (std::size_t i = 0; b_size > i;) {
-            len = 0;
-            while (b_size > i && std::isspace(buf[i]))
-                i++;
-            while (b_size > i + len && !std::isspace(buf[i + len])
-                && !config_is_special_char(buf[i + len]))
-                len++;
-            if (buf[i] == '#') {
-                i = b_size;
-            } else if (len > 0) {
-                tmp_token.value = buf.substr(i, len);
-                tmp_token.alive = 1;
-                tmp_token.line = line_i;
-                tmp_token.type = config_get_token_type(tmp_token);
-                tmp_token.keyword = config_get_token_keyword(tmp_token);
-                _tokens.push_back(tmp_token);
-                i += len;
-            } else if (config_is_special_char(buf[i])) {
-                tmp_token.value = buf[i];
-                tmp_token.alive = 1;
-                tmp_token.line = line_i;
-                tmp_token.type = config_get_token_type(tmp_token);
-                tmp_token.keyword = config_get_token_keyword(tmp_token);
-                _tokens.push_back(tmp_token);
-                i++;
-            }
+
+    ss << in_file.rdbuf();
+    buf = ss.str();
+    b_size = buf.size();
+    for (std::size_t i = 0; b_size > i;) {
+        len = 0;
+
+        while (b_size > i && std::isspace(buf[i])) {
+            if (buf[i] == '\n')
+                line_i++;
+            i++;
         }
-        line_i++;
+        while (b_size > i + len && !std::isspace(buf[i + len])
+            && !config_is_special_char(buf[i + len])) {
+            len++;
+        }
+        if (buf[i] == '#') {
+            while (buf[i] && buf[i] != '\n')
+                i++;
+        } else {
+            int32_t len_copied;
+            len_copied = create_token(buf, i, len, line_i);
+            if (len_copied == -1)
+                return false;
+            i += len_copied;
+        }
     }
     in_file.close();
     return true;

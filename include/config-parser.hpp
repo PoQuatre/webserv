@@ -6,25 +6,26 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/27 04:42:38 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/31 03:44:46 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #pragma once
 
+#include <cstddef>
 #include <cstring>
 #include <string>
 #include <vector>
 
 #include "Server.hpp"
 #include "config-parser-def.hpp"
-#include "logger.hpp"
 
 #define DEFAULT_ROOT "/"
 #define DEFAULT_LISTEN "127.0.0.1:8080"
 #define DEFAULT_SERVER_NAME ""
 
-// #define CALL(macro, val) macro(val);
+#define ALLOW_EMPTY_STRING false
+#define ALLOW_MULTILINE_STRING false
 
 bool string_check(const std::string &string);
 bool bool_check(const std::string &string);
@@ -57,6 +58,8 @@ private:
     bool iter_on_tokens();
     bool token_to_tree();
     void free_tree(config_node *root);
+    int32_t create_token(std::string &buf, const std::size_t &i,
+        std::size_t len, std::size_t &line_i);
     bool tokenize();
     void delete_tree(config_node *root);
     void create_one_server(const config_node &node,
