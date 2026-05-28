@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/27 10:51:44 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/28 02:49:48 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -317,6 +317,7 @@ void create_all_location(const config_node &node, Config &inital_config,
             Config location_conf = inital_config;
             Location location_struct;
 
+            location_struct.type = (*it)->location_type;
             location_struct.regexp = (*it)->location_regexp;
             if ((*it)->vals.empty()) {
                 location_struct.path = "/";
@@ -609,14 +610,6 @@ bool Parser::create_location_node()
     case location::CASE_SENSITIVE:
         code = regcomp(
             &node->location_regexp, _act_token->value.c_str(), REG_EXTENDED);
-        break;
-    case location::STRICT:
-        code = regcomp(&node->location_regexp,
-            ("$" + _act_token->value + "^").c_str(), REG_EXTENDED);
-        break;
-    case location::PRIO:
-        code = regcomp(&node->location_regexp,
-            ("^" + _act_token->value).c_str(), REG_EXTENDED);
         break;
     default:
         code = 0;
@@ -958,7 +951,8 @@ void Parser::delete_tree(config_node *root)
     for (std::vector<config_node *>::iterator it = root->children.begin();
         it != root->children.end(); it++)
         delete_tree(*it);
-    if (root->location_type != location::CLASSIC)
+    if (root->location_type == location::CASE_INSENSITIVE
+        || root->location_type == location::CASE_SENSITIVE)
         regfree(&root->location_regexp);
     root->children.clear();
     delete root;
