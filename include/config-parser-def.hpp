@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/27 10:50:19 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/28 06:51:10 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,7 +54,7 @@ enum type {
 
 UNUSED
 static const char *strings[] = {
-#define X(_, str) #str,
+#define X(str, _) #str,
     LOCATION_TYPE
 #undef X
 };
