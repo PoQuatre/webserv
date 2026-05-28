@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/28 06:51:23 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/28 07:36:55 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,7 +16,7 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
-#include <cerrno>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -26,10 +26,54 @@
 
 #include "logger.hpp"
 
+namespace {
+
+int location_priority(location::type t)
+{
+    switch (t) {
+    case location::STRICT:
+        return 0;
+    case location::CLASSIC:
+    case location::PRIO:
+        return 1;
+    case location::CASE_SENSITIVE:
+    case location::CASE_INSENSITIVE:
+        return 2;
+    default:
+        return 3;
+    }
+}
+
+struct LocationPriorityLess {
+    bool operator()(const Location &a, const Location &b) const
+    {
+        int pa = location_priority(a.type);
+        int pb = location_priority(b.type);
+        if (pa != pb)
+            return pa < pb;
+
+        // Regex locations (group 2) preserve declaration order via stable_sort
+        if (a.type == location::CASE_SENSITIVE
+            || a.type == location::CASE_INSENSITIVE)
+            return false;
+
+        // Prefix/exact locations: longer paths take precedence (longest match)
+        return a.path.size() < b.path.size();
+    }
+};
+
+std::vector<Location> sort_locations(std::vector<Location> locs)
+{
+    std::stable_sort(locs.begin(), locs.end(), LocationPriorityLess());
+    return locs;
+}
+
+}
+
 Server::Server(const std::string &root_path,
-    const std::vector<Location> &root_location, const std::string &server_name,
+    const std::vector<Location> &locations, const std::string &server_name,
     const std::string &listen_addr)
-    : _root_location(root_location)
+    : _locations(sort_locations(locations))
     , _root_path(root_path)
     , _server_name(server_name)
     , _sockaddr()
@@ -62,13 +106,13 @@ Server::Server(const std::string &root_path,
         port = std::atoi(&listen_addr[listen_addr.find(':') + 1]);
         _sockaddr.sin_port = htons(static_cast<uint16_t>(port));
     }
-    L_TRACE("Creating server with: \n\troot_location: {}\n\troot_path: "
+    L_TRACE("Creating server with: \n\tlocations: \n{}\troot_path: "
             "{}\n\tserver_name: {}\n\tis ipv6: {}\n\taddr: {}\n\tport: {}",
-        _root_location, _root_path, _server_name, _is_ipv6, addr, port);
+        _locations, _root_path, _server_name, _is_ipv6, addr, port);
 }
 
 Server::Server(const Server &other)
-    : _root_location(other._root_location)
+    : _locations(other._locations)
     , _root_path(other._root_path)
     , _server_name(other._server_name)
     , _sockaddr(other._sockaddr)
@@ -153,14 +197,9 @@ std::ostream &operator<<(
         it != locations.end(); it++) {
         location = *it;
         os << "{";
-        os << "path: " << location.path << ", ";
-        os << "config: " << location.config << ", ";
         os << "type: " << location::strings[location.type] << ", ";
-
-        if (it == locations.end() - 1)
-            os << "}\n";
-        else
-            os << "}\n\n";
+        os << "path: " << location.path << ", ";
+        os << "config: " << location.config << "}\n";
     }
     return os;
 }
