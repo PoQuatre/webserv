@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/28 07:10:15 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 01:25:15 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -44,8 +44,9 @@ std::ostream &operator<<(
 
 class Server {
 public:
-    Server(const std::string &root_path, const std::vector<Location> &locations,
-        const std::string &server_name, const std::string &listen_addr);
+    Server(const std::vector<Location> &locations,
+        const std::string &server_name, const std::string &listen_addr,
+        const Config &default_config);
     Server(const Server &other);
     ~Server();
 
@@ -57,8 +58,8 @@ private:
     Server();
 
     const std::vector<Location> _locations;
-    const std::string _root_path;
     const std::string _server_name;
+    const Config _default_config;
     struct sockaddr_in _sockaddr;
     struct sockaddr_in6 _sockaddr6;
     int32_t _sockfd;

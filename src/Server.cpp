@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/28 07:36:55 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 01:27:28 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -70,12 +70,12 @@ std::vector<Location> sort_locations(std::vector<Location> locs)
 
 }
 
-Server::Server(const std::string &root_path,
-    const std::vector<Location> &locations, const std::string &server_name,
-    const std::string &listen_addr)
+Server::Server(const std::vector<Location> &locations,
+    const std::string &server_name, const std::string &listen_addr,
+    const Config &default_config)
     : _locations(sort_locations(locations))
-    , _root_path(root_path)
     , _server_name(server_name)
+    , _default_config(default_config)
     , _sockaddr()
     , _sockaddr6()
     , _is_ipv6(false)
@@ -106,15 +106,15 @@ Server::Server(const std::string &root_path,
         port = std::atoi(&listen_addr[listen_addr.find(':') + 1]);
         _sockaddr.sin_port = htons(static_cast<uint16_t>(port));
     }
-    L_TRACE("Creating server with: \n\tlocations: \n{}\troot_path: "
-            "{}\n\tserver_name: {}\n\tis ipv6: {}\n\taddr: {}\n\tport: {}",
-        _locations, _root_path, _server_name, _is_ipv6, addr, port);
+    L_TRACE("Creating server with: \n\tlocations: \n{}\tserver_name: {}\n"
+            "\tis ipv6: {}\n\taddr: {}\n\tport: {}",
+        _locations, _server_name, _is_ipv6, addr, port);
 }
 
 Server::Server(const Server &other)
     : _locations(other._locations)
-    , _root_path(other._root_path)
     , _server_name(other._server_name)
+    , _default_config(other._default_config)
     , _sockaddr(other._sockaddr)
     , _sockaddr6(other._sockaddr6)
     , _sockfd(-1)

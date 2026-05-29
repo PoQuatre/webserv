@@ -355,6 +355,9 @@ void initalize_server_config(
     std::map<keywords::type, std::vector<std::string> > &server_conf,
     Config &inital_config)
 {
+    if (server_conf.find(keywords::ROOT) != server_conf.end())
+        inital_config.root = *server_conf.find(keywords::ROOT)->second.begin();
+
     // Configure error_pages on server config
     if (server_conf.find(keywords::ERROR_PAGE) != server_conf.end()) {
         std::vector<std::string> error_page_vec
@@ -1172,17 +1175,14 @@ void Parser::create_one_server(const config_node &node,
     if (server_conf.find(keywords::LISTEN) == server_conf.end())
         L_WARN("No listen address, using '{}' as the default ", DEFAULT_LISTEN);
 
-    Server n_server
-        = Server(server_conf.find(keywords::ROOT) != server_conf.end()
-                ? *server_conf.find(keywords::ROOT)->second.begin()
-                : DEFAULT_ROOT,
-            location_vector,
-            server_conf.find(keywords::SERVER_NAME) != server_conf.end()
-                ? *server_conf.find(keywords::SERVER_NAME)->second.begin()
-                : DEFAULT_SERVER_NAME,
-            server_conf.find(keywords::LISTEN) != server_conf.end()
-                ? *server_conf.find(keywords::LISTEN)->second.begin()
-                : DEFAULT_LISTEN);
+    Server n_server = Server(location_vector,
+        server_conf.find(keywords::SERVER_NAME) != server_conf.end()
+            ? *server_conf.find(keywords::SERVER_NAME)->second.begin()
+            : DEFAULT_SERVER_NAME,
+        server_conf.find(keywords::LISTEN) != server_conf.end()
+            ? *server_conf.find(keywords::LISTEN)->second.begin()
+            : DEFAULT_LISTEN,
+        inital_config);
 
     _servers.push_back(n_server);
 }
