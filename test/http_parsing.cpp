@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 07:24:07 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 01:26:39 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,7 +30,8 @@ static Connection make_conn(const std::string &raw)
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0)
         return Connection();
     write(fds[1], raw.c_str(), raw.size());
-    Connection conn(fds[0]);
+    Server s({ }, "", "", { });
+    Connection conn(fds[0], s);
     while (!conn.is_parse_complete() && !conn.is_parse_error()
         && conn.on_readable())
         ;
@@ -50,7 +51,8 @@ static Connection make_conn_eof(const std::string &raw)
         return Connection();
     write(fds[1], raw.c_str(), raw.size());
     close(fds[1]);
-    Connection conn(fds[0]);
+    Server s({ }, "", "", { });
+    Connection conn(fds[0], s);
     while (!conn.is_parse_complete() && !conn.is_parse_error()
         && conn.on_readable())
         ;
@@ -862,7 +864,8 @@ Test(reset, second_request_after_reset)
         = "POST /second HTTP/1.0\r\nContent-Length: 3\r\n\r\nabc";
 
     write(fds[1], req1.c_str(), req1.size());
-    Connection conn(fds[0]);
+    Server s({ }, "", "", { });
+    Connection conn(fds[0], s);
     conn.on_readable();
     cr_assert(conn.is_parse_complete());
     cr_assert_eq(conn.request().uri, "/first");

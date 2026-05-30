@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/21 20:54:40 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/29 21:45:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,12 +21,14 @@
 
 Connection::Connection()
     : _fd(-1)
+    , _server(NULL)
     , _send_state(IDLE)
 {
 }
 
-Connection::Connection(int32_t fd)
+Connection::Connection(int32_t fd, const Server &server)
     : _fd(fd)
+    , _server(&server)
     , _send_state(IDLE)
 {
 }
