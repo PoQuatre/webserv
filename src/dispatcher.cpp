@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 03:57:53 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 05:34:44 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -71,12 +71,16 @@ bool read_file(const std::string &path, std::string &out)
     return !f.fail();
 }
 
-std::string make_response(http::status::type status, const std::string &body,
-    const std::string &content_type)
+std::string make_response(const http::request &req, http::status::type status,
+    const std::string &body, const std::string &content_type)
 {
+    if (req.version == http::versions::HTTP09)
+        return body;
+
     std::ostringstream ss;
-    ss << "HTTP/1.1 " << http::status::codes[status] << " "
-       << http::status::reasons[status] << "\r\n";
+    ss << http::versions::strings[req.version] << " "
+       << http::status::codes[status] << " " << http::status::reasons[status]
+       << "\r\n";
     ss << "Content-Type: " << content_type << "\r\n";
     ss << "Content-Length: " << body.size() << "\r\n";
     ss << "Connection: close\r\n";
@@ -86,7 +90,7 @@ std::string make_response(http::status::type status, const std::string &body,
 }
 
 std::string make_error_response_impl(
-    http::status::type status, const Config &cfg)
+    const http::request &req, http::status::type status, const Config &cfg)
 {
     int code = http::status::codes[status];
     std::map<uint32_t, std::string>::const_iterator it
@@ -98,7 +102,7 @@ std::string make_error_response_impl(
 
         std::string content;
         if (read_file(ep_path, content))
-            return make_response(status, content, "text/html");
+            return make_response(req, status, content, "text/html");
     }
 
     std::ostringstream body;
@@ -106,19 +110,20 @@ std::string make_error_response_impl(
          << http::status::reasons[status] << "</title></head>\n<body>\n<h1>"
          << code << " " << http::status::reasons[status]
          << "</h1>\n</body>\n</html>\n";
-    return make_response(status, body.str(), "text/html");
+    return make_response(req, status, body.str(), "text/html");
 }
 
 std::string handle_get(
-    const std::string &uri_path, const std::string &fs_path, const Config &cfg)
+    const http::request &req, const std::string &fs_path, const Config &cfg)
 {
     struct stat st;
     if (stat(fs_path.c_str(), &st) != 0) {
         if (errno == EACCES)
-            return make_error_response_impl(http::status::FORBIDDEN, cfg);
-        return make_error_response_impl(http::status::NOT_FOUND, cfg);
+            return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        return make_error_response_impl(req, http::status::NOT_FOUND, cfg);
     }
 
+    std::string uri_path = req.uri;
     if (S_ISDIR(st.st_mode)) {
         if (uri_path.empty() || uri_path[uri_path.size() - 1] != '/') {
             std::ostringstream ss;
@@ -134,24 +139,26 @@ std::string handle_get(
         if (stat(index_path.c_str(), &ist) == 0 && S_ISREG(ist.st_mode)) {
             std::string content;
             if (read_file(index_path, content))
-                return make_response(http::status::OK, content, "text/html");
+                return make_response(
+                    req, http::status::OK, content, "text/html");
         }
 
-        return make_error_response_impl(http::status::FORBIDDEN, cfg);
+        return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
     }
 
     if (!S_ISREG(st.st_mode))
-        return make_error_response_impl(http::status::FORBIDDEN, cfg);
+        return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
 
     if (access(fs_path.c_str(), R_OK) != 0)
-        return make_error_response_impl(http::status::FORBIDDEN, cfg);
+        return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
 
     std::string content;
     if (!read_file(fs_path, content))
         return make_error_response_impl(
-            http::status::INTERNAL_SERVER_ERROR, cfg);
+            req, http::status::INTERNAL_SERVER_ERROR, cfg);
 
-    return make_response(http::status::OK, content, content_type_for(fs_path));
+    return make_response(
+        req, http::status::OK, content, content_type_for(fs_path));
 }
 
 }
@@ -162,19 +169,22 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
     const Config &cfg = loc ? loc->config : server.default_config();
 
     if (!cfg.allowed_methods[req.method])
-        return make_error_response_impl(http::status::METHOD_NOT_ALLOWED, cfg);
+        return make_error_response_impl(
+            req, http::status::METHOD_NOT_ALLOWED, cfg);
 
     if (req.method != http::methods::GET)
-        return make_error_response_impl(http::status::NOT_IMPLEMENTED, cfg);
+        return make_error_response_impl(
+            req, http::status::NOT_IMPLEMENTED, cfg);
 
     std::string fs_path = cfg.root + req.uri;
     L_DEBUG("GET {} -> {}", req.uri, fs_path);
 
-    return handle_get(req.uri, fs_path, cfg);
+    return handle_get(req, fs_path, cfg);
 }
 
 std::string dispatcher::error_response(http::status::type status)
 {
     Config empty_cfg;
-    return make_error_response_impl(status, empty_cfg);
+    http::request empty_req;
+    return make_error_response_impl(empty_req, status, empty_cfg);
 }
