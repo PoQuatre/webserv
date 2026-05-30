@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/30 01:27:28 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 01:49:27 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -228,4 +228,42 @@ std::ostream &operator<<(std::ostream &os, const Config &config)
     os << "]";
     os << "}";
     return os;
+}
+
+const Location *Server::find_location(const std::string &uri) const
+{
+    const Location *longest_match = NULL;
+
+    std::vector<Location>::const_iterator cit = _locations.begin();
+    std::vector<Location>::const_iterator cite = _locations.end();
+
+    for (; cit != cite; ++cit) {
+        switch (cit->type) {
+        case location::STRICT:
+            if (uri == cit->path)
+                return &*cit;
+            break;
+
+        case location::PRIO:
+        case location::CLASSIC:
+            if (uri.compare(0, cit->path.size(), cit->path) == 0)
+                longest_match = &*cit;
+            break;
+
+        default:
+            goto regex_phase;
+        }
+    }
+
+regex_phase:
+    if (longest_match && longest_match->type == location::PRIO)
+        return longest_match;
+
+    for (; cit != cite; ++cit) {
+        regmatch_t pmatch[1];
+        if (!regexec(&cit->regexp, uri.c_str(), 1, pmatch, REG_STARTEND))
+            return &*cit;
+    }
+
+    return longest_match;
 }
