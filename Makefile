@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/30 02:02:21 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/30 02:07:16 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -121,7 +121,6 @@ TEST_DEPS = $(addprefix $(BUILD_DIR)/$(TEST_DIR)/,$(TEST_SRCS:%.cpp=%.d))
 
 LINT_SRCS		= $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 LINT_STAMPS		= $(addprefix $(BUILD_DIR)/lint/,$(addsuffix .ok,$(LINT_SRCS)))
-LINT_FIX_STAMPS	= $(addprefix $(BUILD_DIR)/lint-fix/,$(addsuffix .ok,$(LINT_SRCS)))
 
 
 
@@ -366,13 +365,7 @@ $(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBU
 $(BUILD_DIR)/lint/%.ok: %
 	@mkdir -p $(dir $@)
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$<)
-	$(call success_quiet,$(CLANG_TIDY) -p . --quiet $<)
-	@touch $@
-
-$(BUILD_DIR)/lint-fix/%.ok: %
-	@mkdir -p $(dir $@)
-	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$<)
-	$(call success_quiet,$(CLANG_TIDY) -p . --quiet --fix $<)
+	$(call success_quiet,$(CLANG_TIDY) -p . --quiet $(if $(filter lint-fix,$(MAKECMDGOALS)),--fix) $<)
 	@touch $@
 
 $(CRITERION_SRC):
@@ -451,7 +444,7 @@ format-fix: .header
 lint: .header $(LINT_STAMPS)
 
 .PHONY: lint-fix
-lint-fix: .header $(LINT_FIX_STAMPS)
+lint-fix: .header $(LINT_STAMPS)
 
 .PHONY: setup-criterion
 setup-criterion: .header $(CRITERION_NAME)
