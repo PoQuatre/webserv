@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/26 16:29:50 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/05/30 02:02:21 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -353,12 +353,12 @@ $(TEST_NAME): $(LIB_OBJS) $(TEST_OBJS) $(CRITERION_NAME)
 	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
 	$(CXX) $(CXXFLAGS) -o $@ $(LIB_OBJS) $(TEST_OBJS) -Wl,-rpath='$(dir $(CRITERION_NAME))' -L'$(dir $(CRITERION_NAME))' -lcriterion
 
-$(BUILD_DIR)/$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),fclean)
+$(BUILD_DIR)/$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),.fclean)
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(INCS:%=-I%) -o $@ -c $<
 
-$(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBUILD),fclean)
+$(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBUILD),.fclean)
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++11 $(DFLAGS) $(TEST_INCS:%=-I%) -o $@ -c $<
@@ -416,6 +416,16 @@ clean: .header
 
 .PHONY: fclean
 fclean: .header clean
+	@$(call progress,$(CLR_BLUE)fclean $(CLR_TEAL)$(NAME))
+	$(RM) $(NAME) $(TEST_NAME)
+
+.PHONY: .clean
+.clean: .header
+	@$(call progress,$(CLR_BLUE)clean $(CLR_TEAL)$(NAME))
+	$(RM) -r $(BUILD_DIR)/$(SRC_DIR) $(BUILD_DIR)/$(TEST_DIR)
+
+.PHONY: .fclean
+.fclean: .header .clean
 	@$(call progress,$(CLR_BLUE)fclean $(CLR_TEAL)$(NAME))
 	$(RM) $(NAME) $(TEST_NAME)
 
