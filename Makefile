@@ -90,8 +90,9 @@ TEST_INCS =	$(INCS) \
 LIB_SRCS =	Connection.cpp \
 			HttpParser.cpp \
 			Server.cpp \
-			config-parser.cpp \
 			cli.cpp \
+			config-parser.cpp \
+			dispatcher.cpp \
 			http.cpp
 ##end: LIB_SRCS
 
@@ -99,8 +100,8 @@ SRCS =	$(LIB_SRCS) \
 		main.cpp
 
 ##begin: TEST_SRCS
-TEST_SRCS =	http_parsing.cpp \
-			config_parsing.cpp
+TEST_SRCS =	config_parsing.cpp \
+			http_parsing.cpp
 ##end: TEST_SRCS
 
 ##begin: HDRS
@@ -108,6 +109,9 @@ HDRS =	include/Connection.hpp \
 		include/HttpParser.hpp \
 		include/Server.hpp \
 		include/cli.hpp \
+		include/config-parser-def.hpp \
+		include/config-parser.hpp \
+		include/dispatcher.hpp \
 		include/http.hpp \
 		include/logger.hpp \
 		include/webserv.hpp

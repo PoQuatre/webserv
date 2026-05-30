@@ -25,6 +25,7 @@
 #include "Connection.hpp"
 #include "cli.hpp"
 #include "config-parser.hpp"
+#include "dispatcher.hpp"
 #include "logger.hpp"
 
 #define MAX_EVENTS 16
@@ -120,11 +121,15 @@ void process_client(
 
     if (evts & EPOLLIN) {
         if (!conn.on_readable()) {
+            if (conn.is_parse_error()) {
+                conn.enqueue_response(
+                    dispatcher::error_response(conn.parse_error_code()));
+                conn.on_writable();
+            }
             close_conn = true;
         } else if (conn.is_parse_complete()) {
-            conn.enqueue_response("HTTP/1.0 200 OK\r\nContent-Length: "
-                                  "66\r\n\r\nThis is just a test,\nwe will "
-                                  "need to insert request handling here\n");
+            conn.enqueue_response(
+                dispatcher::handle(conn.request(), conn.server()));
 
             if (!conn.on_writable()) {
                 close_conn = true;

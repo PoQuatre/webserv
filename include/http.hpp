@@ -96,6 +96,8 @@ namespace status {
     X(BAD_REQUEST, 400, "Bad Request")                                         \
     X(FORBIDDEN, 403, "Forbidden")                                             \
     X(NOT_FOUND, 404, "Not Found")                                             \
+    X(METHOD_NOT_ALLOWED, 405, "Method Not Allowed")                           \
+    X(PAYLOAD_TOO_LARGE, 413, "Payload Too Large")                             \
                                                                                \
     X(INTERNAL_SERVER_ERROR, 500, "Internal Server Error")                     \
     X(NOT_IMPLEMENTED, 501, "Not Implemented")                                 \
