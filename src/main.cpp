@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/25 21:22:50 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/05/30 03:44:20 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,7 +26,6 @@
 #include "cli.hpp"
 #include "config-parser.hpp"
 #include "logger.hpp"
-#include "webserv.hpp"
 
 #define MAX_EVENTS 16
 #define EPOLL_RDONLY (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
@@ -84,18 +83,8 @@ void drain_signal_pipe()
             L_DEBUG("Received signal {}, shutting down", (int)buf[j]);
 }
 
-bool is_sockfd(const std::vector<Server> &servers, int32_t fd)
-{
-    for (std::vector<Server>::const_iterator it = servers.begin();
-        it != servers.end(); ++it) {
-        if (it->get_sockfd() == fd)
-            return true;
-    }
-    return false;
-}
-
-void accept_client(
-    int32_t epollfd, int32_t sockfd, std::map<int32_t, Connection> &connections)
+void accept_client(int32_t epollfd, int32_t sockfd,
+    std::map<int32_t, Connection> &connections, const Server &server)
 {
     int32_t clientfd = accept(sockfd, NULL, NULL);
     if (clientfd == -1) {
@@ -112,7 +101,7 @@ void accept_client(
     ev.data.fd = clientfd;
     epoll_ctl(epollfd, EPOLL_CTL_ADD, clientfd, &ev);
 
-    connections[clientfd] = Connection(clientfd);
+    connections[clientfd] = Connection(clientfd, server);
 }
 
 void close_client(int32_t epollfd, int32_t clientfd, Connection &conn)
@@ -182,10 +171,16 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
             continue;
         }
 
-        if (is_sockfd(servers, fd)) {
-            accept_client(epollfd, fd, connections);
-            continue;
+        bool is_server_fd = false;
+        for (std::size_t j = 0; j < servers.size(); ++j) {
+            if (servers[j].get_sockfd() == fd) {
+                accept_client(epollfd, fd, connections, servers[j]);
+                is_server_fd = true;
+                break;
+            }
         }
+        if (is_server_fd)
+            continue;
 
         process_client(epollfd, fd, events[i].events, connections[fd]);
     }

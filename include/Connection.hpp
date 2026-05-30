@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 07:17:09 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/21 00:00:00 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 02:09:09 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,7 @@
 #include <string>
 
 #include "HttpParser.hpp"
+#include "Server.hpp"
 #include "http.hpp"
 
 class Connection {
@@ -27,7 +28,7 @@ public:
     };
 
     Connection();
-    explicit Connection(int32_t fd);
+    Connection(int32_t fd, const Server &server);
 
     bool on_readable();
     bool on_writable();
@@ -40,12 +41,14 @@ public:
     bool is_sending() const { return _send_state == SENDING; }
 
     const http::request &request() const { return _parser.request(); }
+    const Server &server() const { return *_server; }
     int32_t fd() const { return _fd; }
 
     void reset();
 
 private:
     int32_t _fd;
+    const Server *_server;
     std::string _send_buf;
     SendState _send_state;
     HttpParser _parser;
