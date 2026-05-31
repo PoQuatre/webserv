@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 07:17:09 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 02:09:09 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 06:09:15 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,6 +39,7 @@ public:
     bool is_parse_error() const { return _parser.is_error(); }
     http::status::type parse_error_code() const { return _parser.error_code(); }
     bool is_sending() const { return _send_state == SENDING; }
+    bool keep_alive() const { return _parser.request().keep_alive; }
 
     const http::request &request() const { return _parser.request(); }
     const Server &server() const { return *_server; }

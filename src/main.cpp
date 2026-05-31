@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 03:44:20 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/01 06:53:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,6 +30,7 @@
 
 #define MAX_EVENTS 16
 #define EPOLL_RDONLY (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
+#define EPOLL_WRONLY (EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
 #define EPOLL_RDWR (EPOLL_RDONLY | EPOLLOUT)
 
 namespace {
@@ -130,12 +131,11 @@ void process_client(
         } else if (conn.is_parse_complete()) {
             conn.enqueue_response(
                 dispatcher::handle(conn.request(), conn.server()));
+            conn.on_writable();
 
-            if (!conn.on_writable()) {
-                close_conn = true;
-            } else if (conn.is_sending()) {
+            if (conn.is_sending()) {
                 epoll_event ev = { };
-                ev.events = EPOLL_RDWR;
+                ev.events = EPOLL_WRONLY;
                 ev.data.fd = fd;
                 epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
             } else {
