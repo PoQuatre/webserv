@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 21:31:18 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/01 06:42:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -50,12 +50,13 @@ void HttpParser::set_eof()
 
 void HttpParser::reset()
 {
-    _buf.clear();
     _state = READING_REQUEST_LINE;
     _content_length = 0;
     _eof = false;
     _chunked = false;
+    _error_code = http::status::OK;
     _request = http::request();
+    run();
 }
 
 bool HttpParser::run()
@@ -77,6 +78,8 @@ bool HttpParser::run()
             break;
         }
     }
+    if (_state == ERROR)
+        _request.keep_alive = false;
     return _state != ERROR;
 }
 
@@ -449,6 +452,20 @@ bool HttpParser::try_parse_headers()
 
     if (_state == COMPLETE)
         L_TRACE("No body to parse");
+
+    _request.keep_alive = (_request.version == http::versions::HTTP11);
+    std::map<std::string, std::string>::const_iterator it
+        = _request.headers.find("connection");
+    if (it != _request.headers.end()) {
+        std::string val = it->second;
+        for (std::size_t i = 0; i < val.size(); ++i)
+            val[i] = static_cast<char>(
+                std::tolower(static_cast<unsigned char>(val[i])));
+        if (val == "keep-alive")
+            _request.keep_alive = true;
+        else if (val == "close")
+            _request.keep_alive = false;
+    }
 
     return true;
 }

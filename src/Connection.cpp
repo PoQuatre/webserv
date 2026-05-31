@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/29 21:45:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/01 06:58:47 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,12 +54,7 @@ void Connection::enqueue_response(const std::string &data)
     _send_state = SENDING;
 }
 
-void Connection::reset()
-{
-    _send_buf.clear();
-    _send_state = IDLE;
-    _parser.reset();
-}
+void Connection::reset() { _parser.reset(); }
 
 bool Connection::do_recv()
 {
@@ -93,6 +88,8 @@ bool Connection::do_send()
     if (n > 0) {
         L_TRACE("Sent {} bytes to client {}", n, _fd);
         _send_buf.erase(0, static_cast<std::size_t>(n));
+        if (_send_buf.empty())
+            _send_state = IDLE;
     }
 
     // n == 0: shouldn't happen but is fine

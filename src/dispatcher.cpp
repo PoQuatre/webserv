@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 05:34:44 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/05/30 06:23:27 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -83,7 +83,7 @@ std::string make_response(const http::request &req, http::status::type status,
        << "\r\n";
     ss << "Content-Type: " << content_type << "\r\n";
     ss << "Content-Length: " << body.size() << "\r\n";
-    ss << "Connection: close\r\n";
+    ss << "Connection: " << (req.keep_alive ? "keep-alive" : "close") << "\r\n";
     ss << "\r\n";
     ss << body;
     return ss.str();
@@ -127,10 +127,12 @@ std::string handle_get(
     if (S_ISDIR(st.st_mode)) {
         if (uri_path.empty() || uri_path[uri_path.size() - 1] != '/') {
             std::ostringstream ss;
-            ss << "HTTP/1.1 301 Moved Permanently\r\n"
+            ss << http::versions::strings[req.version]
+               << " 301 Moved Permanently\r\n"
                << "Location: " << uri_path << "/\r\n"
                << "Content-Length: 0\r\n"
-               << "Connection: close\r\n\r\n";
+               << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
+               << "\r\n\r\n";
             return ss.str();
         }
 
