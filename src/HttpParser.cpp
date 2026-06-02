@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/01 06:42:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/03 01:52:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -454,10 +454,10 @@ bool HttpParser::try_parse_headers()
         L_TRACE("No body to parse");
 
     _request.keep_alive = (_request.version == http::versions::HTTP11);
-    std::map<std::string, std::string>::const_iterator it
+    std::map<std::string, std::string>::const_iterator cit
         = _request.headers.find("connection");
-    if (it != _request.headers.end()) {
-        std::string val = it->second;
+    if (cit != _request.headers.end()) {
+        std::string val = cit->second;
         for (std::size_t i = 0; i < val.size(); ++i)
             val[i] = static_cast<char>(
                 std::tolower(static_cast<unsigned char>(val[i])));

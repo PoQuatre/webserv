@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/02 16:05:31 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/03 01:51:37 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -93,12 +93,12 @@ std::string make_error_response_impl(
     const http::request &req, http::status::type status, const Config &cfg)
 {
     int code = http::status::codes[status];
-    std::map<uint32_t, std::string>::const_iterator it
+    std::map<uint32_t, std::string>::const_iterator cit
         = cfg.error_pages.find(static_cast<uint32_t>(code));
 
-    if (it != cfg.error_pages.end()) {
+    if (cit != cfg.error_pages.end()) {
         std::string ep_path = cfg.root;
-        ep_path += it->second;
+        ep_path += cit->second;
 
         std::string content;
         if (read_file(ep_path, content))
