@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/01 19:09:00 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/02 16:27:21 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,7 +54,12 @@ void Connection::enqueue_response(const std::string &data)
     _send_state = SENDING;
 }
 
-void Connection::reset() { _parser.reset(); }
+void Connection::reset()
+{
+    _send_buf.clear();
+    _send_state = IDLE;
+    _parser.reset();
+}
 
 bool Connection::do_recv()
 {
