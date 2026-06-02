@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 01:49:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/03 01:52:08 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -194,9 +194,9 @@ std::ostream &operator<<(
     std::ostream &os, const std::vector<Location> &locations)
 {
     Location location;
-    for (std::vector<Location>::const_iterator it = locations.begin();
-        it != locations.end(); it++) {
-        location = *it;
+    for (std::vector<Location>::const_iterator cit = locations.begin();
+        cit != locations.end(); cit++) {
+        location = *cit;
         os << "{";
         os << "type: " << location::strings[location.type] << ", ";
         os << "path: " << location.path << ", ";
@@ -221,10 +221,10 @@ std::ostream &operator<<(std::ostream &os, const Config &config)
     os << "autoindex: " << std::boolalpha << config.autoindex << ", ";
     os << "client max body size: " << config.client_max_body_size << ", ";
     os << "error pages: [";
-    for (std::map<uint32_t, std::string>::const_iterator it
+    for (std::map<uint32_t, std::string>::const_iterator cit
         = config.error_pages.begin();
-        it != config.error_pages.end(); it++) {
-        os << it->first << ": " << it->second << ", ";
+        cit != config.error_pages.end(); cit++) {
+        os << cit->first << ": " << cit->second << ", ";
     }
     os << "]";
     os << "}";

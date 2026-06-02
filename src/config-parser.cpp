@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/02 05:09:00 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/03 01:53:05 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -241,12 +241,12 @@ bool config_is_special_char(char c)
 void push_configuration(const config_node &node,
     std::map<keywords::type, std::vector<std::string> > &conf)
 {
-    for (std::vector<config_node *>::const_iterator it = node.children.begin();
-        it != node.children.end(); it++) {
+    for (std::vector<config_node *>::const_iterator cit = node.children.begin();
+        cit != node.children.end(); cit++) {
 
-        if ((*it)->type == LEAF) {
+        if ((*cit)->type == LEAF) {
             conf.insert(std::pair<keywords::type, std::vector<std::string> >(
-                (*it)->keyword, (*it)->vals));
+                (*cit)->keyword, (*cit)->vals));
         }
     }
 }
@@ -311,23 +311,23 @@ void create_all_location(const config_node &node, Config &inital_config,
     std::vector<Location> &location_vector)
 {
     // Iter on server children node
-    for (std::vector<config_node *>::const_iterator it = node.children.begin();
-        it != node.children.end(); it++) {
+    for (std::vector<config_node *>::const_iterator cit = node.children.begin();
+        cit != node.children.end(); cit++) {
 
         // Create new location from server configuration
-        if ((*it)->keyword == keywords::LOCATION) {
+        if ((*cit)->keyword == keywords::LOCATION) {
             Config location_conf = inital_config;
             Location location_struct;
 
-            location_struct.type = (*it)->location_type;
-            location_struct.regexp = (*it)->location_regexp;
-            if ((*it)->vals.empty()) {
+            location_struct.type = (*cit)->location_type;
+            location_struct.regexp = (*cit)->location_regexp;
+            if ((*cit)->vals.empty()) {
                 location_struct.path = "/";
             } else {
-                location_struct.path = *(*it)->vals.begin();
+                location_struct.path = *(*cit)->vals.begin();
             }
 
-            create_location(it, location_conf);
+            create_location(cit, location_conf);
 
             location_struct.config = location_conf;
             location_vector.push_back(location_struct);
