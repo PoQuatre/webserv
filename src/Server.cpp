@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/02 03:08:30 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/03 01:49:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -242,13 +242,13 @@ const Location *Server::find_location(const std::string &uri) const
         switch (cit->type) {
         case location::STRICT:
             if (uri == cit->path)
-                return &*cit;
+                return cit.base();
             break;
 
         case location::PRIO:
         case location::CLASSIC:
             if (uri.compare(0, cit->path.size(), cit->path) == 0)
-                longest_match = &*cit;
+                longest_match = cit.base();
             break;
 
         default:
@@ -263,7 +263,7 @@ regex_phase:
     for (; cit != cite; ++cit) {
         regmatch_t pmatch[1];
         if (!regexec(&cit->regexp, uri.c_str(), 1, pmatch, REG_STARTEND))
-            return &*cit;
+            return cit.base();
     }
 
     return longest_match;
