@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/31 04:11:09 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/02 05:09:00 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -1017,7 +1017,7 @@ int32_t Parser::create_token(std::string &buf, const std::size_t &i,
 #if ALLOW_MULTILINE_STRING == 0
         char *p2;
         p2 = std::find(&buf[i + 1], &buf[size], '\n');
-        if (!ALLOW_MULTILINE_STRING && p > p2) {
+        if (p > p2) {
             std::size_t old_line = line_i;
             while (p2 && *p2 == '\n') {
                 p2 = std::find(p2 + 1, p, '\n');

@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/31 03:44:46 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/02 05:07:36 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,8 +24,8 @@
 #define DEFAULT_LISTEN "127.0.0.1:8080"
 #define DEFAULT_SERVER_NAME ""
 
-#define ALLOW_EMPTY_STRING false
-#define ALLOW_MULTILINE_STRING false
+#define ALLOW_EMPTY_STRING 0
+#define ALLOW_MULTILINE_STRING 0
 
 bool string_check(const std::string &string);
 bool bool_check(const std::string &string);
