@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/01 19:18:06 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/02 16:06:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -146,11 +146,14 @@ void process_client(
             if (conn.is_parse_error()) {
                 conn.enqueue_response(
                     dispatcher::error_response(conn.parse_error_code()));
-                conn.on_writable();
-                epoll_event ev = { };
-                ev.events = EPOLL_WRONLY;
-                ev.data.fd = fd;
-                epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
+                if (!conn.on_writable()) {
+                    close_conn = true;
+                } else {
+                    epoll_event ev = { };
+                    ev.events = EPOLL_WRONLY;
+                    ev.data.fd = fd;
+                    epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
+                }
             } else {
                 close_conn = true;
             }
