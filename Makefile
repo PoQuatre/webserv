@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/05/30 02:07:16 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/06/02 03:58:36 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -369,7 +369,7 @@ $(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBU
 $(BUILD_DIR)/lint/%.ok: %
 	@mkdir -p $(dir $@)
 	@$(call progress,$(CLR_BLUE)Linting $(CLR_TEAL)$<)
-	$(call success_quiet,$(CLANG_TIDY) -p . --quiet $(if $(filter lint-fix,$(MAKECMDGOALS)),--fix) $<)
+	$(call success_quiet,$(CLANG_TIDY) -p . --quiet $(if $(filter lint-fix,$(MAKECMDGOALS)),--fix) $< --warnings-as-errors='*')
 	@touch $@
 
 $(CRITERION_SRC):
