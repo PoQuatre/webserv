@@ -88,6 +88,7 @@ TEST_INCS =	$(INCS) \
 
 ##begin: LIB_SRCS
 LIB_SRCS =	Connection.cpp \
+			HeaderMap.cpp \
 			HttpParser.cpp \
 			Server.cpp \
 			StringView.cpp \
@@ -102,11 +103,16 @@ SRCS =	$(LIB_SRCS) \
 
 ##begin: TEST_SRCS
 TEST_SRCS =	config_parsing.cpp \
-			http_parsing.cpp
+			http/body.cpp \
+			http/headers.cpp \
+			http/misc.cpp \
+			http/request_line.cpp \
+			http/uri.cpp
 ##end: TEST_SRCS
 
 ##begin: HDRS
 HDRS =	include/Connection.hpp \
+		include/HeaderMap.hpp \
 		include/HttpParser.hpp \
 		include/Server.hpp \
 		include/StringView.hpp \

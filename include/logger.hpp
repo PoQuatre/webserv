@@ -164,7 +164,9 @@ inline std::ostream *&out_stream()
 
 inline levels::type &log_level()
 {
-#ifndef NDEBUG
+#ifdef TESTING
+    static levels::type lvl = levels::NOTHING;
+#elif !defined(NDEBUG)
     static levels::type lvl = levels::TRACE;
 #else
     static levels::type lvl = levels::INFO;
