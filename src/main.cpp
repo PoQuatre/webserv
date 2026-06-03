@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/02 16:06:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/03 05:37:51 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -61,7 +61,7 @@ bool init_signal_handlers(int32_t epollfd)
     (void)signal(SIGTERM, &signal_handler);
     (void)signal(SIGQUIT, &signal_handler);
 
-    epoll_event ev = { };
+    epoll_event ev = {};
     ev.events = EPOLLIN;
     ev.data.fd = g_signal_pipe[0];
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, g_signal_pipe[0], &ev) == -1) {
@@ -112,6 +112,8 @@ void close_client(int32_t epollfd, int32_t clientfd, Connection &conn)
 
     epoll_ctl(epollfd, EPOLL_CTL_DEL, clientfd, NULL);
     conn.reset();
+    SSL_shutdown(conn.ssl());
+    SSL_free(conn.ssl());
     close(clientfd);
 }
 
@@ -123,13 +125,13 @@ void dispatch_pending(
             dispatcher::handle(conn.request(), conn.server()));
         conn.on_writable();
         if (evts & EPOLLIN) {
-            epoll_event ev = { };
+            epoll_event ev = {};
             ev.events = EPOLL_WRONLY;
             ev.data.fd = fd;
             epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
         }
     } else if (evts & EPOLLOUT) {
-        epoll_event ev = { };
+        epoll_event ev = {};
         ev.events = EPOLL_RDONLY;
         ev.data.fd = fd;
         epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
@@ -149,7 +151,7 @@ void process_client(
                 if (!conn.on_writable()) {
                     close_conn = true;
                 } else {
-                    epoll_event ev = { };
+                    epoll_event ev = {};
                     ev.events = EPOLL_WRONLY;
                     ev.data.fd = fd;
                     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);

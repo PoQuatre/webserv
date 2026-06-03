@@ -6,13 +6,14 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 01:52:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/03 05:50:50 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Server.hpp"
 
 #include <arpa/inet.h>
+#include <openssl/ssl.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 
@@ -107,6 +108,22 @@ Server::Server(const std::vector<Location> &locations,
         port = std::atoi(&listen_addr[listen_addr.find(':') + 1]);
         _sockaddr.sin_port = htons(static_cast<uint16_t>(port));
     }
+    // TODO: real certificate and private key path parsing in conf file
+    _ssl_ctx = SSL_CTX_new(TLS_server_method());
+    if (!_ssl_ctx) {
+        L_ERROR("Failed to create ssl ctx");
+        return;
+    }
+    if (SSL_CTX_use_certificate_file(_ssl_ctx, "cert.pem", SSL_FILETYPE_PEM)
+        != 1) {
+        L_ERROR("Invalid ssl certificate");
+        return;
+    }
+    if (SSL_CTX_use_PrivateKey_file(_ssl_ctx, "key.pem", SSL_FILETYPE_PEM)
+        != 1) {
+        L_ERROR("Invalid private ssl key");
+        return;
+    }
     L_TRACE("Creating server with: \n\tlocations: \n{}\tserver_name: {}\n"
             "\tis ipv6: {}\n\taddr: {}\n\tport: {}",
         _locations, _server_name, _is_ipv6, addr, port);
@@ -120,10 +137,11 @@ Server::Server(const Server &other)
     , _sockaddr6(other._sockaddr6)
     , _sockfd(-1)
     , _is_ipv6(other._is_ipv6)
+    , _ssl_ctx(other._ssl_ctx)
 {
 }
 
-Server::~Server() { }
+Server::~Server() {}
 
 int32_t Server::get_sockfd() const { return _sockfd; }
 
@@ -168,7 +186,7 @@ bool Server::init(int32_t epollfd)
         return false;
     }
 
-    epoll_event ev = { };
+    epoll_event ev = {};
     ev.events = EPOLLIN;
     ev.data.fd = _sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
@@ -185,7 +203,7 @@ bool Server::init(int32_t epollfd)
 void Server::shutdown(int32_t epollfd)
 {
     L_DEBUG("Stopping server {}", _server_name);
-
+    SSL_CTX_free(_ssl_ctx);
     epoll_ctl(epollfd, EPOLL_CTL_DEL, _sockfd, NULL);
     close(_sockfd);
 }

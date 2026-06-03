@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/06/02 03:58:36 by mle-flem         ###   ########.fr        #
+#    Updated: 2026/06/03 05:19:51 by uanglade         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -348,7 +348,7 @@ $(NAME): $(OBJS)
 	@$(call progress,$(CLR_BLUE)Linking $(CLR_TEAL)$@)
 	@mkdir -p $(dir $(MK_CXXFLAGS))
 	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) -lssl
 
 $(TEST_NAME): $(LIB_OBJS) $(TEST_OBJS) $(CRITERION_NAME)
 	@$(call progress,$(CLR_BLUE)Linking $(CLR_TEAL)$@)
