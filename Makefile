@@ -110,12 +110,14 @@ HDRS =	include/Connection.hpp \
 		include/HttpParser.hpp \
 		include/Server.hpp \
 		include/Ssl.hpp \
+		include/cipher_suites.hpp \
 		include/cli.hpp \
 		include/config-parser-def.hpp \
 		include/config-parser.hpp \
 		include/dispatcher.hpp \
 		include/http.hpp \
 		include/logger.hpp \
+		include/ssl_types.hpp \
 		include/webserv.hpp
 ##end: HDRS
 

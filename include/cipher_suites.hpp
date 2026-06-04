@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 22:08:34 by uanglade          #+#    #+#             */
-/*   Updated: 2026/06/04 22:50:56 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/05 00:10:19 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -150,7 +150,7 @@ enum type {
 #undef X
 };
 
-const char *to_string(type cs)
+inline const char *to_string(type cs)
 {
     switch (cs) {
 #define X(name, _, __)                                                         \

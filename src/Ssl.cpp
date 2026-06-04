@@ -6,7 +6,7 @@
 /*   By: uanglade </var/spool/mail/uanglade>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/03 06:30:19 by uanglade          #+#    #+#             */
-/*   Updated: 2026/06/04 22:42:32 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/05 00:27:36 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,10 +27,32 @@ namespace ssl {
 
 namespace {
 
-handshake_protocol::ClientHello convert_to_client_hello(
-    const std::vector<uint8_t> &buf)
+handshake_protocol::ClientHello convert_to_client_hello(const uint8_t *buf)
 {
     handshake_protocol::ClientHello ret;
+
+    ret.type = static_cast<handshake_protocol::HandshakeType::type>(*buf++);
+    ret.length[0] = *buf++;
+    ret.length[1] = *buf++;
+    ret.length[2] = *buf++;
+    ret.version.major = *buf++;
+    ret.version.minor = *buf++;
+    for (int i = 0; i < 32; ++i) {
+        ret.random[i] = *buf++;
+    }
+    ret.session_id_length = *buf++;
+    ret.session_id = buf;
+    buf += ret.session_id_length;
+    ret.cipher_suites_length = buf[0] << 8 | buf[1];
+    buf += 2;
+    // FIXME: c casse connerie de cast
+    ret.cipher_suites = (cipher_suites::type *)buf;
+    buf += ret.cipher_suites_length;
+    ret.legacy_compression_methods_length = *buf++;
+    ret.legacy_compression_methods = buf;
+    buf += ret.legacy_compression_methods_length;
+    ret.extensions_length = buf[0] << 8 | buf[1];
+    ret.extensions = (handshake_protocol::extensions::Extenion *)buf;
 
     return ret;
 }
@@ -79,8 +101,14 @@ Ssl::SslError Ssl::accept()
                 _current_message.content_length);
         }
         if (_buf.size() >= _current_message.content_length) {
+            _current_message.data = &_buf[5];
             if (_current_message.type
-                == record_protocol::ContentType::CONTENT_TYPE_handshake) { }
+                == record_protocol::ContentType::CONTENT_TYPE_handshake) {
+                handshake_protocol::ClientHello client_hello
+                    = convert_to_client_hello(&_buf[5]);
+                L_TRACE("client hello : {}", client_hello);
+                (void)client_hello;
+            }
         }
     }
     if (n == 0) {
@@ -112,4 +140,5 @@ int32_t Ssl::write(const void *buf, int num)
     (void)num;
     return 1;
 }
+
 }

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 07:17:09 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 06:44:29 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/05 00:09:27 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,7 +19,6 @@
 
 #include "HttpParser.hpp"
 #include "Server.hpp"
-#include "Ssl.hpp"
 #include "http.hpp"
 
 class Connection {
