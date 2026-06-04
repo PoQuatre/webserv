@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 07:17:09 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 05:23:36 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/03 06:44:29 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,7 @@
 
 #include "HttpParser.hpp"
 #include "Server.hpp"
+#include "Ssl.hpp"
 #include "http.hpp"
 
 class Connection {
@@ -45,7 +46,6 @@ public:
     const http::request &request() const { return _parser.request(); }
     const Server &server() const { return *_server; }
     int32_t fd() const { return _fd; }
-    SSL *ssl() const { return _ssl; }
 
     void reset();
 
@@ -55,10 +55,10 @@ private:
     std::string _send_buf;
     SendState _send_state;
     HttpParser _parser;
-    SSL *_ssl;
     bool _is_ssl;
     bool _is_handshake_done;
 
     bool do_recv();
     bool do_send();
+    ssl::Ssl _ssl;
 };

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 05:46:47 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/04 11:43:00 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,15 +17,17 @@
 
 #include "logger.hpp"
 
+#ifndef RECV_CHUNK
 #define RECV_CHUNK 4096
+#endif
 
 Connection::Connection()
     : _fd(-1)
     , _server(NULL)
     , _send_state(IDLE)
-    , _ssl(NULL)
     , _is_ssl(false)
     , _is_handshake_done(false)
+    , _ssl(-1)
 {
 }
 
@@ -33,9 +35,9 @@ Connection::Connection(int32_t fd, const Server &server)
     : _fd(fd)
     , _server(&server)
     , _send_state(IDLE)
-    , _ssl(NULL)
     , _is_ssl(false)
     , _is_handshake_done(false)
+    , _ssl(fd)
 {
 }
 
@@ -56,11 +58,9 @@ bool is_request_ssl(int fd)
 bool Connection::on_readable()
 {
     if (!_is_ssl && is_request_ssl(_fd)) {
-        _ssl = SSL_new(_server->get_ssl_ctx());
-        SSL_set_fd(_ssl, _fd);
-        SSL_set_accept_state(_ssl);
         _is_ssl = true;
         _is_handshake_done = false;
+        _ssl.connect(_server->get_ssl_ctx());
     }
 
     bool was_complete = _parser.is_complete();
@@ -91,22 +91,19 @@ void Connection::reset()
 
 bool Connection::do_recv()
 {
-    if (_is_ssl && _ssl && !_is_handshake_done && !SSL_is_init_finished(_ssl)) {
+    if (_is_ssl && !_is_handshake_done) {
         L_TRACE("Trying to do handsake ");
-        int ret = SSL_accept(_ssl);
-        if (ret == 1) {
+        int ret = _ssl.accept();
+        if (ret == ssl::Ssl::ERROR_OK) {
             _is_handshake_done = true;
             L_TRACE("Handsake done");
-        } else if (ret == 0) {
-            int err = SSL_get_error(_ssl, ret);
-            if (err == SSL_ERROR_WANT_READ) {
-                L_TRACE("Ssl want read");
-            }
-            if (err == SSL_ERROR_WANT_WRITE) {
-                L_TRACE("Ssl want write");
-            }
-        } else if (ret < 0) {
+        } else if (ret == ssl::Ssl::ERROR_NEED_READ) {
+            L_TRACE("Ssl want read");
+        } else if (ret == ssl::Ssl::ERROR_NEED_WRITE) {
+            L_TRACE("Ssl want write");
+        } else if (ret == ssl::Ssl::ERROR_FATAL) {
             L_ERROR("fatal ssl handshake error");
+            return false;
         }
     }
     char tmp[RECV_CHUNK];
@@ -115,7 +112,7 @@ bool Connection::do_recv()
     if (_is_ssl) {
         if (_is_handshake_done) {
             L_TRACE("Reading with SSL");
-            n = SSL_read(_ssl, tmp, RECV_CHUNK);
+            n = _ssl.read(tmp, RECV_CHUNK);
         }
     } else {
         n = recv(_fd, tmp, sizeof(tmp), 0);
@@ -144,8 +141,7 @@ bool Connection::do_send()
     }
     ssize_t n = -1;
     if (_is_ssl) {
-        n = SSL_write(
-            _ssl, _send_buf.data(), static_cast<int>(_send_buf.size()));
+        n = _ssl.write(_send_buf.data(), static_cast<int>(_send_buf.size()));
     } else {
         n = send(_fd, _send_buf.c_str(), _send_buf.size(), 0);
     }

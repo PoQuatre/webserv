@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 03:29:54 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/03 06:44:48 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "Ssl.hpp"
 #include "config-parser-def.hpp"
 #include "http.hpp"
 
@@ -58,7 +59,7 @@ public:
     const Location *find_location(const std::string &uri) const;
     const Config &default_config() const { return _default_config; }
     const std::string &server_name() const { return _server_name; }
-    SSL_CTX *get_ssl_ctx() const { return _ssl_ctx; }
+    const ssl::SslContext *get_ssl_ctx() const { return &_ssl_ctx; }
 
 private:
     Server();
@@ -70,5 +71,5 @@ private:
     struct sockaddr_in6 _sockaddr6;
     int32_t _sockfd;
     bool _is_ipv6;
-    SSL_CTX *_ssl_ctx;
+    ssl::SslContext _ssl_ctx;
 };

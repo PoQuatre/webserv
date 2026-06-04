@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 05:37:51 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/03 06:45:53 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -112,8 +112,6 @@ void close_client(int32_t epollfd, int32_t clientfd, Connection &conn)
 
     epoll_ctl(epollfd, EPOLL_CTL_DEL, clientfd, NULL);
     conn.reset();
-    SSL_shutdown(conn.ssl());
-    SSL_free(conn.ssl());
     close(clientfd);
 }
 

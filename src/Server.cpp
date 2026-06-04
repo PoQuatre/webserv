@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 05:50:50 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/03 06:45:43 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -108,22 +108,7 @@ Server::Server(const std::vector<Location> &locations,
         port = std::atoi(&listen_addr[listen_addr.find(':') + 1]);
         _sockaddr.sin_port = htons(static_cast<uint16_t>(port));
     }
-    // TODO: real certificate and private key path parsing in conf file
-    _ssl_ctx = SSL_CTX_new(TLS_server_method());
-    if (!_ssl_ctx) {
-        L_ERROR("Failed to create ssl ctx");
-        return;
-    }
-    if (SSL_CTX_use_certificate_file(_ssl_ctx, "cert.pem", SSL_FILETYPE_PEM)
-        != 1) {
-        L_ERROR("Invalid ssl certificate");
-        return;
-    }
-    if (SSL_CTX_use_PrivateKey_file(_ssl_ctx, "key.pem", SSL_FILETYPE_PEM)
-        != 1) {
-        L_ERROR("Invalid private ssl key");
-        return;
-    }
+    // TODO: private key and certificate parsing
     L_TRACE("Creating server with: \n\tlocations: \n{}\tserver_name: {}\n"
             "\tis ipv6: {}\n\taddr: {}\n\tport: {}",
         _locations, _server_name, _is_ipv6, addr, port);
@@ -203,7 +188,6 @@ bool Server::init(int32_t epollfd)
 void Server::shutdown(int32_t epollfd)
 {
     L_DEBUG("Stopping server {}", _server_name);
-    SSL_CTX_free(_ssl_ctx);
     epoll_ctl(epollfd, EPOLL_CTL_DEL, _sockfd, NULL);
     close(_sockfd);
 }
