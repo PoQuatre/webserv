@@ -6,7 +6,7 @@
 /*   By: uanglade </var/spool/mail/uanglade>        +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/03 06:30:19 by uanglade          #+#    #+#             */
-/*   Updated: 2026/06/04 17:06:55 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/04 22:42:32 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -25,8 +25,21 @@
 
 namespace ssl {
 
+namespace {
+
+handshake_protocol::ClientHello convert_to_client_hello(
+    const std::vector<uint8_t> &buf)
+{
+    handshake_protocol::ClientHello ret;
+
+    return ret;
+}
+
+}
+
 Ssl::Ssl(int32_t fd)
     : _fd(fd)
+    , _state(STATE_NONE)
     , _client_hello_received(false)
 {
 }
@@ -34,6 +47,7 @@ Ssl::Ssl(int32_t fd)
 Ssl::SslError Ssl::connect(const SslContext *ssl_ctx)
 {
     _ctx = ssl_ctx;
+    _state = STATE_HANDSHAKE;
     return ERROR_OK;
 }
 
@@ -49,14 +63,24 @@ Ssl::SslError Ssl::accept()
         uint8_t *end = _buf.end().base() - n;
         std::memcpy(end, tmp, n);
         L_TRACE("Received {} bytes from client {}", n, _fd);
-        if (!_client_hello_received && _buf.size() > 5) {
-            _client_hello.content_type = _buf[0];
-            _client_hello.protocol_version = _buf[1] << 8 | _buf[2];
-            _client_hello.content_length = _buf[3] << 8 | _buf[4];
-            L_TRACE(
-                "Content type: {}, Protocol version: {}, Content length: {}",
-                (int)_client_hello.content_type, _client_hello.protocol_version,
-                _client_hello.content_length);
+        if (_buf.size() > 5) {
+            _current_message.type
+                = static_cast<record_protocol::ContentType::type>(_buf[0]);
+            _current_message.legacy_record_version.major = _buf[1];
+            _current_message.legacy_record_version.minor = _buf[2];
+            _current_message.content_length = _buf[3] << 8 | _buf[4];
+            L_TRACE("Content type: {}, Protocol version: major: {} minor: {}, "
+                    "Content length: {}",
+                record_protocol::ContentType::strings[_current_message.type == 0
+                        ? 0
+                        : _current_message.type - 19],
+                (int)_current_message.legacy_record_version.major,
+                (int)_current_message.legacy_record_version.minor,
+                _current_message.content_length);
+        }
+        if (_buf.size() >= _current_message.content_length) {
+            if (_current_message.type
+                == record_protocol::ContentType::CONTENT_TYPE_handshake) { }
         }
     }
     if (n == 0) {
