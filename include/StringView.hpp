@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/03 02:37:38 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 03:02:05 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/05 03:53:12 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,6 +29,17 @@ public:
     bool empty() const;
 
     std::string str() const;
+
+    int32_t compare(const StringView &other) const;
+    int32_t compare(const char *str) const;
+    int32_t compare(const std::string &str) const;
+    int32_t compare(
+        std::size_t pos, std::size_t count, const StringView &str) const;
+    int32_t compare(std::size_t pos, std::size_t count, const char *str) const;
+    int32_t compare(
+        std::size_t pos, std::size_t count, const std::string &str) const;
+
+    char operator[](std::size_t i) const;
 
     bool operator==(const StringView &other) const;
     bool operator!=(const StringView &other) const;
