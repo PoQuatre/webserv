@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 06:09:19 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/05 04:16:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,9 @@
 #include <cstddef>
 #include <map>
 #include <string>
+
+#include "HeaderMap.hpp"
+#include "StringView.hpp"
 
 #ifndef UNUSED
 #define UNUSED __attribute__((unused))
@@ -138,11 +141,12 @@ static const std::size_t COUNT = sizeof(strings) / sizeof(*strings);
 
 struct request {
     methods::type method;
-    std::string uri;
+    StringView uri;
     versions::type version;
-    std::map<std::string, std::string> headers;
+    HeaderMap headers;
     std::map<std::string, std::string> query;
-    std::string body;
+    StringView body;
+    std::string body_chunked;
     bool keep_alive;
 };
 

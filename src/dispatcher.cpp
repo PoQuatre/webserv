@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 01:51:37 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/05 04:15:15 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -123,13 +123,12 @@ std::string handle_get(
         return make_error_response_impl(req, http::status::NOT_FOUND, cfg);
     }
 
-    std::string uri_path = req.uri;
     if (S_ISDIR(st.st_mode)) {
-        if (uri_path.empty() || uri_path[uri_path.size() - 1] != '/') {
+        if (req.uri.empty() || req.uri[req.uri.size() - 1] != '/') {
             std::ostringstream ss;
             ss << http::versions::strings[req.version]
                << " 301 Moved Permanently\r\n"
-               << "Location: " << uri_path << "/\r\n"
+               << "Location: " << req.uri << "/\r\n"
                << "Content-Length: 0\r\n"
                << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
                << "\r\n\r\n";
@@ -178,7 +177,7 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
         return make_error_response_impl(
             req, http::status::NOT_IMPLEMENTED, cfg);
 
-    std::string fs_path = cfg.root + req.uri;
+    std::string fs_path = cfg.root + req.uri.str();
     L_DEBUG("GET {} -> {}", req.uri, fs_path);
 
     return handle_get(req, fs_path, cfg);
