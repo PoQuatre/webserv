@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/30 01:37:27 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/05 04:01:30 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -55,6 +55,7 @@ public:
     int32_t get_sockfd() const;
 
     const Location *find_location(const std::string &uri) const;
+    const Location *find_location(const StringView &uri) const;
     const Config &default_config() const { return _default_config; }
     const std::string &server_name() const { return _server_name; }
 

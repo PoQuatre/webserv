@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 01:52:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/05 04:01:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,7 +17,7 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <cerrno>
+// #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -233,6 +233,12 @@ std::ostream &operator<<(std::ostream &os, const Config &config)
 
 const Location *Server::find_location(const std::string &uri) const
 {
+    return find_location(StringView(uri.data(), uri.size()));
+}
+
+// WARN: uri must be NUL terminated (not necessarily within the StringView)
+const Location *Server::find_location(const StringView &uri) const
+{
     const Location *longest_match = NULL;
 
     std::vector<Location>::const_iterator cit = _locations.begin();
@@ -262,7 +268,7 @@ regex_phase:
 
     for (; cit != cite; ++cit) {
         regmatch_t pmatch[1];
-        if (!regexec(&cit->regexp, uri.c_str(), 1, pmatch, REG_STARTEND))
+        if (!regexec(&cit->regexp, uri.data(), 1, pmatch, REG_STARTEND))
             return cit.base();
     }
 
