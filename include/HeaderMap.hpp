@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/03 06:12:44 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 06:31:06 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/05 03:55:43 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,6 +34,7 @@ public:
     bool insert(StringView name, StringView val);
     const StringView *find(const char *name) const;
     std::size_t count(const char *name) const;
+    StringView at(const char *name) const;
 
     const Entry *begin() const;
     const Entry *end() const;

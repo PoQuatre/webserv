@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/03 06:30:15 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 06:31:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/05 03:55:57 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -48,6 +48,12 @@ std::size_t HeaderMap::count(const char *name) const
         if (_entries[i].name == name)
             ++cnt;
     return cnt;
+}
+
+StringView HeaderMap::at(const char *name) const
+{
+    const StringView *v = find(name);
+    return v ? *v : StringView();
 }
 
 const HeaderMap::Entry *HeaderMap::begin() const { return _entries; }
