@@ -6,23 +6,30 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 01:51:37 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/08 09:41:39 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "dispatcher.hpp"
 
 #include <dirent.h>
+#include <fcntl.h>
+#include <string.h>
+#include <sys/epoll.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <string>
 
+#include "Connection.hpp"
+#include "http.hpp"
 #include "logger.hpp"
-
 namespace {
 
 struct MimeType {
@@ -162,10 +169,10 @@ std::string handle_get(
     return make_response(
         req, http::status::OK, content, content_type_for(fs_path));
 }
-
 }
 
-std::string dispatcher::handle(const http::request &req, const Server &server)
+std::string dispatcher::handle(const http::request &req, const Server &server,
+    const int &epollfd, const int &clientfd)
 {
     const Location *loc = server.find_location(req.uri);
     const Config &cfg = loc ? loc->config : server.default_config();
@@ -174,12 +181,16 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
         return make_error_response_impl(
             req, http::status::METHOD_NOT_ALLOWED, cfg);
 
+    std::string fs_path = cfg.root + req.uri;
+
+    if (!cfg.cgis.empty() && Cgi::is_a_cgi(req.uri)) {
+        return Cgi::handle_cgi(
+            (Cgi)(*cfg.cgis.begin()), req, cfg, fs_path, epollfd, clientfd);
+    }
+
     if (req.method != http::methods::GET)
         return make_error_response_impl(
             req, http::status::NOT_IMPLEMENTED, cfg);
-
-    std::string fs_path = cfg.root + req.uri;
-    L_DEBUG("GET {} -> {}", req.uri, fs_path);
 
     return handle_get(req, fs_path, cfg);
 }

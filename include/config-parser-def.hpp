@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/30 05:34:16 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/03 07:34:42 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -153,6 +153,7 @@ namespace keywords {
     X(PROXY_BUFFER_SIZE, "proxy_buffer_size", 1, " ", 1, 1, 1, size_check, std::size_t)                                                                                                                 \
     X(OUTPUT_BUFFERS, "output_buffers", 1, " ", 1, 1, 1, string_check, std::string)                                                                                                                     \
     X(LIMIT_EXCEPT, "limit_except", 8, "https://nginx.org/en/docs/http/ngx_http_core_module.html#limit_except", 0, 0, 1, string_check, std::string)                                                     \
+    X(CGI_PASS, "cgi_pass", 8, "", 0, 0, 1, string_check, std::string)                                                     \
     X(GLOBAL, "  ", 8, "default", 0, 0, 0, string_check, std::string)
 // clang-format on
 

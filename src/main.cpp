@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/02 16:06:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/08 12:51:47 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <sys/epoll.h>
 #include <sys/sendfile.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -63,7 +64,7 @@ bool init_signal_handlers(int32_t epollfd)
 
     epoll_event ev = { };
     ev.events = EPOLLIN;
-    ev.data.fd = g_signal_pipe[0];
+    ev.data.u64 = g_signal_pipe[0];
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, g_signal_pipe[0], &ev) == -1) {
         L_ERROR(
             "Failed to add signal pipe to epoll instance: {}", strerror(errno));
@@ -100,7 +101,7 @@ void accept_client(int32_t epollfd, int32_t sockfd,
 
     epoll_event ev;
     ev.events = EPOLL_RDONLY;
-    ev.data.fd = clientfd;
+    ev.data.u64 = clientfd;
     epoll_ctl(epollfd, EPOLL_CTL_ADD, clientfd, &ev);
 
     connections[clientfd] = Connection(clientfd, server);
@@ -120,18 +121,18 @@ void dispatch_pending(
 {
     if (conn.is_parse_complete()) {
         conn.enqueue_response(
-            dispatcher::handle(conn.request(), conn.server()));
+            dispatcher::handle(conn.request(), conn.server(), epollfd, fd));
         conn.on_writable();
         if (evts & EPOLLIN) {
             epoll_event ev = { };
             ev.events = EPOLL_WRONLY;
-            ev.data.fd = fd;
+            ev.data.u64 = fd;
             epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
         }
     } else if (evts & EPOLLOUT) {
         epoll_event ev = { };
         ev.events = EPOLL_RDONLY;
-        ev.data.fd = fd;
+        ev.data.u64 = fd;
         epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
     }
 }
@@ -151,7 +152,7 @@ void process_client(
                 } else {
                     epoll_event ev = { };
                     ev.events = EPOLL_WRONLY;
-                    ev.data.fd = fd;
+                    ev.data.u64 = fd;
                     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
                 }
             } else {
@@ -187,8 +188,8 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
     epoll_event (&events)[MAX_EVENTS], int32_t nfds)
 {
     for (int32_t i = 0; i < nfds; ++i) {
-        int32_t fd = events[i].data.fd;
-
+        int32_t fd = (int32_t)events[i].data.u64;
+        int32_t cgifd = (int32_t)((events[i].data.u64 >> 32) & 0x7FFFFFFFULL);
         if (fd == g_signal_pipe[0]) {
             drain_signal_pipe();
             running = false;
@@ -205,7 +206,10 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
         }
         if (is_server_fd)
             continue;
-
+        if (cgifd) {
+            Cgi::process(epollfd, fd, cgifd, &events[i]);
+            continue;
+        }
         process_client(epollfd, fd, events[i].events, connections[fd]);
     }
 }

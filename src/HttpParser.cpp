@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 01:52:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/08 12:40:01 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -306,11 +306,12 @@ bool HttpParser::try_parse_query(std::size_t start, std::size_t end)
             std::string key = decode_percent(_buf, pos, eq, true);
             std::string val = decode_percent(_buf, eq + 1, amp, true);
             if (!key.empty())
-                _request.query[key] = val;
+                _request.query += key + "=" += val += "&";
+            //_request.query[key] = val;
         } else {
             std::string key = decode_percent(_buf, pos, amp, true);
             if (!key.empty())
-                _request.query[key] = "";
+                _request.query += key + "=&";
         }
 
         pos = amp + 1;

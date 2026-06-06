@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 23:48:58 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/06 16:31:20 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -139,6 +139,8 @@ public:
                 _fmt.c_str() + _pos, static_cast<std::streamsize>(open - _pos));
             _out << val;
             _pos = open + 2;
+        } else {
+            ++_pos;
         }
         return *this;
     }

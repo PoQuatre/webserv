@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/30 01:37:27 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/07 13:50:18 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "cgi.hpp"
 #include "config-parser-def.hpp"
 #include "http.hpp"
 
@@ -26,6 +27,8 @@ struct Config {
     std::map<uint32_t, std::string> error_pages;
     std::string root;
     std::size_t client_max_body_size;
+    std::string server_name;
+    std::vector<Cgi> cgis;
     bool autoindex;
     bool allowed_methods[http::methods::COUNT];
 };

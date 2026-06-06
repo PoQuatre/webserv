@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 01:53:05 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/07 13:51:19 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "Server.hpp"
+#include "cgi.hpp"
 #include "config-parser-def.hpp"
 #include "http.hpp"
 #include "logger.hpp"
@@ -288,6 +289,14 @@ void create_location(
                     location_conf.error_pages[code] = *((*it)->vals.end() - 1);
                 }
             }
+        }
+
+        if ((*it)->keyword == keywords::CGI_PASS) {
+            location_conf.cgis.push_back(Cgi((*(*it)->vals.begin())));
+        }
+
+        if ((*it)->keyword == keywords::SERVER_NAME) {
+            location_conf.server_name = *(*it)->vals.begin();
         }
 
         set_location_value(**it, location_conf);

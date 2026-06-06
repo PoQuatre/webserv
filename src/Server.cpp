@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 01:52:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/04 06:00:41 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -170,7 +170,7 @@ bool Server::init(int32_t epollfd)
 
     epoll_event ev = { };
     ev.events = EPOLLIN;
-    ev.data.fd = _sockfd;
+    ev.data.u64 = _sockfd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
         L_ERROR("Failed to add socket {} to epoll instance: {}", _sockfd,
             strerror(errno));
