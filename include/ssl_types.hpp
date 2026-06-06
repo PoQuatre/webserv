@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 22:51:59 by uanglade          #+#    #+#             */
-/*   Updated: 2026/06/05 00:27:38 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/06 18:03:04 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <ostream>
+#include <vector>
 
 #include "cipher_suites.hpp"
 
@@ -142,10 +143,12 @@ namespace ExtensionType {
     X(EXTENSION_TYPE_signature_algorithms_cert, 50)                            \
     X(EXTENSION_TYPE_key_share, 51)
 
-enum type {
+enum __attribute__((__packed__)) type {
 #define X(name, value) name = (value),
     EXTENSION_TYPES
 #undef X
+        EXTENIONS_MAX
+    = 65535
 };
 
 inline const char *to_string(type cs)
@@ -156,20 +159,100 @@ inline const char *to_string(type cs)
         return #name;
         EXTENSION_TYPES
 #undef X
+    case EXTENIONS_MAX:
+        return "MAX";
     }
     return "UNKNOWN";
 }
 
 }
 
-struct Extenion {
-    ExtensionType::type type;
-    void *extenion_data;
+namespace NamedGroup {
+
+#define NAMED_GROUPS                                                           \
+    X(NAMED_GROUP_null, 0x00, 0x00, false)                                     \
+    /* Elliptic Curve Groups (ECDHE) */                                        \
+    X(NAMED_GROUP_secp256r1, 0x00, 0x17, false)                                \
+    X(NAMED_GROUP_secp384r1, 0x00, 0x18, false)                                \
+    X(NAMED_GROUP_secp521r1, 0x00, 0x19, false)                                \
+    X(NAMED_GROUP_x25519, 0x00, 0x1D, true)                                    \
+    X(NAMED_GROUP_x448, 0x00, 0x1E, false)                                     \
+    /* Finite Field Groups (DHE) */                                            \
+    X(NAMED_GROUP_ffdhe2048, 0x01, 0x00, false)                                \
+    X(NAMED_GROUP_ffdhe3072, 0x01, 0x01, false)                                \
+    X(NAMED_GROUP_ffdhe4096, 0x01, 0x02, false)                                \
+    X(NAMED_GROUP_ffdhe6144, 0x01, 0x03, false)                                \
+    X(NAMED_GROUP_ffdhe8192, 0x01, 0x04, false)
+
+enum __attribute__((__packed__)) type {
+#define X(name, value_1, value_2, _) name = (value_1) << 8 | (value_2),
+    NAMED_GROUPS
+#undef X
 };
 
-std::ostream &operator<<(std::ostream &os, const Extenion &ext);
+inline const char *to_string(type cs)
+{
+    switch (cs) {
+#define X(name, _, __, ___)                                                    \
+    case name:                                                                 \
+        return #name;
+        NAMED_GROUPS
+#undef X
+    }
+    return "UNKNOWN";
+}
 
-// TODO: more extensions
+inline bool is_supported(type cs)
+{
+    switch (cs) {
+#define X(name, _, __, support)                                                \
+    case name:                                                                 \
+        return support;
+        NAMED_GROUPS
+#undef X
+    }
+    return "UNKNOWN";
+}
+
+}
+
+struct ServerName {
+    uint16_t list_length;
+    uint8_t name_type;
+    std::string names;
+};
+
+struct KeyShareEntry {
+    NamedGroup::type group;
+    uint16_t length;
+    const uint8_t *key_exchange;
+};
+
+struct SupportedGroups {
+    uint16_t length;
+    uint16_t count;
+    std::vector<NamedGroup::type> groups;
+};
+
+struct KeyShare {
+    uint16_t length;
+    std::vector<KeyShareEntry> client_shares;
+};
+
+struct Extenion {
+    ExtensionType::type type;
+    uint16_t length;
+    const uint8_t *extenion_data;
+};
+
+inline std::ostream &operator<<(std::ostream &os, const Extenion &ext)
+{
+
+    os << "type: " << ExtensionType::to_string(ext.type)
+       << ", length: " << ext.length;
+
+    return os;
+}
 
 }
 
@@ -218,11 +301,13 @@ struct ClientHello {
     uint8_t session_id_length;
     const uint8_t *session_id;
     uint16_t cipher_suites_length;
+    uint16_t cipher_suites_count;
     const cipher_suites::type *cipher_suites;
     uint8_t legacy_compression_methods_length;
     const uint8_t *legacy_compression_methods;
     uint16_t extensions_length;
-    const extensions::Extenion *extensions;
+    uint16_t extensions_count;
+    std::vector<extensions::Extenion> extensions;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ClientHello &msg)
@@ -245,14 +330,14 @@ inline std::ostream &operator<<(std::ostream &os, const ClientHello &msg)
     }
     os << "\ncipher suites length: " << std::dec
        << (int)msg.cipher_suites_length << " cipher suites: \n";
-    // FIXME: c casse connerie de cast
-
-    // for (int i = 0; i < msg.cipher_suites_length / 2; i++) {
-    // os << std::hex << (int)msg.cipher_suites[0]
-    // << "\n"; // ssl::cipher_suites::to_string(msg.cipher_suites[i])
-    // << "\n";
-    // }
-    os << "extensions count: " << std::dec << (int)msg.extensions_length;
+    for (int i = 0; i < msg.cipher_suites_length / 2; i++) {
+        os << std::hex << (int)msg.cipher_suites[i] << ": "
+           << ssl::cipher_suites::to_string(msg.cipher_suites[i]) << "\n";
+    }
+    os << "extensions count: " << std::dec << (int)msg.extensions_count << "\n";
+    for (int i = 0; i < msg.extensions_count; i++) {
+        os << msg.extensions[i] << "\n";
+    }
 
     return os;
 }
