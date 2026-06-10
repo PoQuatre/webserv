@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 22:51:59 by uanglade          #+#    #+#             */
-/*   Updated: 2026/06/06 18:03:04 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/10 23:42:15 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,6 +22,10 @@
 
 #ifndef UNUSED
 #define UNUSED __attribute__((unused))
+#endif
+
+#ifndef PACKED
+#define PACKED __attribute__((__packed__))
 #endif
 
 namespace ssl {
@@ -82,7 +86,7 @@ namespace ContentType {
     X(CONTENT_TYPE_handshake, 22)                                              \
     X(CONTENT_TYPE_application_data, 23)
 
-enum type {
+enum PACKED type {
 #define X(name, value) name = (value),
     CONTENT_TYPES
 #undef X
@@ -101,6 +105,14 @@ static const std::size_t COUNT = sizeof(strings) / sizeof(*strings);
 
 #undef CONTENT_TYPES
 }
+
+struct HkdfLabel {
+    uint16_t key_length;
+    uint8_t label_length;
+    uint8_t *label;
+    uint8_t context_length;
+    uint8_t context[255];
+};
 
 struct TLSPlainText {
     ContentType::type type;
@@ -143,7 +155,7 @@ namespace ExtensionType {
     X(EXTENSION_TYPE_signature_algorithms_cert, 50)                            \
     X(EXTENSION_TYPE_key_share, 51)
 
-enum __attribute__((__packed__)) type {
+enum PACKED type {
 #define X(name, value) name = (value),
     EXTENSION_TYPES
 #undef X
@@ -184,7 +196,7 @@ namespace NamedGroup {
     X(NAMED_GROUP_ffdhe6144, 0x01, 0x03, false)                                \
     X(NAMED_GROUP_ffdhe8192, 0x01, 0x04, false)
 
-enum __attribute__((__packed__)) type {
+enum PACKED type {
 #define X(name, value_1, value_2, _) name = (value_1) << 8 | (value_2),
     NAMED_GROUPS
 #undef X
@@ -211,10 +223,75 @@ inline bool is_supported(type cs)
         NAMED_GROUPS
 #undef X
     }
-    return "UNKNOWN";
+    return false;
 }
 
 }
+
+namespace SignatureScheme {
+
+#define SIGNATURE_SCHEMES                                                      \
+    X(SIGNATURE_SCHEME_null, 0x0000, false)                                    \
+    /* RSASSA-PKCS1-v1_5 algorithms */                                         \
+    X(SIGNATURE_SCHEME_rsa_pkcs1_sha256, 0x0401, false)                        \
+    X(SIGNATURE_SCHEME_rsa_pkcs1_sha384, 0x0501, false)                        \
+    X(SIGNATURE_SCHEME_rsa_pkcs1_sha512, 0x0601, false)                        \
+    /* ECDSA algorithms */                                                     \
+    X(SIGNATURE_SCHEME_ecdsa_secp256r1_sha256, 0x0403, false)                  \
+    X(SIGNATURE_SCHEME_ecdsa_secp384r1_sha384, 0x0503, false)                  \
+    X(SIGNATURE_SCHEME_ecdsa_secp521r1_sha512, 0x0603, false)                  \
+    /* RSASSA-PSS algorithms with public key OID rsaEncryption */              \
+    X(SIGNATURE_SCHEME_rsa_pss_rsae_sha256, 0x0804, false)                     \
+    X(SIGNATURE_SCHEME_rsa_pss_rsae_sha384, 0x0805, false)                     \
+    X(SIGNATURE_SCHEME_rsa_pss_rsae_sha512, 0x0806, false)                     \
+    /* EdDSA algorithms */                                                     \
+    X(SIGNATURE_SCHEME_ed25519, 0x0807, false)                                 \
+    X(SIGNATURE_SCHEME_ed448, 0x0808, false)                                   \
+    /* RSASSA-PSS algorithms with public key OID RSASSA-PSS */                 \
+    X(SIGNATURE_SCHEME_rsa_pss_pss_sha256, 0x0809, false)                      \
+    X(SIGNATURE_SCHEME_rsa_pss_pss_sha384, 0x080a, false)                      \
+    X(SIGNATURE_SCHEME_rsa_pss_pss_sha512, 0x080b, false)                      \
+    /* Legacy algorithms */                                                    \
+    X(SIGNATURE_SCHEME_rsa_pkcs1_sha1, 0x0201, false)                          \
+    X(SIGNATURE_SCHEME_ecdsa_sha1, 0x0203, false)
+
+enum PACKED type {
+#define X(name, value, _) name = (value),
+    SIGNATURE_SCHEMES
+#undef X
+};
+
+inline const char *to_string(type cs)
+{
+    switch (cs) {
+#define X(name, _, __)                                                         \
+    case name:                                                                 \
+        return #name;
+        SIGNATURE_SCHEMES
+#undef X
+    }
+    return "UNKNOWN";
+}
+
+inline bool is_supported(type cs)
+{
+    switch (cs) {
+#define X(name, _, support)                                                    \
+    case name:                                                                 \
+        return support;
+        SIGNATURE_SCHEMES
+#undef X
+    }
+    return false;
+}
+
+}
+
+struct SignatureAlgorithms {
+    uint16_t length;
+    uint8_t count;
+    std::vector<SignatureScheme::type> algorithms;
+};
 
 struct ServerName {
     uint16_t list_length;
@@ -230,7 +307,7 @@ struct KeyShareEntry {
 
 struct SupportedGroups {
     uint16_t length;
-    uint16_t count;
+    uint8_t count;
     std::vector<NamedGroup::type> groups;
 };
 
@@ -249,8 +326,21 @@ inline std::ostream &operator<<(std::ostream &os, const Extenion &ext)
 {
 
     os << "type: " << ExtensionType::to_string(ext.type)
-       << ", length: " << ext.length;
+       << ", length: " << (int)ext.length;
 
+    return os;
+}
+
+inline std::ostream &operator<<(std::ostream &os, const KeyShareEntry &key)
+{
+
+    os << "group: " << NamedGroup::to_string(key.group)
+       << ", length: " << (int)key.length << "\n";
+
+    os << "key: ";
+    for (int i = 0; i < key.length; i++) {
+        os << std::hex << (int)key.key_exchange[i];
+    }
     return os;
 }
 
@@ -271,7 +361,7 @@ namespace HandshakeType {
     X(HANDSHAKE_TYPE_key_update, 24)                                           \
     X(HANDSHAKE_TYPE_message_hash, 254)
 
-enum type {
+enum PACKED type {
 #define X(name, value) name = (value),
     HANDSHAKE_TYPES
 #undef X
@@ -302,7 +392,7 @@ struct ClientHello {
     const uint8_t *session_id;
     uint16_t cipher_suites_length;
     uint16_t cipher_suites_count;
-    const cipher_suites::type *cipher_suites;
+    std::vector<cipher_suites::type> cipher_suites;
     uint8_t legacy_compression_methods_length;
     const uint8_t *legacy_compression_methods;
     uint16_t extensions_length;

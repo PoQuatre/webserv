@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/06 00:59:58 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/10 22:28:24 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -135,10 +135,11 @@ bool Connection::do_recv()
 
 bool Connection::do_send()
 {
-    if (_send_buf.empty()) {
+    if (_send_buf.empty() && _ssl.get_state() != ssl::Ssl::STATE_HANDSHAKE) {
         _send_state = IDLE;
         return true;
     }
+
     ssize_t n = -1;
     if (_is_ssl) {
         n = _ssl.write(_send_buf.data(), static_cast<int>(_send_buf.size()));

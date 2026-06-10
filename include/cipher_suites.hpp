@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/04 22:08:34 by uanglade          #+#    #+#             */
-/*   Updated: 2026/06/06 02:02:49 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/10 23:44:23 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,7 +38,7 @@ namespace cipher_suites {
     X(TLS_KRB5_EXPORT_WITH_RC4_40_MD5, 0x00, 0x2B, false)                      \
     X(TLS_PSK_WITH_NULL_SHA, 0x00, 0x2C, false)                                \
     X(TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA, 0x00, 0x86, false)                 \
-    X(TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA, 0x00, 0x89, false)                \
+    X(TLS_DH_ANON_WITH_CAMELLIA_256_CBC_SHA, 0x00, 0x89, false)                \
     X(TLS_PSK_WITH_RC4_128_SHA, 0x00, 0x8A, false)                             \
     X(TLS_PSK_WITH_3DES_EDE_CBC_SHA, 0x00, 0x8B, false)                        \
     X(TLS_PSK_WITH_AES_128_CBC_SHA, 0x00, 0x8C, false)                         \
@@ -51,8 +51,8 @@ namespace cipher_suites {
     X(TLS_PSK_WITH_NULL_SHA384, 0x00, 0xB1, false)                             \
     X(TLS_EMPTY_RENEGOTIATION_INFO_SCSV, 0x00, 0xFF, false)                    \
     X(TLS_AES_128_GCM_SHA256, 0x13, 0x01, true)                                \
-    X(TLS_AES_256_GCM_SHA384, 0x13, 0x02, true)                                \
-    X(TLS_CHACHA20_POLY1305_SHA256, 0x13, 0x03, true)                          \
+    X(TLS_AES_256_GCM_SHA384, 0x13, 0x02, false)                               \
+    X(TLS_CHACHA20_POLY1305_SHA256, 0x13, 0x03, false)                         \
     X(TLS_AES_128_CCM_SHA256, 0x13, 0x04, false)                               \
     X(TLS_AES_128_CCM_8_SHA256, 0x13, 0x05, false)                             \
     X(TLS_FALLBACK_SCSV, 0x56, 0x00, false)                                    \
@@ -130,7 +130,7 @@ namespace cipher_suites {
     X(TLS_ECDHE_ECDSA_WITH_AES_256_CCM, 0xC0, 0xAD, false)                     \
     X(TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8, 0xC0, 0xAE, false)                   \
     X(TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8, 0xC0, 0xAF, false)                   \
-    X(TLS_ECCPWD_WITH_AES_128_GCM_SHA256, 0xC0, 0xB0, false)                   \
+    X(TLS_ECCPWD_WITH_AES_128_GCM_SHA256, 0xC0, 0xB0, true)                    \
     X(TLS_ECCPWD_WITH_AES_256_GCM_SHA384, 0xC0, 0xB1, false)                   \
     X(TLS_ECCPWD_WITH_AES_128_CCM_SHA256, 0xC0, 0xB2, false)                   \
     X(TLS_ECCPWD_WITH_AES_256_CCM_SHA384, 0xC0, 0xB3, false)                   \
@@ -146,7 +146,7 @@ namespace cipher_suites {
     X(TLS_ECDHE_PSK_WITH_AES_128_CCM_SHA256, 0xD0, 0x05, false)
 
 enum __attribute__((__packed__)) type {
-#define X(name, value_1, value_2, _) name = (value_2) << 8 | (value_1),
+#define X(name, value_1, value_2, _) name = (value_1) << 8 | (value_2),
     CIPHER_SUITES
 #undef X
 };
@@ -172,7 +172,7 @@ inline bool is_supported(type cs)
         CIPHER_SUITES
 #undef X
     }
-    return "UNKNOWN";
+    return false;
 }
 
 }

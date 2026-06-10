@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 06:45:53 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/10 22:11:20 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -214,6 +214,8 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
 
 int32_t main(int32_t ac, char **av)
 {
+    srand(time(NULL));
+
     logger::print_date() = false;
 
     cli::ParsedArgs args = cli::parse_arguments(ac, av);
