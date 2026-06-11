@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/05 04:16:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/10 05:23:07 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,10 +15,8 @@
 #include <stdint.h>
 
 #include <cstddef>
-#include <map>
-#include <string>
 
-#include "HeaderMap.hpp"
+#include "StaticMap.hpp"
 #include "StringView.hpp"
 
 #ifndef UNUSED
@@ -143,10 +141,9 @@ struct request {
     methods::type method;
     StringView uri;
     versions::type version;
-    HeaderMap headers;
-    std::map<std::string, std::string> query;
+    StaticMap<128> headers;
+    StaticMap<64> query;
     StringView body;
-    std::string body_chunked;
     bool keep_alive;
 };
 

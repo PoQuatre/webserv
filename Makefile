@@ -88,7 +88,6 @@ TEST_INCS =	$(INCS) \
 
 ##begin: LIB_SRCS
 LIB_SRCS =	Connection.cpp \
-			HeaderMap.cpp \
 			HttpParser.cpp \
 			Server.cpp \
 			StringView.cpp \
@@ -112,9 +111,9 @@ TEST_SRCS =	config_parsing.cpp \
 
 ##begin: HDRS
 HDRS =	include/Connection.hpp \
-		include/HeaderMap.hpp \
 		include/HttpParser.hpp \
 		include/Server.hpp \
+		include/StaticMap.hpp \
 		include/StringView.hpp \
 		include/cli.hpp \
 		include/config-parser-def.hpp \
