@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/17 23:48:58 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/06/16 04:52:25 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -164,7 +164,9 @@ inline std::ostream *&out_stream()
 
 inline levels::type &log_level()
 {
-#ifndef NDEBUG
+#ifdef TESTING
+    static levels::type lvl = levels::NOTHING;
+#elif defined(NDEBUG)
     static levels::type lvl = levels::TRACE;
 #else
     static levels::type lvl = levels::INFO;
@@ -228,7 +230,6 @@ inline void write_log(levels::type level, const std::string &msg)
     MAKE_LOG_OVERLOADS(func, levels::name)
 LOG_LEVELS
 #undef X
-
 }
 
 #undef ENUM_PARAMS_1
