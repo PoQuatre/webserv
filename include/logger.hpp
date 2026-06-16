@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/14 17:56:20 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/16 04:52:25 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/16 07:40:11 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -166,7 +166,7 @@ inline levels::type &log_level()
 {
 #ifdef TESTING
     static levels::type lvl = levels::NOTHING;
-#elif defined(NDEBUG)
+#elif !defined(NDEBUG)
     static levels::type lvl = levels::TRACE;
 #else
     static levels::type lvl = levels::INFO;
