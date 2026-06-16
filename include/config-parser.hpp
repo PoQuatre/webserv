@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/02 05:07:36 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/16 05:55:58 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,10 +27,10 @@
 #define ALLOW_EMPTY_STRING 0
 #define ALLOW_MULTILINE_STRING 0
 
-bool string_check(const std::string &string);
-bool bool_check(const std::string &string);
+bool string_check(const std::string &val);
+bool bool_check(const std::string &val);
 bool time_check(const std::string &val);
-bool int_check(const std::string &string);
+bool int_check(const std::string &val);
 bool size_check(const std::string &val);
 std::size_t convert_time_to_size_t(const std::string &val);
 std::size_t convert_string_to_size(const std::string &val);

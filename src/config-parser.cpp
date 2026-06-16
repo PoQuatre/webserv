@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 01:53:05 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/16 05:59:58 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,9 +30,7 @@
 #include "http.hpp"
 #include "logger.hpp"
 
-#ifndef TESTING
 namespace {
-#endif
 
 const char *strings[] = {
 #define X(_, __, ___, text, ____, _____, ______, _______, ________) #text,
@@ -85,145 +83,6 @@ location::type config_get_location_type(const std::string &t_str)
     LOCATION_TYPE
 #undef X
     return location::CLASSIC;
-}
-
-bool string_check(const std::string &val)
-{
-    (void)val;
-    return true;
-}
-
-bool int_check(const std::string &val)
-{
-    for (int i = 0; val[i]; i++) {
-        if (!std::isdigit(val[i]))
-            return false;
-    }
-    return true;
-}
-
-bool bool_check(const std::string &string)
-{
-    return (string == "on" || string == "off");
-}
-
-bool time_check(const std::string &val)
-{
-    bool valid = false;
-    uint32_t i = 0;
-
-    while (1) {
-        while (val[i] && std::isdigit(val[i])) {
-            i++;
-        }
-        if (i + 1 < val.length() && val[i] == 'm' && (val[i + 1]) == 's') {
-            valid = true;
-            i += 2;
-        } else {
-            switch (val[i]) {
-            case 's':
-            case 'm':
-            case 'h':
-                /*
-            case 'd':
-            case 'w':
-            case 'M':
-            case 'y':
-*/
-                i++;
-                valid = true;
-                break;
-            default:
-                return (!val[i]);
-            }
-        }
-        if (i == val.length())
-            return valid;
-    }
-    return valid;
-}
-
-std::size_t convert_time_to_size_t(const std::string &val)
-{
-    int64_t i = 0;
-    std::size_t final_size = 0;
-    const char *str = val.c_str();
-    char *p;
-
-    while (1) {
-        i = std::strtol(str, &p, 10);
-        if (i < 0)
-            return 9;
-        str = p;
-        if (!*str)
-            return final_size + (i / 1000);
-        if (str[1] && str[0] == 'm' && str[1] == 's') {
-            final_size += (i / 1000);
-            str += 2;
-        } else {
-            switch (*str) {
-            case 's':
-                final_size += i;
-                str++;
-                break;
-            case 'm':
-                final_size += i * 60;
-                str++;
-                break;
-            case 'h':
-                final_size += i * 3600;
-                str++;
-                break;
-                /*
-        case 'd':
-        case 'w':
-        case 'M':
-        case 'y':
-                */
-            default:
-                return final_size;
-            }
-        }
-        if (!*p)
-            return final_size;
-    }
-    return 0;
-}
-
-bool size_check(const std::string &val)
-{
-    (void)convert_time_to_size_t;
-    std::size_t i;
-    for (i = 0; val[i]; i++) {
-        if (!std::isdigit(val[i]))
-            break;
-    }
-    if (!val[i])
-        return true;
-    if ((val[i] == 'k' || val[i] == 'K') && i + 1 == (val.size()))
-        return true;
-    if ((val[i] == 'm' || val[i] == 'M') && i + 1 == (val.size()))
-        return true;
-    if ((val[i] == 'g' || val[i] == 'G') && i + 1 == (val.length()))
-        return true;
-    return (std::isdigit(val[i]));
-}
-
-std::size_t convert_string_to_size(const std::string &val)
-{
-    int64_t i;
-    char *p;
-
-    i = std::strtol(val.c_str(), &p, 10);
-    if (!*p)
-        return i;
-    if (*p == 'k' || *p == 'K')
-        return (INT64_MAX / 1024 < i ? INT64_MAX : i * 1024);
-    if (*p == 'm' || *p == 'M')
-        return (INT64_MAX / 1048576 < i ? INT64_MAX : i * 1048576);
-    if ((*p == 'g' || *p == 'G'))
-        return (INT64_MAX / 1073741824 < i ? INT64_MAX : i * 1073741824);
-    return 0;
 }
 
 bool config_is_special_char(char c)
@@ -445,9 +304,146 @@ bool is_a_valid_val(std::string &val, const config_token &token)
     }
 }
 
-#ifndef TESTING
 }
-#endif
+
+bool string_check(const std::string &val)
+{
+    (void)val;
+    return true;
+}
+
+bool int_check(const std::string &val)
+{
+    for (int i = 0; val[i]; i++) {
+        if (!std::isdigit(val[i]))
+            return false;
+    }
+    return true;
+}
+
+bool bool_check(const std::string &val)
+{
+    return (val == "on" || val == "off");
+}
+
+bool time_check(const std::string &val)
+{
+    bool valid = false;
+    uint32_t i = 0;
+
+    while (1) {
+        while (val[i] && std::isdigit(val[i])) {
+            i++;
+        }
+        if (i + 1 < val.length() && val[i] == 'm' && (val[i + 1]) == 's') {
+            valid = true;
+            i += 2;
+        } else {
+            switch (val[i]) {
+            case 's':
+            case 'm':
+            case 'h':
+                /*
+            case 'd':
+            case 'w':
+            case 'M':
+            case 'y':
+*/
+                i++;
+                valid = true;
+                break;
+            default:
+                return (!val[i]);
+            }
+        }
+        if (i == val.length())
+            return valid;
+    }
+    return valid;
+}
+
+std::size_t convert_time_to_size_t(const std::string &val)
+{
+    int64_t i = 0;
+    std::size_t final_size = 0;
+    const char *str = val.c_str();
+    char *p;
+
+    while (1) {
+        i = std::strtol(str, &p, 10);
+        if (i < 0)
+            return 9;
+        str = p;
+        if (!*str)
+            return final_size + (i / 1000);
+        if (str[1] && str[0] == 'm' && str[1] == 's') {
+            final_size += (i / 1000);
+            str += 2;
+        } else {
+            switch (*str) {
+            case 's':
+                final_size += i;
+                str++;
+                break;
+            case 'm':
+                final_size += i * 60;
+                str++;
+                break;
+            case 'h':
+                final_size += i * 3600;
+                str++;
+                break;
+                /*
+        case 'd':
+        case 'w':
+        case 'M':
+        case 'y':
+                */
+            default:
+                return final_size;
+            }
+        }
+        if (!*p)
+            return final_size;
+    }
+    return 0;
+}
+
+bool size_check(const std::string &val)
+{
+    (void)convert_time_to_size_t;
+    std::size_t i;
+    for (i = 0; val[i]; i++) {
+        if (!std::isdigit(val[i]))
+            break;
+    }
+    if (!val[i])
+        return true;
+    if ((val[i] == 'k' || val[i] == 'K') && i + 1 == (val.size()))
+        return true;
+    if ((val[i] == 'm' || val[i] == 'M') && i + 1 == (val.size()))
+        return true;
+    if ((val[i] == 'g' || val[i] == 'G') && i + 1 == (val.length()))
+        return true;
+    return (std::isdigit(val[i]));
+}
+
+std::size_t convert_string_to_size(const std::string &val)
+{
+    int64_t i;
+    char *p;
+
+    i = std::strtol(val.c_str(), &p, 10);
+    if (!*p)
+        return i;
+    if (*p == 'k' || *p == 'K')
+        return (INT64_MAX / 1024 < i ? INT64_MAX : i * 1024);
+    if (*p == 'm' || *p == 'M')
+        return (INT64_MAX / 1048576 < i ? INT64_MAX : i * 1048576);
+    if ((*p == 'g' || *p == 'G'))
+        return (INT64_MAX / 1073741824 < i ? INT64_MAX : i * 1073741824);
+    return 0;
+}
 
 Parser::Parser(const std::string &path)
     : _path(path)
