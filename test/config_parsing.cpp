@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/25 20:46:13 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/16 04:47:37 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -114,19 +114,19 @@ Test(config_parsing, size_utils)
 
 Test(config_parsing, good_simple)
 {
-    std::string path = "config_test/good/easy-0.conf";
+    std::string path = "test/data/conf-0.conf";
     Parser parser(path);
     cr_assert_eq(parser.parse_config(), 1);
     cr_assert_eq(parser.create_all_servers(), 1);
     cr_assert_eq(parser.get_all_servers().size(), 1);
 
-    path = "config_test/good/easy-1.conf";
+    path = "test/data/conf-1.conf";
     Parser parser2(path);
     cr_assert_eq(parser2.parse_config(), 1);
     cr_assert_eq(parser2.create_all_servers(), 1);
     cr_assert_eq(parser2.get_all_servers().size(), 2);
 
-    path = "config_test/good/easy-3.conf";
+    path = "test/data/conf-3.conf";
     Parser parser3(path);
     cr_assert_eq(parser3.parse_config(), 0);
 }
