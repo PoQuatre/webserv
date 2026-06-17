@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 19:02:38 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 21:03:34 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -208,7 +208,13 @@ void initalize_server_config(
 
 }
 
-std::vector<Server> Parser::get_all_servers() { return _servers; }
+std::vector<Server> Parser::get_all_servers(std::vector<Server> &servers)
+{
+    for (std::vector<Server>::iterator it = _servers.begin();
+        it != _servers.end(); it++)
+        servers.push_back(*it);
+    return _servers;
+}
 
 void Parser::create_one_server(const config_node &node,
     std::vector<Location> location_vector,

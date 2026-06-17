@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 18:35:44 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 21:03:02 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,9 +39,11 @@ class Parser {
 public:
     Parser(const std::string &path);
     ~Parser();
-    bool parse_config();
+    static bool parse_config(
+        const std::string &path, std::vector<Server> &servers);
+    bool start();
     bool create_all_servers();
-    std::vector<Server> get_all_servers();
+    std::vector<Server> get_all_servers(std::vector<Server> &servers);
 
 private:
     Parser();
