@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/02 16:06:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/17 19:31:53 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -227,9 +227,6 @@ int32_t main(int32_t ac, char **av)
 
     Parser config(args.config_path);
     if (!config.parse_config()) {
-        return 1;
-    }
-    if (!config.create_all_servers()) {
         return 1;
     }
     std::vector<Server> servers = config.get_all_servers();
