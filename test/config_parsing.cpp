@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 19:32:15 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 21:10:00 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <vector>
 
 #include "config-parser.hpp"
 #include "logger.hpp"
@@ -114,17 +115,19 @@ Test(config_parsing, size_utils)
 
 Test(config_parsing, good_simple)
 {
+    std::vector<Server> servers;
+
     std::string path = "test/data/conf-0.conf";
-    Parser parser(path);
-    cr_assert_eq(parser.parse_config(), 1);
-    cr_assert_eq(parser.get_all_servers().size(), 1);
+    cr_assert_eq(Parser::parse_config(path, servers), true);
+    cr_assert_eq(servers.size(), 1);
+    servers.clear();
 
     path = "test/data/conf-1.conf";
-    Parser parser2(path);
-    cr_assert_eq(parser2.parse_config(), 1);
-    cr_assert_eq(parser2.get_all_servers().size(), 2);
+    cr_assert_eq(Parser::parse_config(path, servers), true);
+    cr_assert_eq(servers.size(), 2);
+    servers.clear();
 
     path = "test/data/conf-3.conf";
-    Parser parser3(path);
-    cr_assert_eq(parser3.parse_config(), 0);
+    cr_assert_eq(Parser::parse_config(path, servers), false);
+    servers.clear();
 }

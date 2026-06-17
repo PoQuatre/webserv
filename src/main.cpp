@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/17 19:31:53 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 21:00:38 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -215,6 +215,7 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
 int32_t main(int32_t ac, char **av)
 {
     logger::print_date() = false;
+    std::vector<Server> servers;
 
     cli::ParsedArgs args = cli::parse_arguments(ac, av);
     if (args.should_quit)
@@ -225,11 +226,8 @@ int32_t main(int32_t ac, char **av)
     if (args.flags[cli::flags::VERBOSE])
         logger::log_level() = logger::levels::TRACE;
 
-    Parser config(args.config_path);
-    if (!config.parse_config()) {
+    if (!Parser::parse_config(args.config_path, servers))
         return 1;
-    }
-    std::vector<Server> servers = config.get_all_servers();
 
     logger::print_date() = true;
     L_DEBUG("Creating epoll instance");

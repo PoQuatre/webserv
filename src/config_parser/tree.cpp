@@ -6,12 +6,13 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 19:01:36 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 19:04:39 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 21:16:24 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <regex.h>
 
+#include <cerrno>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -21,7 +22,6 @@
 #include "logger.hpp"
 
 namespace {
-
 const char *strings[] = {
 #define X(_, __, ___, text, ...) #text,
 #define X_SPECIAL(_, __, ___, text, ...) text,

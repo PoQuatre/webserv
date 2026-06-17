@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 19:27:51 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 21:10:06 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -176,10 +176,8 @@ Parser::Parser(const std::string &path)
 
 Parser::~Parser() { free_tree(_root); }
 
-bool Parser::parse_config()
+bool Parser::start()
 {
-    Location location = { };
-
     if (!tokenize()) {
         return false;
     }
@@ -209,7 +207,17 @@ bool Parser::parse_config()
 #endif
 
     if (!create_all_servers()) {
-        return 1;
+        return false;
     }
     return _valid;
+}
+
+bool Parser::parse_config(const std::string &path, std::vector<Server> &servers)
+{
+    Location location = { };
+    Parser parser(path);
+    if (!parser.start())
+        return false;
+    parser.get_all_servers(servers);
+    return true;
 }
