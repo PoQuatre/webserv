@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/05/30 01:37:27 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/17 14:04:45 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,6 +28,7 @@ struct Config {
     std::size_t client_max_body_size;
     bool autoindex;
     bool allowed_methods[http::methods::COUNT];
+    config_webserv conf;
 };
 
 std::ostream &operator<<(std::ostream &os, const Config &config);
