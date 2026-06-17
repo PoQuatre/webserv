@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/16 05:59:58 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 13:51:29 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -33,23 +33,30 @@
 namespace {
 
 const char *strings[] = {
-#define X(_, __, ___, text, ____, _____, ______, _______, ________) #text,
+#define X(_, __, ___, text, ...) #text,
+#define X_SPECIAL(_, __, ___, text, ...) text,
     KEYWORDS
+#undef X_SPECIAL
 #undef X
 };
 
 const char *keywords_strs[] = {
-#define X(_, text, ___, __, ____, _____, ______, _______, ________) text,
+#define X(_, text, ...) #text,
+#define X_SPECIAL(_, text, ...) text,
     KEYWORDS
+#undef X_SPECIAL
 #undef X
 };
 
+// clang-format off
 const int keywords_scope_rules[] = {
-#define X(_, _____, ___, __, http, server, location, _______, ________)        \
-    ((http) + ((server) << 1) + ((location) << 2)),
+#define X(_, _____, ___, __, http, server, location, ...) ((http) + ((server) << 1) + ((location) << 2)),
+#define X_SPECIAL(_, _____, ___, __, http, server, location, ...) ((http) + ((server) << 1) + ((location) << 2)),
     KEYWORDS
+#undef X_SPECIAL
 #undef X
 };
+//clang-format on
 
 const std::size_t COUNT = sizeof(keywords_strs) / sizeof(*keywords_strs);
 
@@ -282,10 +289,14 @@ uint32_t get_max_args(const config_token &token)
     if (token.value.empty())
         return 1;
     switch (token.keyword) {
-#define X(name, _, arg, __, ___, ____, _____, _______, ______)                 \
+#define X(name, _, arg, ...)                 \
+    case keywords::name:                                                       \
+        return arg;
+#define X_SPECIAL(name, _, arg, ...)         \
     case keywords::name:                                                       \
         return arg;
         KEYWORDS // NOLINT (bugprone-branch-clone) switch 2 identical branches
+#undef X_SPECIAL
 #undef X
     }
     return 1;
@@ -298,7 +309,11 @@ bool is_a_valid_val(std::string &val, const config_token &token)
 #define X(name, _, _______, __, ___, ____, _____, check, ______)               \
     case keywords::name:                                                       \
         return check(val);
+#define X_SPECIAL(name, _, _______, __, ___, ____, _____, check, ______)       \
+    case keywords::name:                                                       \
+        return check(val);
         KEYWORDS // NOLINT (bugprone-branch-clone) switch 2 identical branches
+#undef X_SPECIAL
 #undef X
             default : return true;
     }
