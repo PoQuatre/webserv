@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 13:49:39 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 15:43:22 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -187,9 +187,23 @@ enum type {
 // clang-format on
 
 struct config_webserv {
-#define X(str, _, __, ___, ____, _____, ______, _______, _________)            \
-    std::string str;
+#define X(_, name, keyword, __, ___, ____, _____, ______, type)                \
+    std::vector<std::string> name;
+
+#define X_SPECIAL(...)
+
     KEYWORDS
+
+#undef X
+#undef X_SPECIAL
+};
+
+UNUSED
+static const char *strings_keyword[] = {
+#define X(str, _, ...) #str,
+#define X_SPECIAL(str, _, ...) #str,
+    KEYWORDS
+#undef X_SPECIAL
 #undef X
 };
 

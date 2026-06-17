@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 13:51:29 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 17:33:03 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -137,6 +137,23 @@ void set_location_value(const config_node &node, Config &location_conf)
     }
 }
 
+void add_value_to_config(const config_node &node, Config &conf)
+{
+        switch (node.keyword)
+        {
+         #define X(type, name, ...) \
+            case keywords::type: \
+                conf.conf.name= node.vals; \
+            break;
+        #define X_SPECIAL(...)
+            KEYWORDS
+         default:
+            break;
+         #undef X_SPECIAL
+         #undef X
+        }
+}
+
 void create_location(
     std::vector<config_node *>::const_iterator &node_it, Config &location_conf)
 {
@@ -145,6 +162,9 @@ void create_location(
     // iterate on children location node
     for (std::vector<config_node *>::iterator it = (*node_it)->children.begin();
         it != (*node_it)->children.end(); it++) {
+
+        add_value_to_config(**it, location_conf);
+
         if ((*it)->keyword == keywords::ERROR_PAGE) {
             // node->value ERROR_PAGE
             for (std::vector<std::string>::iterator it2 = (*it)->vals.begin();
@@ -261,6 +281,24 @@ void initalize_server_config(
         }
     } else {
         inital_config.client_max_body_size = 0;
+    }
+
+    for (std::map<keywords::type, std::vector<std::string> >::iterator it = server_conf.begin(); it != server_conf.end(); it++)
+    {
+    switch (it->first)
+    {
+ #define X(type, name, ...) \
+            case keywords::type: \
+                inital_config.conf.name= it->second; \
+            break;
+        #define X_SPECIAL(...)
+            KEYWORDS
+         default:
+            break;
+         #undef X_SPECIAL
+         #undef X
+
+    }
     }
 }
 
