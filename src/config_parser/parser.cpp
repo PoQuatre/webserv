@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 19:05:01 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/17 19:27:51 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -207,5 +207,9 @@ bool Parser::parse_config()
     if (logger::log_level() == logger::levels::TRACE)
         debug_tree(_root, 0);
 #endif
+
+    if (!create_all_servers()) {
+        return 1;
+    }
     return _valid;
 }
