@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 20:06:29 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 21:56:00 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,9 +24,7 @@
 #include "http.hpp"
 #include "logger.hpp"
 
-#ifndef DTESTING
 namespace {
-#endif
 
 void add_value_to_config(const config_node &node, Config &conf)
 {
@@ -225,9 +223,7 @@ void initalize_server_config(
     }
 }
 
-#ifndef DTESTING
 }
-#endif
 
 std::vector<Server> ConfigParser::get_all_servers(std::vector<Server> &servers)
 {
