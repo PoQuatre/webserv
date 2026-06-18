@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:16:14 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 18:37:03 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 19:50:53 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -83,7 +83,7 @@ bool config_is_special_char(char c)
 /*           |  _| | |_| | |\  | |___  | |  | | |_| | |\  |___) |            */
 /*           |_|    \___/|_| \_|\____| |_| |___\___/|_| \_|____/             */
 
-void Parser::skip_line()
+void ConfigParser::skip_line()
 {
     while (_act_token->type != tokens::END
         && _act_token->type != tokens::BRACE_CLOSE
@@ -98,7 +98,7 @@ void Parser::skip_line()
         consume_next_token();
 }
 
-bool Parser::see_next_token()
+bool ConfigParser::see_next_token()
 {
     for (std::vector<config_token>::iterator it = _tokens.begin();
         it != _tokens.end(); it++) {
@@ -110,7 +110,7 @@ bool Parser::see_next_token()
     return false;
 }
 
-bool Parser::consume_next_token()
+bool ConfigParser::consume_next_token()
 {
     for (std::vector<config_token>::iterator it = _tokens.begin();
         it != _tokens.end(); it++) {
@@ -123,7 +123,7 @@ bool Parser::consume_next_token()
     return false;
 }
 
-void Parser::config_set_alive_last_token()
+void ConfigParser::config_set_alive_last_token()
 {
     if (_tokens.empty())
         return;
@@ -136,7 +136,7 @@ void Parser::config_set_alive_last_token()
     }
 }
 
-int32_t Parser::create_token(std::string &buf, const std::size_t &i,
+int32_t ConfigParser::create_token(std::string &buf, const std::size_t &i,
     std::size_t len, std::size_t &line_i)
 {
     config_token tmp_token;
@@ -205,7 +205,7 @@ int32_t Parser::create_token(std::string &buf, const std::size_t &i,
     return 0;
 }
 
-bool Parser::tokenize()
+bool ConfigParser::tokenize()
 {
     std::ifstream in_file;
     std::stringstream ss;

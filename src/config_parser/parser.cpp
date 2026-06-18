@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 21:10:06 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 19:50:53 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,146 +24,13 @@
 #include "config-parser.hpp"
 #include "logger.hpp"
 
-bool string_check(const std::string &val)
-{
-    (void)val;
-    return true;
-}
+/*   ____ ___  _   _ _____ ___ ____   ____   _    ____  ____  _____ ____   */
+/*  / ___/ _ \| \ | |  ___|_ _/ ___| |  _ \ / \  |  _ \/ ___|| ____|  _ \  */
+/* | |  | | | |  \| | |_   | | |  _  | |_) / _ \ | |_) \___ \|  _| | |_) | */
+/* | |__| |_| | |\  |  _|  | | |_| | |  __/ ___ \|  _ < ___) | |___|  _ <  */
+/*  \____\___/|_| \_|_|   |___\____| |_| /_/   \_\_| \_\____/|_____|_| \_\ */
 
-bool int_check(const std::string &val)
-{
-    for (int i = 0; val[i]; i++) {
-        if (!std::isdigit(val[i]))
-            return false;
-    }
-    return true;
-}
-
-bool bool_check(const std::string &val)
-{
-    return (val == "on" || val == "off");
-}
-
-bool time_check(const std::string &val)
-{
-    bool valid = false;
-    uint32_t i = 0;
-
-    while (1) {
-        while (val[i] && std::isdigit(val[i])) {
-            i++;
-        }
-        if (i + 1 < val.length() && val[i] == 'm' && (val[i + 1]) == 's') {
-            valid = true;
-            i += 2;
-        } else {
-            switch (val[i]) {
-            case 's':
-            case 'm':
-            case 'h':
-                /*
-            case 'd':
-            case 'w':
-            case 'M':
-            case 'y':
-*/
-                i++;
-                valid = true;
-                break;
-            default:
-                return (!val[i]);
-            }
-        }
-        if (i == val.length())
-            return valid;
-    }
-    return valid;
-}
-
-std::size_t convert_time_to_size_t(const std::string &val)
-{
-    int64_t i = 0;
-    std::size_t final_size = 0;
-    const char *str = val.c_str();
-    char *p;
-
-    while (1) {
-        i = std::strtol(str, &p, 10);
-        if (i < 0)
-            return 9;
-        str = p;
-        if (!*str)
-            return final_size + (i / 1000);
-        if (str[1] && str[0] == 'm' && str[1] == 's') {
-            final_size += (i / 1000);
-            str += 2;
-        } else {
-            switch (*str) {
-            case 's':
-                final_size += i;
-                str++;
-                break;
-            case 'm':
-                final_size += i * 60;
-                str++;
-                break;
-            case 'h':
-                final_size += i * 3600;
-                str++;
-                break;
-                /*
-        case 'd':
-        case 'w':
-        case 'M':
-        case 'y':
-                */
-            default:
-                return final_size;
-            }
-        }
-        if (!*p)
-            return final_size;
-    }
-    return 0;
-}
-
-bool size_check(const std::string &val)
-{
-    (void)convert_time_to_size_t;
-    std::size_t i;
-    for (i = 0; val[i]; i++) {
-        if (!std::isdigit(val[i]))
-            break;
-    }
-    if (!val[i])
-        return true;
-    if ((val[i] == 'k' || val[i] == 'K') && i + 1 == (val.size()))
-        return true;
-    if ((val[i] == 'm' || val[i] == 'M') && i + 1 == (val.size()))
-        return true;
-    if ((val[i] == 'g' || val[i] == 'G') && i + 1 == (val.length()))
-        return true;
-    return (std::isdigit(val[i]));
-}
-
-std::size_t convert_string_to_size(const std::string &val)
-{
-    int64_t i;
-    char *p;
-
-    i = std::strtol(val.c_str(), &p, 10);
-    if (!*p)
-        return i;
-    if (*p == 'k' || *p == 'K')
-        return (INT64_MAX / 1024 < i ? INT64_MAX : i * 1024);
-    if (*p == 'm' || *p == 'M')
-        return (INT64_MAX / 1048576 < i ? INT64_MAX : i * 1048576);
-    if ((*p == 'g' || *p == 'G'))
-        return (INT64_MAX / 1073741824 < i ? INT64_MAX : i * 1073741824);
-    return 0;
-}
-
-Parser::Parser(const std::string &path)
+ConfigParser::ConfigParser(const std::string &path)
     : _path(path)
     , _root(NULL)
     , _act_token(NULL)
@@ -174,9 +41,9 @@ Parser::Parser(const std::string &path)
     L_TRACE("configuration file: {}", _path);
 }
 
-Parser::~Parser() { free_tree(_root); }
+ConfigParser::~ConfigParser() { free_tree(_root); }
 
-bool Parser::start()
+bool ConfigParser::start()
 {
     if (!tokenize()) {
         return false;
@@ -212,10 +79,11 @@ bool Parser::start()
     return _valid;
 }
 
-bool Parser::parse_config(const std::string &path, std::vector<Server> &servers)
+bool ConfigParser::parse_config(
+    const std::string &path, std::vector<Server> &servers)
 {
     Location location = { };
-    Parser parser(path);
+    ConfigParser parser(path);
     if (!parser.start())
         return false;
     parser.get_all_servers(servers);

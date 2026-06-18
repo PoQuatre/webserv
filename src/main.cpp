@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/17 21:00:38 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 19:50:50 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -226,7 +226,7 @@ int32_t main(int32_t ac, char **av)
     if (args.flags[cli::flags::VERBOSE])
         logger::log_level() = logger::levels::TRACE;
 
-    if (!Parser::parse_config(args.config_path, servers))
+    if (!ConfigParser::parse_config(args.config_path, servers))
         return 1;
 
     logger::print_date() = true;

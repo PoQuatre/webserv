@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 21:03:34 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 20:06:29 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,7 +24,9 @@
 #include "http.hpp"
 #include "logger.hpp"
 
+#ifndef DTESTING
 namespace {
+#endif
 
 void add_value_to_config(const config_node &node, Config &conf)
 {
@@ -40,6 +42,23 @@ void add_value_to_config(const config_node &node, Config &conf)
 #undef X_SPECIAL
 #undef X
     }
+}
+
+std::size_t convert_string_to_size(const std::string &val)
+{
+    int64_t i;
+    char *p;
+
+    i = std::strtol(val.c_str(), &p, 10);
+    if (!*p)
+        return i;
+    if (*p == 'k' || *p == 'K')
+        return (INT64_MAX / 1024 < i ? INT64_MAX : i * 1024);
+    if (*p == 'm' || *p == 'M')
+        return (INT64_MAX / 1048576 < i ? INT64_MAX : i * 1048576);
+    if ((*p == 'g' || *p == 'G'))
+        return (INT64_MAX / 1073741824 < i ? INT64_MAX : i * 1073741824);
+    return 0;
 }
 
 void push_configuration(const config_node &node,
@@ -206,9 +225,11 @@ void initalize_server_config(
     }
 }
 
+#ifndef DTESTING
 }
+#endif
 
-std::vector<Server> Parser::get_all_servers(std::vector<Server> &servers)
+std::vector<Server> ConfigParser::get_all_servers(std::vector<Server> &servers)
 {
     for (std::vector<Server>::iterator it = _servers.begin();
         it != _servers.end(); it++)
@@ -216,7 +237,7 @@ std::vector<Server> Parser::get_all_servers(std::vector<Server> &servers)
     return _servers;
 }
 
-void Parser::create_one_server(const config_node &node,
+void ConfigParser::create_one_server(const config_node &node,
     std::vector<Location> location_vector,
     std::map<keywords::type, std::vector<std::string> > &server_conf)
 {
@@ -251,7 +272,7 @@ void Parser::create_one_server(const config_node &node,
     _servers.push_back(n_server);
 }
 
-bool Parser::create_all_servers()
+bool ConfigParser::create_all_servers()
 {
     std::map<keywords::type, std::vector<std::string> > global_conf;
     std::map<keywords::type, std::vector<std::string> > http_conf;

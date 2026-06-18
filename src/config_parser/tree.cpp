@@ -6,13 +6,14 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 19:01:36 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 21:16:24 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 19:55:54 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <regex.h>
 
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -48,6 +49,86 @@ const int keywords_scope_rules[] = {
 };
 //clang-format on
 
+/*  _____ ____  _____ _____   _   _ _____ ___ _     ____   */
+/* |_   _|  _ \| ____| ____| | | | |_   _|_ _| |   / ___|  */
+/*   | | | |_) |  _| |  _|   | | | | | |  | || |   \___ \  */
+/*   | | |  _ <| |___| |___  | |_| | | |  | || |___ ___) | */
+/*   |_| |_| \_\_____|_____|  \___/  |_| |___|_____|____/  */
+
+bool string_check(const std::string &val)
+{
+    (void)val;
+    return true;
+}
+
+bool size_check(const std::string &val)
+{
+    std::size_t i;
+    for (i = 0; val[i]; i++) {
+        if (!std::isdigit(val[i]))
+            break;
+    }
+    if (!val[i])
+        return true;
+    if ((val[i] == 'k' || val[i] == 'K') && i + 1 == (val.size()))
+        return true;
+    if ((val[i] == 'm' || val[i] == 'M') && i + 1 == (val.size()))
+        return true;
+    if ((val[i] == 'g' || val[i] == 'G') && i + 1 == (val.length()))
+        return true;
+    return (std::isdigit(val[i]));
+}
+
+bool bool_check(const std::string &val)
+{
+    return (val == "on" || val == "off");
+}
+
+
+bool time_check(const std::string &val)
+{
+    bool valid = false;
+    uint32_t i = 0;
+
+    while (1) {
+        while (val[i] && std::isdigit(val[i])) {
+            i++;
+        }
+        if (i + 1 < val.length() && val[i] == 'm' && (val[i + 1]) == 's') {
+            valid = true;
+            i += 2;
+        } else {
+            switch (val[i]) {
+            case 's':
+            case 'm':
+            case 'h':
+                /*
+            case 'd':
+            case 'w':
+            case 'M':
+            case 'y':
+*/
+                i++;
+                valid = true;
+                break;
+            default:
+                return (!val[i]);
+            }
+        }
+        if (i == val.length())
+            return valid;
+    }
+    return valid;
+}
+
+bool int_check(const std::string &val)
+{
+    for (int i = 0; val[i]; i++) {
+        if (!std::isdigit(val[i]))
+            return false;
+    }
+    return true;
+}
 
 
 bool node_already_present(std::vector<config_node *> &node,
@@ -133,7 +214,13 @@ bool is_a_valid_val(std::string &val, const config_token &token)
 }
 }
 
-void Parser::debug_tree(config_node *tree, int i)
+/*  _____ ____  _____ _____  */
+/* |_   _|  _ \| ____| ____| */
+/*   | | | |_) |  _| |  _|   */
+/*   | | |  _ <| |___| |___  */
+/*   |_| |_| \_\_____|_____| */
+
+void ConfigParser::debug_tree(config_node *tree, int i)
 {
     if (!tree)
         return;
@@ -162,7 +249,7 @@ void Parser::debug_tree(config_node *tree, int i)
     }
 }
 
-void Parser::delete_tree(config_node *root)
+void ConfigParser::delete_tree(config_node *root)
 {
     if (!root)
         return;
@@ -176,7 +263,7 @@ void Parser::delete_tree(config_node *root)
     delete root;
 }
 
-void Parser::free_tree(config_node *root)
+void ConfigParser::free_tree(config_node *root)
 {
     if (!root)
         return;
@@ -187,7 +274,7 @@ void Parser::free_tree(config_node *root)
 
 // ignoring undefined scope
 // scope_name is copy of token->str for prevent this value from being changed
-void Parser::skip_scope(
+void ConfigParser::skip_scope(
     const std::string &scope_name, uint32_t line, bool print_err)
 {
     int depth = 0;
@@ -212,7 +299,7 @@ void Parser::skip_scope(
     }
 }
 
-bool Parser::create_location_node()
+bool ConfigParser::create_location_node()
 {
     config_node *node;
     uint32_t line = _act_token->line;
@@ -332,7 +419,7 @@ bool Parser::create_location_node()
     return true;
 }
 
-bool Parser::check_controversal_directive(
+bool ConfigParser::check_controversal_directive(
     std::vector<config_node *> &node, const keywords::type &key, uint32_t line)
 {
     if (key == keywords::PROXY_PASS) {
@@ -374,7 +461,7 @@ bool Parser::check_controversal_directive(
     return false;
 }
 
-bool Parser::create_node()
+bool ConfigParser::create_node()
 {
     config_node *node;
     uint32_t line;
@@ -421,7 +508,7 @@ bool Parser::create_node()
     return true;
 }
 
-bool Parser::create_leaf()
+bool ConfigParser::create_leaf()
 {
     config_node *node;
     config_token tmp_token;
@@ -550,7 +637,7 @@ bool Parser::create_leaf()
     return true;
 }
 
-bool Parser::iter_on_tokens()
+bool ConfigParser::iter_on_tokens()
 {
     uint32_t line;
 
@@ -593,7 +680,7 @@ bool Parser::iter_on_tokens()
     return true;
 }
 
-bool Parser::token_to_tree()
+bool ConfigParser::token_to_tree()
 {
     L_DEBUG("TOKEN TO TREE tokens size {}", _tokens.size());
     if (_tokens.empty()) {

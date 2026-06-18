@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 21:03:02 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 19:50:49 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,18 +27,10 @@
 #define ALLOW_EMPTY_STRING 0
 #define ALLOW_MULTILINE_STRING 0
 
-bool string_check(const std::string &val);
-bool bool_check(const std::string &val);
-bool time_check(const std::string &val);
-bool int_check(const std::string &val);
-bool size_check(const std::string &val);
-std::size_t convert_time_to_size_t(const std::string &val);
-std::size_t convert_string_to_size(const std::string &val);
-
-class Parser {
+class ConfigParser {
 public:
-    Parser(const std::string &path);
-    ~Parser();
+    ConfigParser(const std::string &path);
+    ~ConfigParser();
     static bool parse_config(
         const std::string &path, std::vector<Server> &servers);
     bool start();
@@ -46,7 +38,7 @@ public:
     std::vector<Server> get_all_servers(std::vector<Server> &servers);
 
 private:
-    Parser();
+    ConfigParser();
     void skip_line();
     bool see_next_token();
     bool consume_next_token();
