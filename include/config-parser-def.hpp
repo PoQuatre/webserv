@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 15:43:22 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/06/18 22:05:16 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -153,7 +153,8 @@ namespace keywords {
     X_SPECIAL(OPEN_SCOPE, "{", 1, " ", 0, 0, 0, string_check, std::string)                                                                                                                            \
     X_SPECIAL(CLOSE_SCOPE, "}", 1, " ", 0, 0, 0, string_check, std::string)                                                                                                                           \
     X_SPECIAL(UNKNOWN,  "", 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html", 0, 0, 0, string_check, std::string)                                                                        \
-    X_SPECIAL(GLOBAL, "  ", 8, "default", 0, 0, 0, string_check, std::string) // clang-format on
+    X_SPECIAL(GLOBAL, "  ", 8, "default", 0, 0, 0, string_check, std::string)
+// clang-format on
 // https://nginx.org/en/docs/http/ngx_http_gzip_module.html
 // https://nginx.org/en/docs/http/ngx_http_proxy_module.html#
 // NOTE:A CHECK EN DETAILS
@@ -175,7 +176,6 @@ namespace keywords {
 // X(types, "types", ,
 // "https://nginx.org/en/docs/http/ngx_http_core_module.html#types")
 
-// clang-format off
 enum type {
 #define X(name, ...) name,
 #define X_SPECIAL(name, ...) name,
@@ -184,7 +184,6 @@ enum type {
 #undef X
 };
 }
-// clang-format on
 
 struct config_webserv {
 #define X(_, name, keyword, __, ___, ____, _____, ______, type)                \
