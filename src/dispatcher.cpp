@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 01:51:37 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/12 10:24:46 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "cgi.hpp"
 #include "logger.hpp"
 
 namespace {
@@ -162,10 +163,10 @@ std::string handle_get(
     return make_response(
         req, http::status::OK, content, content_type_for(fs_path));
 }
-
 }
 
-std::string dispatcher::handle(const http::request &req, const Server &server)
+std::string dispatcher::handle(const http::request &req, const Server &server,
+    const int &epollfd, const int &clientfd)
 {
     const Location *loc = server.find_location(req.uri);
     const Config &cfg = loc ? loc->config : server.default_config();
@@ -174,12 +175,17 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
         return make_error_response_impl(
             req, http::status::METHOD_NOT_ALLOWED, cfg);
 
+    std::string fs_path = cfg.root + req.uri;
+
+    if (!cfg.conf.cgi_pass.empty()) {
+        Cgi::create_worker(epollfd, clientfd, cfg, req, req.uri,
+            (*cfg.conf.cgi_pass.begin()).c_str());
+        return "";
+    }
+
     if (req.method != http::methods::GET)
         return make_error_response_impl(
             req, http::status::NOT_IMPLEMENTED, cfg);
-
-    std::string fs_path = cfg.root + req.uri;
-    L_DEBUG("GET {} -> {}", req.uri, fs_path);
 
     return handle_get(req, fs_path, cfg);
 }

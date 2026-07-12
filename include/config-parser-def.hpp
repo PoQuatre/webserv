@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 22:05:16 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/08 10:24:01 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -150,6 +150,7 @@ namespace keywords {
     X(PROXY_BUFFER_SIZE, proxy_buffer_size, 1, " ", 1, 1, 1, size_check, std::size_t)                                                                                                                 \
     X(OUTPUT_BUFFERS, output_buffers, 1, " ", 1, 1, 1, string_check, std::string)                                                                                                                     \
     X(LIMIT_EXCEPT, limit_except, 8, "https://nginx.org/en/docs/http/ngx_http_core_module.html#limit_except", 0, 0, 1, string_check, std::string)                                                     \
+    X(CGI_PASS, cgi_pass, 8, "", 0, 0, 1, string_check, std::string)                                                     \
     X_SPECIAL(OPEN_SCOPE, "{", 1, " ", 0, 0, 0, string_check, std::string)                                                                                                                            \
     X_SPECIAL(CLOSE_SCOPE, "}", 1, " ", 0, 0, 0, string_check, std::string)                                                                                                                           \
     X_SPECIAL(UNKNOWN,  "", 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html", 0, 0, 0, string_check, std::string)                                                                        \

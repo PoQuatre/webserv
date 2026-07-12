@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/18 19:50:50 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/12 10:22:54 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "Connection.hpp"
+#include "cgi.hpp"
 #include "cli.hpp"
 #include "config-parser.hpp"
 #include "dispatcher.hpp"
@@ -63,7 +64,7 @@ bool init_signal_handlers(int32_t epollfd)
 
     epoll_event ev = { };
     ev.events = EPOLLIN;
-    ev.data.fd = g_signal_pipe[0];
+    ev.data.u64 = g_signal_pipe[0];
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, g_signal_pipe[0], &ev) == -1) {
         L_ERROR(
             "Failed to add signal pipe to epoll instance: {}", strerror(errno));
@@ -100,7 +101,7 @@ void accept_client(int32_t epollfd, int32_t sockfd,
 
     epoll_event ev;
     ev.events = EPOLL_RDONLY;
-    ev.data.fd = clientfd;
+    ev.data.u64 = clientfd;
     epoll_ctl(epollfd, EPOLL_CTL_ADD, clientfd, &ev);
 
     connections[clientfd] = Connection(clientfd, server);
@@ -120,18 +121,18 @@ void dispatch_pending(
 {
     if (conn.is_parse_complete()) {
         conn.enqueue_response(
-            dispatcher::handle(conn.request(), conn.server()));
+            dispatcher::handle(conn.request(), conn.server(), epollfd, fd));
         conn.on_writable();
         if (evts & EPOLLIN) {
             epoll_event ev = { };
             ev.events = EPOLL_WRONLY;
-            ev.data.fd = fd;
+            ev.data.u64 = fd;
             epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
         }
     } else if (evts & EPOLLOUT) {
         epoll_event ev = { };
         ev.events = EPOLL_RDONLY;
-        ev.data.fd = fd;
+        ev.data.u64 = fd;
         epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
     }
 }
@@ -151,7 +152,7 @@ void process_client(
                 } else {
                     epoll_event ev = { };
                     ev.events = EPOLL_WRONLY;
-                    ev.data.fd = fd;
+                    ev.data.u64 = fd;
                     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev);
                 }
             } else {
@@ -187,8 +188,8 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
     epoll_event (&events)[MAX_EVENTS], int32_t nfds)
 {
     for (int32_t i = 0; i < nfds; ++i) {
-        int32_t fd = events[i].data.fd;
-
+        int32_t fd = (int32_t)events[i].data.u64;
+        int32_t pid = (int32_t)(events[i].data.u64 >> 32);
         if (fd == g_signal_pipe[0]) {
             drain_signal_pipe();
             running = false;
@@ -205,7 +206,10 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
         }
         if (is_server_fd)
             continue;
-
+        if (pid) {
+            Cgi::handle_cgi(epollfd, fd, pid);
+            continue;
+        }
         process_client(epollfd, fd, events[i].events, connections[fd]);
     }
 }
@@ -215,7 +219,6 @@ void process_io_events(int32_t epollfd, std::vector<Server> &servers,
 int32_t main(int32_t ac, char **av)
 {
     logger::print_date() = false;
-    std::vector<Server> servers;
 
     cli::ParsedArgs args = cli::parse_arguments(ac, av);
     if (args.should_quit)
@@ -226,8 +229,8 @@ int32_t main(int32_t ac, char **av)
     if (args.flags[cli::flags::VERBOSE])
         logger::log_level() = logger::levels::TRACE;
 
-    if (!ConfigParser::parse_config(args.config_path, servers))
-        return 1;
+    std::vector<Server> servers;
+    ConfigParser::parse_config(args.config_path, servers);
 
     logger::print_date() = true;
     L_DEBUG("Creating epoll instance");

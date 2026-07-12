@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 06:09:19 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/06/08 12:37:30 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <map>
 #include <string>
+#include <vector>
 
 #ifndef UNUSED
 #define UNUSED __attribute__((unused))
@@ -141,7 +142,7 @@ struct request {
     std::string uri;
     versions::type version;
     std::map<std::string, std::string> headers;
-    std::map<std::string, std::string> query;
+    std::string query;
     std::string body;
     bool keep_alive;
 };
