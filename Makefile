@@ -292,25 +292,39 @@ endif
 # **************************************************************************** #
 
 .PHONY: all
-all: .header $(TARGET)
+all: .header $(TARGET) ## Build the default binary
+
+.PHONY: help
+help: ## List documented make targets
+	@awk -v title='$(if $(NOPRETTY),,$(CLR_GREEN))' \
+		-v target='$(if $(NOPRETTY),,$(CLR_TEAL))' \
+		-v desc_color='$(if $(NOPRETTY),,$(CLR_BLUE))' \
+		-v reset='$(if $(NOPRETTY),,$(CLR_RESET))' ' \
+		BEGIN { printf "%sAvailable targets:%s\n", title, reset } \
+		/^[^#[:space:]][^:]*:.*##/ { \
+			name = $$0; sub(/:.*/, "", name); \
+			desc = $$0; sub(/^.*##[[:space:]]*/, "", desc); \
+			printf "  %s%-16s%s %s%s%s\n", target, name, reset, desc_color, desc, reset; \
+		} \
+	' '$(MK_FILE)'
 
 .PHONY: strict
-strict: .header $(TARGET)
+strict: .header $(TARGET) ## Build with extra compiler warnings
 
 .PHONY: debug
-debug: .header $(TARGET)
+debug: .header $(TARGET) ## Build with debug symbols
 
 .PHONY: debug-san
-debug-san: .header $(TARGET)
+debug-san: .header $(TARGET) ## Build with AddressSanitizer and UBSan
 
 .PHONY: asan
-asan: .header $(TARGET)
+asan: .header $(TARGET) ## Build with AddressSanitizer
 
 .PHONY: ubsan
-ubsan: .header $(TARGET)
+ubsan: .header $(TARGET) ## Build with UBSan
 
 .PHONY: test
-test: .header $(TARGET)
+test: .header $(TARGET) ## Build and run the test suite
 	@$(call progress,$(CLR_BLUE)Running $(CLR_TEAL)$(TARGET))
 	./$(TARGET) $(if $(TEST_VERBOSE),--verbose) --default-timeout 2
 
@@ -410,12 +424,12 @@ $(CRITERION_NAME): $(CRITERION_SRC)
 endif
 
 .PHONY: clean
-clean: .header
+clean: .header ## Remove build artifacts
 	@$(call progress,$(CLR_BLUE)clean $(CLR_TEAL)$(NAME))
 	$(RM) -r $(BUILD_DIR)
 
 .PHONY: fclean
-fclean: .header clean
+fclean: .header clean ## Remove build artifacts and binaries
 	@$(call progress,$(CLR_BLUE)fclean $(CLR_TEAL)$(NAME))
 	$(RM) $(NAME) $(TEST_NAME)
 
@@ -430,31 +444,31 @@ fclean: .header clean
 	$(RM) $(NAME) $(TEST_NAME)
 
 .PHONY: re
-re: fclean all
+re: fclean all ## Rebuild from scratch
 
 .PHONY: update-srcs
-update-srcs: .header
+update-srcs: .header ## Refresh source and header lists
 	@$(call progress,$(CLR_BLUE)Updating sources of $(CLR_TEAL)$(NAME))
 	$(call update_sources)
 
 .PHONY: format
-format: .header
+format: .header ## Check source formatting
 	@$(call progress,$(CLR_BLUE)Checking formatting of $(CLR_TEAL)$(NAME))
 	$(CLANG_FORMAT) --dry-run --Werror $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 
 .PHONY: format-fix
-format-fix: .header
+format-fix: .header ## Format source files
 	@$(call progress,$(CLR_BLUE)Formatting $(CLR_TEAL)$(NAME))
 	$(CLANG_FORMAT) -i $(addprefix $(SRC_DIR)/,$(SRCS)) $(HDRS) $(addprefix $(TEST_DIR)/,$(TEST_SRCS))
 
 .PHONY: lint
-lint: .header $(LINT_STAMPS)
+lint: .header $(LINT_STAMPS) ## Run static analysis
 
 .PHONY: lint-fix
-lint-fix: .header $(LINT_STAMPS)
+lint-fix: .header $(LINT_STAMPS) ## Run static analysis and apply fixes
 
 .PHONY: setup-criterion
-setup-criterion: .header $(CRITERION_NAME)
+setup-criterion: .header $(CRITERION_NAME) ## Download and prepare Criterion
 
 .PHONY: .ci-args
 .ci-args:
