@@ -6,7 +6,7 @@
 #    By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/12 18:29:33 by mle-flem          #+#    #+#              #
-#    Updated: 2026/06/17 19:06:55 by nlaporte         ###   ########.fr        #
+#    Updated: 2026/07/16 18:46:09 by mle-flem         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -176,6 +176,8 @@ MK_CXXFLAGS	:= $(BUILD_DIR)/cxxflags.txt
 FOUND_CXXFLAGS	:= $(shell cat $(MK_CXXFLAGS) 2>/dev/null || echo '$(call shell_escape,$(CXXFLAGS))')
 MK_REBUILD		:= $(strip $(filter clean fclean re,$(MAKECMDGOALS)) \
 					$(shell [ 'x$(call shell_escape,$(FOUND_CXXFLAGS))' = 'x$(call shell_escape,$(CXXFLAGS))' ] || echo yes))
+
+REBUILD_TARGET	:= $(if $(filter clean fclean re,$(MAKECMDGOALS)),fclean,.fclean)
 
 NOPRETTY	?= $(if $(CI),1,$(if $(MAKE_TERMOUT),,1))
 MAKEFLAGS	+= $(if $(NOPRETTY),,--silent --no-print-directory)
@@ -373,12 +375,12 @@ $(TEST_NAME): $(LIB_OBJS) $(TEST_OBJS) $(CRITERION_NAME)
 	@echo '$(call shell_escape,$(CXXFLAGS))' > $(MK_CXXFLAGS)
 	$(CXX) $(CXXFLAGS) -o $@ $(LIB_OBJS) $(TEST_OBJS) -Wl,-rpath='$(dir $(CRITERION_NAME))' -L'$(dir $(CRITERION_NAME))' -lcriterion
 
-$(BUILD_DIR)/$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),.fclean)
+$(BUILD_DIR)/$(SRC_DIR)/%.o: $(SRC_DIR)/%.cpp $(if $(MK_REBUILD),$(REBUILD_TARGET))
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(DFLAGS) $(INCS:%=-I%) -o $@ -c $<
 
-$(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBUILD),.fclean)
+$(BUILD_DIR)/$(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(CRITERION_NAME) $(if $(MK_REBUILD),$(REBUILD_TARGET))
 	@$(call progress,$(CLR_BLUE)Compiling $(CLR_TEAL)$@)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -std=c++11 $(DFLAGS) $(TEST_INCS:%=-I%) -o $@ -c $<
