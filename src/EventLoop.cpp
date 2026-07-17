@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/17 19:41:46 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 01:39:52 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -269,23 +269,26 @@ void EventLoop::process_io_event(int32_t fd, uint32_t events, bool &running)
 void EventLoop::dispatch_source(int32_t fd, uint32_t events,
     const EventLoop::EventSource &source, bool &running)
 {
-    (void)events;
-    if (source.type == EventSource::SOURCE_SIGNAL) {
+    switch (source.type) {
+    case EventSource::SOURCE_LISTENER:
+        if (source.server != NULL)
+            accept_client(fd, *source.server);
+        else
+            L_WARN("Ignoring listener event source {} without server", fd);
+        break;
+
+    case EventSource::SOURCE_SIGNAL:
         drain_signal_pipe();
         running = false;
-        return;
-    }
-    if (source.type == EventSource::SOURCE_CLIENT) {
+        break;
+
+    case EventSource::SOURCE_CLIENT:
         if (source.connection != NULL)
             process_client(fd, events, *source.connection);
         else
             L_WARN("Ignoring client event source {} without connection", fd);
-        return;
+        break;
     }
-    if (source.server != NULL)
-        accept_client(fd, *source.server);
-    else
-        L_WARN("Ignoring listener event source {} without server", fd);
 }
 
 void EventLoop::accept_client(int32_t sockfd, const Server &server)
@@ -299,6 +302,7 @@ void EventLoop::accept_client(int32_t sockfd, const Server &server)
     L_DEBUG("Accepting client {}", clientfd);
 
     fcntl(clientfd, F_SETFL, O_NONBLOCK);
+    fcntl(clientfd, F_SETFD, FD_CLOEXEC);
 
     _connections[clientfd] = Connection(clientfd, server);
     Connection &conn = _connections[clientfd];
