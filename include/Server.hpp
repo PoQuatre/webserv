@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/17 14:04:45 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/17 18:35:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -51,8 +51,8 @@ public:
     Server(const Server &other);
     ~Server();
 
-    bool init(int32_t epollfd);
-    void shutdown(int32_t epollfd);
+    bool init_socket();
+    void shutdown_socket();
     int32_t get_sockfd() const;
 
     const Location *find_location(const std::string &uri) const;
