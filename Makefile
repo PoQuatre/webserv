@@ -105,6 +105,7 @@ SRCS =	$(LIB_SRCS) \
 
 ##begin: TEST_SRCS
 TEST_SRCS =	config_parsing.cpp \
+			event_loop.cpp \
 			http_parsing.cpp \
 			server_socket.cpp
 ##end: TEST_SRCS
