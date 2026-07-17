@@ -6,18 +6,16 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/03 01:52:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/17 18:35:18 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Server.hpp"
 
 #include <arpa/inet.h>
-#include <sys/epoll.h>
 #include <unistd.h>
 
 #include <algorithm>
-#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -79,6 +77,7 @@ Server::Server(const std::vector<Location> &locations,
     , _default_config(default_config)
     , _sockaddr()
     , _sockaddr6()
+    , _sockfd(-1)
     , _is_ipv6(false)
 {
     std::string addr;
@@ -127,7 +126,7 @@ Server::~Server() { }
 
 int32_t Server::get_sockfd() const { return _sockfd; }
 
-bool Server::init(int32_t epollfd)
+bool Server::init_socket()
 {
     L_DEBUG("Initializing server, name : {}", _server_name);
 
@@ -168,26 +167,17 @@ bool Server::init(int32_t epollfd)
         return false;
     }
 
-    epoll_event ev = { };
-    ev.events = EPOLLIN;
-    ev.data.fd = _sockfd;
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, _sockfd, &ev) == -1) {
-        L_ERROR("Failed to add socket {} to epoll instance: {}", _sockfd,
-            strerror(errno));
-        close(_sockfd);
-        _sockfd = -1;
-        return false;
-    }
-
     return true;
 }
 
-void Server::shutdown(int32_t epollfd)
+void Server::shutdown_socket()
 {
     L_DEBUG("Stopping server {}", _server_name);
 
-    epoll_ctl(epollfd, EPOLL_CTL_DEL, _sockfd, NULL);
-    close(_sockfd);
+    if (_sockfd != -1) {
+        close(_sockfd);
+        _sockfd = -1;
+    }
 }
 
 std::ostream &operator<<(

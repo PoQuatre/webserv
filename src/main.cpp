@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/12 18:53:25 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/18 19:50:50 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/17 18:34:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -245,9 +245,20 @@ int32_t main(int32_t ac, char **av)
         return 1;
     }
 
-    for (size_t i = 0; i < servers.size(); i++)
-        if (!servers[i].init(epollfd))
+    for (size_t i = 0; i < servers.size(); i++) {
+        if (!servers[i].init_socket())
             return 1;
+        epoll_event ev = { };
+        ev.events = EPOLLIN;
+        ev.data.fd = servers[i].get_sockfd();
+        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, servers[i].get_sockfd(), &ev)
+            == -1) {
+            L_ERROR("Failed to add socket {} to epoll instance: {}",
+                servers[i].get_sockfd(), strerror(errno));
+            servers[i].shutdown_socket();
+            return 1;
+        }
+    }
 
     if (!init_signal_handlers(epollfd))
         return 1;
@@ -279,8 +290,10 @@ int32_t main(int32_t ac, char **av)
     close(g_signal_pipe[0]);
     close(g_signal_pipe[1]);
 
-    for (size_t i = 0; i < servers.size(); i++)
-        servers[i].shutdown(epollfd);
+    for (size_t i = 0; i < servers.size(); i++) {
+        epoll_ctl(epollfd, EPOLL_CTL_DEL, servers[i].get_sockfd(), NULL);
+        servers[i].shutdown_socket();
+    }
 
     close(epollfd);
 

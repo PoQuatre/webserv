@@ -91,12 +91,12 @@ LIB_SRCS =	Connection.cpp \
 			HttpParser.cpp \
 			Server.cpp \
 			cli.cpp \
+			dispatcher.cpp \
+			http.cpp \
 			config_parser/creation.cpp \
 			config_parser/parser.cpp \
 			config_parser/tokens.cpp \
-			config_parser/tree.cpp \
-			dispatcher.cpp \
-			http.cpp
+			config_parser/tree.cpp
 ##end: LIB_SRCS
 
 SRCS =	$(LIB_SRCS) \
@@ -104,7 +104,8 @@ SRCS =	$(LIB_SRCS) \
 
 ##begin: TEST_SRCS
 TEST_SRCS =	config_parsing.cpp \
-			http_parsing.cpp
+			http_parsing.cpp \
+			server_socket.cpp
 ##end: TEST_SRCS
 
 ##begin: HDRS
