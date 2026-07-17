@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/17 19:14:36 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/17 19:20:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -60,6 +60,19 @@ EventLoop::EventLoop(std::vector<Server> &servers)
 }
 
 EventLoop::~EventLoop() { cleanup(); }
+
+EventLoop::EventSource::EventSource()
+    : type(SOURCE_SIGNAL)
+    , server(NULL)
+{
+}
+
+EventLoop::EventSource::EventSource(
+    EventLoop::EventSource::Type source_type, const Server *server_context)
+    : type(source_type)
+    , server(server_context)
+{
+}
 
 bool EventLoop::run()
 {
@@ -129,20 +142,14 @@ bool EventLoop::register_servers()
         if (!_servers[i].init_socket())
             return false;
 
-        epoll_event ev = { };
-        ev.events = EPOLLIN;
-        ev.data.fd = _servers[i].get_sockfd();
-        if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, _servers[i].get_sockfd(), &ev)
-            == -1) {
-            L_ERROR("Failed to add socket {} to epoll instance: {}",
-                _servers[i].get_sockfd(), strerror(errno));
+        if (!add_source(_servers[i].get_sockfd(), EPOLLIN,
+                EventSource(EventSource::SOURCE_LISTENER, &_servers[i])))
             return false;
-        }
     }
     return true;
 }
 
-bool EventLoop::init_signal_handlers() const
+bool EventLoop::init_signal_handlers()
 {
     L_DEBUG("Initializing signal handlers");
 
@@ -160,16 +167,33 @@ bool EventLoop::init_signal_handlers() const
     (void)signal(SIGTERM, &signal_handler);
     (void)signal(SIGQUIT, &signal_handler);
 
+    return add_source(g_signal_pipe[0], EPOLLIN,
+        EventSource(EventSource::SOURCE_SIGNAL, NULL));
+}
+
+bool EventLoop::add_source(
+    int32_t fd, uint32_t events, const EventLoop::EventSource &source)
+{
     epoll_event ev = { };
-    ev.events = EPOLLIN;
-    ev.data.fd = g_signal_pipe[0];
-    if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, g_signal_pipe[0], &ev) == -1) {
-        L_ERROR(
-            "Failed to add signal pipe to epoll instance: {}", strerror(errno));
+    ev.events = events;
+    ev.data.fd = fd;
+    if (epoll_ctl(_epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+        L_ERROR("Failed to add event source {} to epoll instance: {}", fd,
+            strerror(errno));
         return false;
     }
-
+    _sources[fd] = source;
     return true;
+}
+
+void EventLoop::remove_source(int32_t fd)
+{
+    if (_epollfd != -1 && fd != -1) {
+        if (epoll_ctl(_epollfd, EPOLL_CTL_DEL, fd, NULL) == -1)
+            L_WARN("Failed to remove event source {} from epoll instance: {}",
+                fd, strerror(errno));
+    }
+    _sources.erase(fd);
 }
 
 void EventLoop::cleanup()
@@ -184,8 +208,7 @@ void EventLoop::cleanup()
     _connections.clear();
 
     if (g_signal_pipe[0] != -1) {
-        if (_epollfd != -1)
-            epoll_ctl(_epollfd, EPOLL_CTL_DEL, g_signal_pipe[0], NULL);
+        remove_source(g_signal_pipe[0]);
         close(g_signal_pipe[0]);
         g_signal_pipe[0] = -1;
     }
@@ -195,10 +218,12 @@ void EventLoop::cleanup()
     }
 
     for (std::size_t i = 0; i < _servers.size(); i++) {
-        if (_epollfd != -1 && _servers[i].get_sockfd() != -1)
-            epoll_ctl(_epollfd, EPOLL_CTL_DEL, _servers[i].get_sockfd(), NULL);
+        if (_servers[i].get_sockfd() != -1)
+            remove_source(_servers[i].get_sockfd());
         _servers[i].shutdown_socket();
     }
+
+    _sources.clear();
 
     if (_epollfd != -1) {
         close(_epollfd);
@@ -208,20 +233,26 @@ void EventLoop::cleanup()
 
 void EventLoop::process_io_event(int32_t fd, uint32_t events, bool &running)
 {
-    if (fd == g_signal_pipe[0]) {
+    std::map<int32_t, EventSource>::const_iterator source = _sources.find(fd);
+    if (source != _sources.end()) {
+        dispatch_source(fd, events, source->second, running);
+        return;
+    }
+
+    process_client(fd, events, _connections[fd]);
+}
+
+void EventLoop::dispatch_source(int32_t fd, uint32_t events,
+    const EventLoop::EventSource &source, bool &running)
+{
+    (void)events;
+    if (source.type == EventSource::SOURCE_SIGNAL) {
         drain_signal_pipe();
         running = false;
         return;
     }
-
-    for (std::size_t i = 0; i < _servers.size(); ++i) {
-        if (_servers[i].get_sockfd() == fd) {
-            accept_client(fd, _servers[i]);
-            return;
-        }
-    }
-
-    process_client(fd, events, _connections[fd]);
+    if (source.server != NULL)
+        accept_client(fd, *source.server);
 }
 
 void EventLoop::accept_client(int32_t sockfd, const Server &server)
