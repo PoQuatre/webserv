@@ -88,6 +88,7 @@ TEST_INCS =	$(INCS) \
 
 ##begin: LIB_SRCS
 LIB_SRCS =	Connection.cpp \
+			EventLoop.cpp \
 			HttpParser.cpp \
 			Server.cpp \
 			cli.cpp \
@@ -110,6 +111,7 @@ TEST_SRCS =	config_parsing.cpp \
 
 ##begin: HDRS
 HDRS =	include/Connection.hpp \
+		include/EventLoop.hpp \
 		include/HttpParser.hpp \
 		include/Server.hpp \
 		include/cli.hpp \
