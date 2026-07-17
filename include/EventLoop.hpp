@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/17 19:20:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/17 19:41:28 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -38,16 +38,19 @@ private:
     void cleanup();
 
     struct EventSource {
-        enum Type { SOURCE_LISTENER, SOURCE_SIGNAL };
+        enum Type { SOURCE_LISTENER, SOURCE_SIGNAL, SOURCE_CLIENT };
 
         EventSource();
-        EventSource(Type source_type, const Server *server_context);
+        explicit EventSource(const Server &server_context);
+        explicit EventSource(Connection &connection_context);
 
         Type type;
         const Server *server;
+        Connection *connection;
     };
 
     bool add_source(int32_t fd, uint32_t events, const EventSource &source);
+    bool update_source_events(int32_t fd, uint32_t events) const;
     void remove_source(int32_t fd);
 
     void process_io_event(int32_t fd, uint32_t events, bool &running);

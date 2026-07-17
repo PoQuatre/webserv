@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/17 19:20:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/17 19:41:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -64,13 +64,21 @@ EventLoop::~EventLoop() { cleanup(); }
 EventLoop::EventSource::EventSource()
     : type(SOURCE_SIGNAL)
     , server(NULL)
+    , connection(NULL)
 {
 }
 
-EventLoop::EventSource::EventSource(
-    EventLoop::EventSource::Type source_type, const Server *server_context)
-    : type(source_type)
-    , server(server_context)
+EventLoop::EventSource::EventSource(const Server &server_context)
+    : type(SOURCE_LISTENER)
+    , server(&server_context)
+    , connection(NULL)
+{
+}
+
+EventLoop::EventSource::EventSource(Connection &connection_context)
+    : type(SOURCE_CLIENT)
+    , server(NULL)
+    , connection(&connection_context)
 {
 }
 
@@ -142,8 +150,8 @@ bool EventLoop::register_servers()
         if (!_servers[i].init_socket())
             return false;
 
-        if (!add_source(_servers[i].get_sockfd(), EPOLLIN,
-                EventSource(EventSource::SOURCE_LISTENER, &_servers[i])))
+        if (!add_source(
+                _servers[i].get_sockfd(), EPOLLIN, EventSource(_servers[i])))
             return false;
     }
     return true;
@@ -167,8 +175,7 @@ bool EventLoop::init_signal_handlers()
     (void)signal(SIGTERM, &signal_handler);
     (void)signal(SIGQUIT, &signal_handler);
 
-    return add_source(g_signal_pipe[0], EPOLLIN,
-        EventSource(EventSource::SOURCE_SIGNAL, NULL));
+    return add_source(g_signal_pipe[0], EPOLLIN, EventSource());
 }
 
 bool EventLoop::add_source(
@@ -186,6 +193,24 @@ bool EventLoop::add_source(
     return true;
 }
 
+bool EventLoop::update_source_events(int32_t fd, uint32_t events) const
+{
+    if (_sources.find(fd) == _sources.end()) {
+        L_WARN("Ignoring event interest update for unknown source {}", fd);
+        return false;
+    }
+
+    epoll_event ev = { };
+    ev.events = events;
+    ev.data.fd = fd;
+    if (epoll_ctl(_epollfd, EPOLL_CTL_MOD, fd, &ev) == -1) {
+        L_WARN("Failed to update event source {} in epoll instance: {}", fd,
+            strerror(errno));
+        return false;
+    }
+    return true;
+}
+
 void EventLoop::remove_source(int32_t fd)
 {
     if (_epollfd != -1 && fd != -1) {
@@ -200,8 +225,7 @@ void EventLoop::cleanup()
 {
     for (std::map<int32_t, Connection>::iterator it = _connections.begin();
         it != _connections.end(); ++it) {
-        if (_epollfd != -1)
-            epoll_ctl(_epollfd, EPOLL_CTL_DEL, it->first, NULL);
+        remove_source(it->first);
         it->second.reset();
         close(it->first);
     }
@@ -239,7 +263,7 @@ void EventLoop::process_io_event(int32_t fd, uint32_t events, bool &running)
         return;
     }
 
-    process_client(fd, events, _connections[fd]);
+    L_WARN("Ignoring event for unknown or stale descriptor {}", fd);
 }
 
 void EventLoop::dispatch_source(int32_t fd, uint32_t events,
@@ -251,8 +275,17 @@ void EventLoop::dispatch_source(int32_t fd, uint32_t events,
         running = false;
         return;
     }
+    if (source.type == EventSource::SOURCE_CLIENT) {
+        if (source.connection != NULL)
+            process_client(fd, events, *source.connection);
+        else
+            L_WARN("Ignoring client event source {} without connection", fd);
+        return;
+    }
     if (source.server != NULL)
         accept_client(fd, *source.server);
+    else
+        L_WARN("Ignoring listener event source {} without server", fd);
 }
 
 void EventLoop::accept_client(int32_t sockfd, const Server &server)
@@ -267,19 +300,20 @@ void EventLoop::accept_client(int32_t sockfd, const Server &server)
 
     fcntl(clientfd, F_SETFL, O_NONBLOCK);
 
-    epoll_event ev;
-    ev.events = EPOLL_RDONLY;
-    ev.data.fd = clientfd;
-    epoll_ctl(_epollfd, EPOLL_CTL_ADD, clientfd, &ev);
-
     _connections[clientfd] = Connection(clientfd, server);
+    Connection &conn = _connections[clientfd];
+    if (!add_source(clientfd, EPOLL_RDONLY, EventSource(conn))) {
+        conn.reset();
+        close(clientfd);
+        _connections.erase(clientfd);
+    }
 }
 
 void EventLoop::close_client(int32_t clientfd, Connection &conn)
 {
     L_DEBUG("Closing client {}", clientfd);
 
-    epoll_ctl(_epollfd, EPOLL_CTL_DEL, clientfd, NULL);
+    remove_source(clientfd);
     conn.reset();
     close(clientfd);
     _connections.erase(clientfd);
@@ -292,17 +326,10 @@ void EventLoop::dispatch_pending(
         conn.enqueue_response(
             dispatcher::handle(conn.request(), conn.server()));
         conn.on_writable();
-        if (events & EPOLLIN) {
-            epoll_event ev = { };
-            ev.events = EPOLL_WRONLY;
-            ev.data.fd = fd;
-            epoll_ctl(_epollfd, EPOLL_CTL_MOD, fd, &ev);
-        }
+        if (events & EPOLLIN)
+            update_source_events(fd, EPOLL_WRONLY);
     } else if (events & EPOLLOUT) {
-        epoll_event ev = { };
-        ev.events = EPOLL_RDONLY;
-        ev.data.fd = fd;
-        epoll_ctl(_epollfd, EPOLL_CTL_MOD, fd, &ev);
+        update_source_events(fd, EPOLL_RDONLY);
     }
 }
 
@@ -318,10 +345,7 @@ void EventLoop::process_client(int32_t fd, uint32_t events, Connection &conn)
                 if (!conn.on_writable()) {
                     close_conn = true;
                 } else {
-                    epoll_event ev = { };
-                    ev.events = EPOLL_WRONLY;
-                    ev.data.fd = fd;
-                    epoll_ctl(_epollfd, EPOLL_CTL_MOD, fd, &ev);
+                    update_source_events(fd, EPOLL_WRONLY);
                 }
             } else {
                 close_conn = true;
