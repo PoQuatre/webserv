@@ -91,6 +91,7 @@ LIB_SRCS =	Connection.cpp \
 			EventLoop.cpp \
 			HttpParser.cpp \
 			Server.cpp \
+			cgi.cpp \
 			cli.cpp \
 			dispatcher.cpp \
 			http.cpp \
@@ -104,7 +105,8 @@ SRCS =	$(LIB_SRCS) \
 		main.cpp
 
 ##begin: TEST_SRCS
-TEST_SRCS =	config_parsing.cpp \
+TEST_SRCS =	cgi_response.cpp \
+			config_parsing.cpp \
 			event_loop.cpp \
 			http_parsing.cpp \
 			server_socket.cpp
@@ -115,6 +117,7 @@ HDRS =	include/Connection.hpp \
 		include/EventLoop.hpp \
 		include/HttpParser.hpp \
 		include/Server.hpp \
+		include/cgi.hpp \
 		include/cli.hpp \
 		include/config-parser-def.hpp \
 		include/config-parser.hpp \
