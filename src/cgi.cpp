@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 07:06:46 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 07:41:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,6 +20,7 @@
 #include <cctype>
 #include <csignal>
 #include <cstdlib>
+#include <map>
 #include <sstream>
 #include <vector>
 
@@ -244,18 +245,173 @@ bool is_readable_script(const std::string &path)
     return S_ISREG(st.st_mode) && access(path.c_str(), R_OK) == 0;
 }
 
-void set_cgi_environment(
-    const http::request &req, const std::string &script_path)
+std::string number_string(std::size_t value)
 {
-    setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
-    setenv("REQUEST_METHOD", http::methods::strings[req.method], 1);
-    setenv("QUERY_STRING", req.query_string.c_str(), 1);
-    setenv("SCRIPT_FILENAME", script_path.c_str(), 1);
-    setenv("SCRIPT_NAME", req.uri.c_str(), 1);
-    setenv("SERVER_PROTOCOL", version_string(req).c_str(), 1);
-    setenv("CONTENT_LENGTH", "0", 1);
-    if (req.headers.count("host"))
-        setenv("HTTP_HOST", req.headers.find("host")->second.c_str(), 1);
+    std::ostringstream ss;
+
+    ss << value;
+    return ss.str();
+}
+
+void add_env(std::vector<std::string> &env, const std::string &name,
+    const std::string &value)
+{
+    env.push_back(name + "=" + value);
+}
+
+std::string header_value(const http::request &req, const std::string &name)
+{
+    std::map<std::string, std::string>::const_iterator it
+        = req.headers.find(name);
+
+    if (it == req.headers.end())
+        return "";
+    return it->second;
+}
+
+std::string host_name(const std::string &host)
+{
+    std::size_t end;
+    std::size_t colon;
+
+    if (host.empty())
+        return "";
+    if (host[0] == '[') {
+        end = host.find(']');
+        if (end != std::string::npos)
+            return host.substr(1, end - 1);
+    }
+    colon = host.find(':');
+    if (colon != std::string::npos)
+        return host.substr(0, colon);
+    return host;
+}
+
+std::string port_from_authority(const std::string &authority)
+{
+    std::size_t end;
+    std::size_t colon;
+
+    if (authority.empty())
+        return "";
+    if (authority[0] == '[') {
+        end = authority.find(']');
+        if (end != std::string::npos && end + 1 < authority.size()
+            && authority[end + 1] == ':')
+            return authority.substr(end + 2);
+        return "";
+    }
+    colon = authority.rfind(':');
+    if (colon != std::string::npos)
+        return authority.substr(colon + 1);
+    return "";
+}
+
+std::string first_config_value(const std::vector<std::string> &values)
+{
+    if (values.empty())
+        return "";
+    return values[0];
+}
+
+std::string server_name(const http::request &req, const Config &cfg)
+{
+    std::string name = first_config_value(cfg.conf.server_name);
+
+    if (!name.empty())
+        return name;
+    return host_name(header_value(req, "host"));
+}
+
+std::string server_port(const http::request &req, const Config &cfg)
+{
+    std::string port = port_from_authority(first_config_value(cfg.conf.listen));
+
+    if (!port.empty())
+        return port;
+    port = port_from_authority(header_value(req, "host"));
+    if (!port.empty())
+        return port;
+    return "80";
+}
+
+bool excluded_http_header(const std::string &name)
+{
+    return name == "content-length" || name == "content-type"
+        || name == "transfer-encoding" || name == "connection"
+        || name == "proxy";
+}
+
+bool safe_http_header_name(const std::string &name)
+{
+    if (name.empty())
+        return false;
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(name[i]);
+
+        if (!std::isalnum(c) && name[i] != '-')
+            return false;
+    }
+    return true;
+}
+
+std::string http_env_name(const std::string &header_name)
+{
+    std::string name = "HTTP_";
+
+    for (std::size_t i = 0; i < header_name.size(); ++i) {
+        if (header_name[i] == '-') {
+            name += '_';
+        } else {
+            name += static_cast<char>(
+                std::toupper(static_cast<unsigned char>(header_name[i])));
+        }
+    }
+    return name;
+}
+
+std::vector<std::string> make_cgi_environment(
+    const http::request &req, const Config &cfg, const std::string &script_path)
+{
+    std::vector<std::string> env;
+    std::string content_length = header_value(req, "content-length");
+    std::string content_type = header_value(req, "content-type");
+
+    if (content_length.empty())
+        content_length = number_string(req.body.size());
+    add_env(env, "PATH", "/usr/bin:/bin");
+    add_env(env, "GATEWAY_INTERFACE", "CGI/1.1");
+    add_env(env, "REQUEST_METHOD", http::methods::strings[req.method]);
+    add_env(env, "QUERY_STRING", req.query_string);
+    add_env(env, "SCRIPT_FILENAME", script_path);
+    add_env(env, "SCRIPT_NAME", req.uri);
+    add_env(env, "REMOTE_ADDR", req.remote_addr);
+    add_env(env, "SERVER_NAME", server_name(req, cfg));
+    add_env(env, "SERVER_PORT", server_port(req, cfg));
+    add_env(env, "SERVER_PROTOCOL", version_string(req));
+    add_env(env, "SERVER_SOFTWARE", "webserv");
+    add_env(env, "CONTENT_LENGTH", content_length);
+    if (!content_type.empty())
+        add_env(env, "CONTENT_TYPE", content_type);
+    for (std::map<std::string, std::string>::const_iterator it
+        = req.headers.begin();
+        it != req.headers.end(); ++it) {
+        if (!excluded_http_header(it->first)
+            && safe_http_header_name(it->first))
+            add_env(env, http_env_name(it->first), it->second);
+    }
+    return env;
+}
+
+std::vector<char *> make_envp(std::vector<std::string> &env_values)
+{
+    std::vector<char *> envp;
+
+    envp.reserve(env_values.size() + 1);
+    for (std::size_t i = 0; i < env_values.size(); ++i)
+        envp.push_back(const_cast<char *>(env_values[i].c_str()));
+    envp.push_back(NULL);
+    return envp;
 }
 
 void child_exec_cgi(const http::request &req, const Config &cfg,
@@ -269,9 +425,12 @@ void child_exec_cgi(const http::request &req, const Config &cfg,
         _exit(127);
     close(stdin_pipe[0]);
     close(stdout_pipe[1]);
-    set_cgi_environment(req, script_path);
-    execl(cfg.cgi_pass.c_str(), cfg.cgi_pass.c_str(), script_path.c_str(),
-        static_cast<char *>(NULL));
+    std::vector<std::string> env_values
+        = make_cgi_environment(req, cfg, script_path);
+    std::vector<char *> envp = make_envp(env_values);
+    char *argv[] = { const_cast<char *>(cfg.cgi_pass.c_str()),
+        const_cast<char *>(script_path.c_str()), NULL };
+    execve(cfg.cgi_pass.c_str(), argv, &envp[0]);
     _exit(127);
 }
 

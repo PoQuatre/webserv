@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:11 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 07:34:38 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,6 +40,10 @@ public:
     http::status::type error_code() const { return _error_code; }
 
     const http::request &request() const { return _request; }
+    void set_remote_addr(const std::string &remote_addr)
+    {
+        _request.remote_addr = remote_addr;
+    }
 
     void reset();
 
