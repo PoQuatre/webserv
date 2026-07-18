@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 22:23:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,8 +16,10 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -60,6 +62,16 @@ void kill_child(pid_t pid, int options)
         return;
     kill(pid, SIGKILL);
     waitpid(pid, NULL, options);
+}
+
+uint64_t monotonic_millis()
+{
+    timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1)
+        return 0;
+    return (static_cast<uint64_t>(ts.tv_sec) * 1000)
+        + static_cast<uint64_t>(ts.tv_nsec / 1000000);
 }
 
 http::status::type cgi_start_error(cgi::start::result result)
@@ -120,20 +132,25 @@ EventLoop::CgiJob::CgiJob()
     , stdin_fd(-1)
     , body_written(0)
     , max_output(0)
+    , deadline_millis(0)
     , request()
+    , failure_status(http::status::BAD_GATEWAY)
     , failed(false)
 {
 }
 
 EventLoop::CgiJob::CgiJob(int32_t cgi_clientfd, pid_t cgi_pid,
-    int32_t cgi_stdin_fd, std::size_t cgi_max_output,
+    int32_t cgi_stdin_fd, std::size_t cgi_max_output, uint32_t cgi_timeout,
     const http::request &cgi_request)
     : clientfd(cgi_clientfd)
     , pid(cgi_pid)
     , stdin_fd(cgi_stdin_fd)
     , body_written(0)
     , max_output(cgi_max_output)
+    , deadline_millis(
+          monotonic_millis() + (static_cast<uint64_t>(cgi_timeout) * 1000))
     , request(cgi_request)
+    , failure_status(http::status::BAD_GATEWAY)
     , failed(false)
 {
 }
@@ -152,7 +169,9 @@ bool EventLoop::run()
     bool ok = true;
     while (running) {
         L_TRACE("Waiting for events");
-        int32_t nfds = epoll_wait(_epollfd, events, MAX_EVENTS, -1);
+        expire_cgi_jobs();
+        int32_t nfds
+            = epoll_wait(_epollfd, events, MAX_EVENTS, cgi_epoll_timeout());
         if (nfds == -1) {
             if (errno == EINTR)
                 continue;
@@ -161,6 +180,7 @@ bool EventLoop::run()
             break;
         }
 
+        expire_cgi_jobs();
         L_TRACE("Got {} events", nfds);
         for (int32_t i = 0; i < nfds; ++i)
             process_io_event(events[i].data.fd, events[i].events, running);
@@ -443,8 +463,9 @@ bool EventLoop::start_cgi_request(
         error_status = cgi_start_error(result);
         return false;
     }
-    _cgi_jobs[process.stdout_fd] = CgiJob(clientfd, process.pid,
-        process.stdin_fd, cfg.cgi_output_buffer_size, conn.request());
+    _cgi_jobs[process.stdout_fd]
+        = CgiJob(clientfd, process.pid, process.stdin_fd,
+            cfg.cgi_output_buffer_size, cfg.cgi_timeout, conn.request());
     if (!add_source(process.stdout_fd, EPOLL_RDONLY,
             EventSource(EventSource::SOURCE_CGI_STDOUT, clientfd))
         || !add_source(process.stdin_fd, EPOLL_WRONLY,
@@ -505,6 +526,7 @@ void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
             && it->second.output.size() + static_cast<std::size_t>(bytes_read)
                 > it->second.max_output) {
             it->second.failed = true;
+            it->second.failure_status = http::status::BAD_GATEWAY;
             done = true;
         } else {
             it->second.output.append(
@@ -519,6 +541,44 @@ void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
     }
     if (done)
         finish_cgi_job(fd);
+}
+
+int32_t EventLoop::cgi_epoll_timeout() const
+{
+    uint64_t now;
+    uint64_t nearest = 0;
+
+    if (_cgi_jobs.empty())
+        return -1;
+    now = monotonic_millis();
+    for (std::map<int32_t, CgiJob>::const_iterator it = _cgi_jobs.begin();
+        it != _cgi_jobs.end(); ++it) {
+        if (it->second.deadline_millis <= now)
+            return 0;
+        if (nearest == 0 || it->second.deadline_millis < nearest)
+            nearest = it->second.deadline_millis;
+    }
+    return static_cast<int32_t>(
+        std::min(nearest - now, static_cast<uint64_t>(INT32_MAX)));
+}
+
+void EventLoop::expire_cgi_jobs()
+{
+    uint64_t now = monotonic_millis();
+
+    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
+        it != _cgi_jobs.end();) {
+        int32_t fd = it->first;
+
+        if (it->second.deadline_millis > now) {
+            ++it;
+            continue;
+        }
+        it->second.failed = true;
+        it->second.failure_status = http::status::GATEWAY_TIMEOUT;
+        ++it;
+        finish_cgi_job(fd);
+    }
 }
 
 void EventLoop::finish_cgi_job(int32_t fd)
@@ -544,7 +604,7 @@ void EventLoop::finish_cgi_job(int32_t fd)
     if (waited == job.pid)
         child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     else if (waited == 0)
-        kill_child(job.pid, WNOHANG);
+        kill_child(job.pid, 0);
     std::map<int32_t, Connection>::iterator conn_it
         = _connections.find(job.clientfd);
     if (conn_it == _connections.end())
@@ -553,8 +613,8 @@ void EventLoop::finish_cgi_job(int32_t fd)
         const Config &cfg
             = dispatcher::config_for(job.request, conn_it->second.server());
 
-        conn_it->second.enqueue_response(dispatcher::error_response(
-            job.request, cfg, http::status::BAD_GATEWAY));
+        conn_it->second.enqueue_response(
+            dispatcher::error_response(job.request, cfg, job.failure_status));
     } else {
         conn_it->second.enqueue_response(
             cgi::translate_output(job.output, job.request));

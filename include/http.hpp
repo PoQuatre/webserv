@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 07:34:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 22:07:06 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -102,7 +102,8 @@ namespace status {
     X(INTERNAL_SERVER_ERROR, 500, "Internal Server Error")                     \
     X(NOT_IMPLEMENTED, 501, "Not Implemented")                                 \
     X(BAD_GATEWAY, 502, "Bad Gateway")                                         \
-    X(SERVICE_UNAVAILABLE, 503, "Service Unavailable")
+    X(SERVICE_UNAVAILABLE, 503, "Service Unavailable")                         \
+    X(GATEWAY_TIMEOUT, 504, "Gateway Timeout")
 
 enum type {
 #define X(name, _, __) name,
