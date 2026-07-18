@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:23:10 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -212,7 +212,8 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     cfg.conf.server_name.push_back("example.test");
     cfg.conf.listen.push_back("127.0.0.1:8080");
     cgi::Process process;
-    cr_assert(cgi::start_process(req, cfg, script, process));
+    cr_assert_eq(
+        cgi::start_process(req, cfg, script, process), cgi::start::STARTED);
     close(process.stdin_fd);
     std::string output = read_all(process.stdout_fd);
     close(process.stdout_fd);
@@ -244,4 +245,64 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     assert_not_contains(output, "HTTP_CONNECTION=");
     assert_not_contains(output, "HTTP_PROXY=");
     assert_not_contains(output, "WEBSERV_TEST_SHOULD_NOT_LEAK=");
+}
+
+Test(cgi_process,
+    runs_readable_script_without_executable_bit_through_interpreter)
+{
+    std::string root = make_tmpdir();
+    std::string script = root + "/not-executable.sh";
+    write_file(script,
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'script-ran\\n'\n");
+    cr_assert_eq(
+        chmod(script.c_str(), 0600), 0, "chmod() failed: %s", strerror(errno));
+
+    http::request req = make_req(http::methods::GET);
+    req.uri = "/cgi/not-executable.sh";
+    Config cfg = { };
+    cfg.cgi_pass = "/bin/sh";
+    cgi::Process process;
+    cr_assert_eq(
+        cgi::start_process(req, cfg, script, process), cgi::start::STARTED);
+    close(process.stdin_fd);
+    std::string output = read_all(process.stdout_fd);
+    close(process.stdout_fd);
+    int status = 0;
+    cr_assert_eq(waitpid(process.pid, &status, 0), process.pid,
+        "waitpid() failed: %s", strerror(errno));
+
+    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    assert_contains(output, "script-ran\n");
+}
+
+Test(cgi_process, rejects_missing_interpreter_path)
+{
+    std::string root = make_tmpdir();
+    std::string script = root + "/hello.sh";
+    write_file(script,
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'hello\\n'\n");
+
+    http::request req = make_req(http::methods::GET);
+    req.uri = "/cgi/hello.sh";
+    Config cfg = { };
+    cfg.cgi_pass = root + "/missing-interpreter";
+    cgi::Process process;
+
+    cr_assert_eq(
+        cgi::start_process(req, cfg, script, process), cgi::start::BAD_GATEWAY);
+}
+
+Test(cgi_process, reports_script_error_before_interpreter_error)
+{
+    std::string root = make_tmpdir();
+    http::request req = make_req(http::methods::GET);
+    req.uri = "/cgi/missing.sh";
+    Config cfg = { };
+    cfg.cgi_pass = root + "/missing-interpreter";
+    cgi::Process process;
+
+    cr_assert_eq(cgi::start_process(req, cfg, root + "/missing.sh", process),
+        cgi::start::NOT_FOUND);
 }

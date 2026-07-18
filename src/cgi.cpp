@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:23:10 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -236,13 +236,27 @@ void close_if_open(int32_t &fd)
     }
 }
 
-bool is_readable_script(const std::string &path)
+cgi::start::result check_script_path(const std::string &path)
+{
+    struct stat st;
+
+    if (stat(path.c_str(), &st) != 0) {
+        if (errno == ENOENT || errno == ENOTDIR)
+            return cgi::start::NOT_FOUND;
+        return cgi::start::FORBIDDEN;
+    }
+    if (!S_ISREG(st.st_mode) || access(path.c_str(), R_OK) != 0)
+        return cgi::start::FORBIDDEN;
+    return cgi::start::STARTED;
+}
+
+bool is_executable_file(const std::string &path)
 {
     struct stat st;
 
     if (stat(path.c_str(), &st) != 0)
         return false;
-    return S_ISREG(st.st_mode) && access(path.c_str(), R_OK) == 0;
+    return S_ISREG(st.st_mode) && access(path.c_str(), X_OK) == 0;
 }
 
 std::string number_string(std::size_t value)
@@ -527,23 +541,27 @@ std::string cgi::translate_output(
     return translate_parsed(output, req, header_end);
 }
 
-bool cgi::start_process(const http::request &req, const Config &cfg,
-    const std::string &script_path, cgi::Process &process)
+cgi::start::result cgi::start_process(const http::request &req,
+    const Config &cfg, const std::string &script_path, cgi::Process &process)
 {
     int32_t stdin_pipe[2] = { -1, -1 };
     int32_t stdout_pipe[2] = { -1, -1 };
+    cgi::start::result script_status;
 
     process.pid = -1;
     process.stdin_fd = -1;
     process.stdout_fd = -1;
-    if (cfg.cgi_pass.empty() || !is_readable_script(script_path))
-        return false;
+    script_status = check_script_path(script_path);
+    if (script_status != cgi::start::STARTED)
+        return script_status;
+    if (cfg.cgi_pass.empty() || !is_executable_file(cfg.cgi_pass))
+        return cgi::start::BAD_GATEWAY;
     if (pipe(stdin_pipe) == -1)
-        return false;
+        return cgi::start::BAD_GATEWAY;
     if (pipe(stdout_pipe) == -1) {
         close_if_open(stdin_pipe[0]);
         close_if_open(stdin_pipe[1]);
-        return false;
+        return cgi::start::BAD_GATEWAY;
     }
 
     process.pid = fork();
@@ -552,7 +570,7 @@ bool cgi::start_process(const http::request &req, const Config &cfg,
         close_if_open(stdin_pipe[1]);
         close_if_open(stdout_pipe[0]);
         close_if_open(stdout_pipe[1]);
-        return false;
+        return cgi::start::BAD_GATEWAY;
     }
     if (process.pid == 0)
         child_exec_cgi(req, cfg, script_path, stdin_pipe, stdout_pipe);
@@ -565,9 +583,9 @@ bool cgi::start_process(const http::request &req, const Config &cfg,
         close_if_open(stdout_pipe[0]);
         kill_child(process.pid);
         process.pid = -1;
-        return false;
+        return cgi::start::BAD_GATEWAY;
     }
     process.stdin_fd = stdin_pipe[1];
     process.stdout_fd = stdout_pipe[0];
-    return true;
+    return cgi::start::STARTED;
 }
