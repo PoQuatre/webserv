@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 01:39:52 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 20:54:07 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -22,10 +23,12 @@
 #include <cstdio>
 #include <cstring>
 
+#include "cgi.hpp"
 #include "dispatcher.hpp"
 #include "logger.hpp"
 
 #define MAX_EVENTS 16
+#define EPOLL_CLOSED (EPOLLERR | EPOLLHUP | EPOLLRDHUP)
 #define EPOLL_RDONLY (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
 #define EPOLL_WRONLY (EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
 
@@ -51,6 +54,14 @@ void drain_signal_pipe()
             L_DEBUG("Received signal {}, shutting down", (int)buf[j]);
 }
 
+void kill_child(pid_t pid, int options)
+{
+    if (pid <= 0)
+        return;
+    kill(pid, SIGKILL);
+    waitpid(pid, NULL, options);
+}
+
 }
 
 EventLoop::EventLoop(std::vector<Server> &servers)
@@ -65,6 +76,7 @@ EventLoop::EventSource::EventSource()
     : type(SOURCE_SIGNAL)
     , server(NULL)
     , connection(NULL)
+    , clientfd(-1)
 {
 }
 
@@ -72,6 +84,7 @@ EventLoop::EventSource::EventSource(const Server &server_context)
     : type(SOURCE_LISTENER)
     , server(&server_context)
     , connection(NULL)
+    , clientfd(-1)
 {
 }
 
@@ -79,6 +92,38 @@ EventLoop::EventSource::EventSource(Connection &connection_context)
     : type(SOURCE_CLIENT)
     , server(NULL)
     , connection(&connection_context)
+    , clientfd(connection_context.fd())
+{
+}
+
+EventLoop::EventSource::EventSource(
+    EventLoop::EventSource::Type cgi_type, int32_t owner_clientfd)
+    : type(cgi_type)
+    , server(NULL)
+    , connection(NULL)
+    , clientfd(owner_clientfd)
+{
+}
+
+EventLoop::CgiJob::CgiJob()
+    : clientfd(-1)
+    , pid(-1)
+    , stdin_fd(-1)
+    , max_output(0)
+    , request()
+    , failed(false)
+{
+}
+
+EventLoop::CgiJob::CgiJob(int32_t cgi_clientfd, pid_t cgi_pid,
+    int32_t cgi_stdin_fd, std::size_t cgi_max_output,
+    const http::request &cgi_request)
+    : clientfd(cgi_clientfd)
+    , pid(cgi_pid)
+    , stdin_fd(cgi_stdin_fd)
+    , max_output(cgi_max_output)
+    , request(cgi_request)
+    , failed(false)
 {
 }
 
@@ -223,6 +268,18 @@ void EventLoop::remove_source(int32_t fd)
 
 void EventLoop::cleanup()
 {
+    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
+        it != _cgi_jobs.end(); ++it) {
+        remove_source(it->first);
+        close(it->first);
+        if (it->second.stdin_fd != -1) {
+            remove_source(it->second.stdin_fd);
+            close(it->second.stdin_fd);
+        }
+        kill_child(it->second.pid, 0);
+    }
+    _cgi_jobs.clear();
+
     for (std::map<int32_t, Connection>::iterator it = _connections.begin();
         it != _connections.end(); ++it) {
         remove_source(it->first);
@@ -288,6 +345,14 @@ void EventLoop::dispatch_source(int32_t fd, uint32_t events,
         else
             L_WARN("Ignoring client event source {} without connection", fd);
         break;
+
+    case EventSource::SOURCE_CGI_STDIN:
+        process_cgi_stdin(fd);
+        break;
+
+    case EventSource::SOURCE_CGI_STDOUT:
+        process_cgi_stdout(fd, events);
+        break;
     }
 }
 
@@ -317,23 +382,169 @@ void EventLoop::close_client(int32_t clientfd, Connection &conn)
 {
     L_DEBUG("Closing client {}", clientfd);
 
+    cancel_cgi_jobs_for(clientfd);
     remove_source(clientfd);
     conn.reset();
     close(clientfd);
     _connections.erase(clientfd);
 }
 
-void EventLoop::dispatch_pending(
-    int32_t fd, uint32_t events, Connection &conn) const
+void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
 {
     if (conn.is_parse_complete()) {
-        conn.enqueue_response(
-            dispatcher::handle(conn.request(), conn.server()));
+        const Config &cfg
+            = dispatcher::config_for(conn.request(), conn.server());
+
+        if (conn.is_waiting_cgi())
+            return;
+        if (cfg.cgi_enabled && cfg.allowed_methods[conn.request().method]
+            && conn.request().method == http::methods::GET) {
+            if (start_cgi_request(fd, conn))
+                return;
+            conn.enqueue_response(
+                dispatcher::error_response(http::status::BAD_GATEWAY));
+        } else {
+            conn.enqueue_response(
+                dispatcher::handle(conn.request(), conn.server()));
+        }
         conn.on_writable();
         if (events & EPOLLIN)
             update_source_events(fd, EPOLL_WRONLY);
     } else if (events & EPOLLOUT) {
         update_source_events(fd, EPOLL_RDONLY);
+    }
+}
+
+bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn)
+{
+    const Config &cfg = dispatcher::config_for(conn.request(), conn.server());
+    std::string script_path = dispatcher::filesystem_path(conn.request(), cfg);
+    cgi::Process process;
+
+    L_DEBUG("CGI GET {} -> {}", conn.request().uri, script_path);
+    if (!cgi::start_get(conn.request(), cfg, script_path, process))
+        return false;
+    _cgi_jobs[process.stdout_fd] = CgiJob(clientfd, process.pid,
+        process.stdin_fd, cfg.cgi_output_buffer_size, conn.request());
+    if (!add_source(process.stdout_fd, EPOLL_RDONLY,
+            EventSource(EventSource::SOURCE_CGI_STDOUT, clientfd))
+        || !add_source(process.stdin_fd, EPOLL_WRONLY,
+            EventSource(EventSource::SOURCE_CGI_STDIN, clientfd))) {
+        _cgi_jobs.erase(process.stdout_fd);
+        remove_source(process.stdout_fd);
+        remove_source(process.stdin_fd);
+        close(process.stdin_fd);
+        close(process.stdout_fd);
+        kill_child(process.pid, WNOHANG);
+        return false;
+    }
+    conn.wait_for_cgi();
+    update_source_events(clientfd, EPOLL_CLOSED);
+    return true;
+}
+
+void EventLoop::process_cgi_stdin(int32_t fd)
+{
+    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
+        it != _cgi_jobs.end(); ++it) {
+        if (it->second.stdin_fd == fd) {
+            remove_source(fd);
+            close(fd);
+            it->second.stdin_fd = -1;
+            return;
+        }
+    }
+}
+
+void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
+{
+    std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.find(fd);
+    char buffer[4096];
+    ssize_t bytes_read;
+    bool done = false;
+
+    if (it == _cgi_jobs.end())
+        return;
+    bytes_read = read(fd, buffer, sizeof(buffer));
+    if (bytes_read > 0) {
+        if (it->second.max_output != 0
+            && it->second.output.size() + static_cast<std::size_t>(bytes_read)
+                > it->second.max_output) {
+            it->second.failed = true;
+            done = true;
+        } else {
+            it->second.output.append(
+                buffer, static_cast<std::size_t>(bytes_read));
+        }
+    } else if (bytes_read == 0) {
+        done = true;
+    } else if (events & EPOLLERR) {
+        it->second.failed = true;
+        done = true;
+    } else if (events & (EPOLLHUP | EPOLLRDHUP)) {
+        done = true;
+    }
+    if (done)
+        finish_cgi_job(fd);
+}
+
+void EventLoop::finish_cgi_job(int32_t fd)
+{
+    std::map<int32_t, CgiJob>::iterator job_it = _cgi_jobs.find(fd);
+    if (job_it == _cgi_jobs.end())
+        return;
+
+    CgiJob job = job_it->second;
+    _cgi_jobs.erase(job_it);
+    remove_source(fd);
+    close(fd);
+    if (job.stdin_fd != -1) {
+        remove_source(job.stdin_fd);
+        close(job.stdin_fd);
+    }
+
+    int status = 0;
+    pid_t waited = waitpid(job.pid, &status, WNOHANG);
+    bool child_ok = waited != -1;
+    if (waited == job.pid)
+        child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    else if (waited == 0)
+        kill_child(job.pid, WNOHANG);
+
+    std::map<int32_t, Connection>::iterator conn_it
+        = _connections.find(job.clientfd);
+    if (conn_it == _connections.end())
+        return;
+    if (job.failed || !child_ok)
+        conn_it->second.enqueue_response(
+            dispatcher::error_response(http::status::BAD_GATEWAY));
+    else
+        conn_it->second.enqueue_response(
+            cgi::translate_output(job.output, job.request));
+    conn_it->second.on_writable();
+    update_source_events(job.clientfd, EPOLL_WRONLY);
+}
+
+void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
+{
+    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
+        it != _cgi_jobs.end();) {
+        if (it->second.clientfd == clientfd) {
+            int32_t fd = it->first;
+            pid_t pid = it->second.pid;
+            int32_t stdin_fd = it->second.stdin_fd;
+
+            _cgi_jobs.erase(it++);
+            remove_source(fd);
+            close(fd);
+            if (stdin_fd != -1) {
+                remove_source(stdin_fd);
+                close(stdin_fd);
+            }
+            kill_child(pid, WNOHANG);
+        } else {
+            ++it;
+        }
     }
 }
 
