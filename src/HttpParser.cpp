@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 01:52:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -281,7 +281,9 @@ bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
 
         if (_buf[auth_end] == '?') {
             _request.uri = "/";
-            return try_parse_query(auth_end + 1, end);
+            _request.query_string
+                = _buf.substr(auth_end + 1, end - auth_end - 1);
+            return true;
         }
 
         start = auth_end;
@@ -291,30 +293,7 @@ bool HttpParser::try_parse_uri(std::size_t start, std::size_t end)
     _request.uri
         = canonicalize_path(decode_percent(_buf, start, path_end, false));
     if (path_end < end)
-        return try_parse_query(path_end + 1, end);
-    return true;
-}
-
-bool HttpParser::try_parse_query(std::size_t start, std::size_t end)
-{
-    std::size_t pos = start;
-    while (pos < end) {
-        std::size_t amp = std::min(end, _buf.find('&', pos));
-        std::size_t eq = _buf.find('=', pos);
-
-        if (eq < amp) {
-            std::string key = decode_percent(_buf, pos, eq, true);
-            std::string val = decode_percent(_buf, eq + 1, amp, true);
-            if (!key.empty())
-                _request.query[key] = val;
-        } else {
-            std::string key = decode_percent(_buf, pos, amp, true);
-            if (!key.empty())
-                _request.query[key] = "";
-        }
-
-        pos = amp + 1;
-    }
+        _request.query_string = _buf.substr(path_end + 1, end - path_end - 1);
     return true;
 }
 

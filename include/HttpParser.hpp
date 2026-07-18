@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:11 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/27 21:22:17 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -58,7 +58,6 @@ private:
     bool try_parse_request_line();
     bool try_parse_method(std::size_t start, std::size_t end);
     bool try_parse_uri(std::size_t start, std::size_t end);
-    bool try_parse_query(std::size_t start, std::size_t end);
     bool try_parse_version(std::size_t start, std::size_t end);
 
     bool try_parse_headers();

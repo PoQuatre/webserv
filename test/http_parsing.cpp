@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 01:26:39 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -242,12 +242,12 @@ Test(uri, path_with_query_splits_at_question_mark)
     cr_assert_eq(c.request().uri, "/search");
 }
 
-Test(uri, path_without_query_no_query_map)
+Test(uri, path_without_query_has_empty_query_string)
 {
     Connection c = make_conn("GET /no-query HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/no-query");
-    cr_assert(c.request().query.empty());
+    cr_assert(c.request().query_string.empty());
 }
 
 Test(uri, fragment_stripped)
@@ -255,7 +255,7 @@ Test(uri, fragment_stripped)
     Connection c = make_conn("GET /page#section HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/page");
-    cr_assert(c.request().query.empty());
+    cr_assert(c.request().query_string.empty());
 }
 
 Test(uri, fragment_after_query_stripped)
@@ -263,8 +263,7 @@ Test(uri, fragment_after_query_stripped)
     Connection c = make_conn("GET /page?k=v#section HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/page");
-    cr_assert_eq(c.request().query.at("k"), "v");
-    cr_assert_eq(c.request().query.size(), 1);
+    cr_assert_eq(c.request().query_string, "k=v");
 }
 
 Test(uri, percent_encoded_space)
@@ -428,7 +427,7 @@ Test(uri_validation, absolute_form_path_extracted)
         "GET http://example.com/path HTTP/1.1\r\nHost: example.com\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/path");
-    cr_assert(c.request().query.empty());
+    cr_assert(c.request().query_string.empty());
 }
 
 Test(uri_validation, absolute_form_with_query)
@@ -437,7 +436,7 @@ Test(uri_validation, absolute_form_with_query)
                              "HTTP/1.1\r\nHost: example.com\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/search");
-    cr_assert_eq(c.request().query.at("q"), "hello");
+    cr_assert_eq(c.request().query_string, "q=hello");
 }
 
 Test(uri_validation, absolute_form_no_path_defaults_to_root)
@@ -454,7 +453,7 @@ Test(uri_validation, absolute_form_query_without_path)
         "GET http://example.com?q=1 HTTP/1.1\r\nHost: example.com\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/");
-    cr_assert_eq(c.request().query.at("q"), "1");
+    cr_assert_eq(c.request().query_string, "q=1");
 }
 
 Test(uri_validation, absolute_form_with_port)
@@ -482,40 +481,35 @@ Test(uri_validation, https_scheme_accepted)
 }
 
 // -----------------------------------------------------------------------------
-// Query params
+// Query string
 // -----------------------------------------------------------------------------
 
 Test(query, single_key_value)
 {
     Connection c = make_conn("GET /?key=value HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.count("key"), 1);
-    cr_assert_eq(c.request().query.at("key"), "value");
+    cr_assert_eq(c.request().query_string, "key=value");
 }
 
 Test(query, multiple_params)
 {
     Connection c = make_conn("GET /?a=1&b=2&c=3 HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.at("a"), "1");
-    cr_assert_eq(c.request().query.at("b"), "2");
-    cr_assert_eq(c.request().query.at("c"), "3");
+    cr_assert_eq(c.request().query_string, "a=1&b=2&c=3");
 }
 
 Test(query, key_without_value)
 {
     Connection c = make_conn("GET /?flag HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.count("flag"), 1);
-    cr_assert(c.request().query.at("flag").empty());
+    cr_assert_eq(c.request().query_string, "flag");
 }
 
 Test(query, key_with_empty_value)
 {
     Connection c = make_conn("GET /?key= HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.count("key"), 1);
-    cr_assert(c.request().query.at("key").empty());
+    cr_assert_eq(c.request().query_string, "key=");
 }
 
 Test(query, empty_query_string)
@@ -523,54 +517,49 @@ Test(query, empty_query_string)
     Connection c = make_conn("GET /path? HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/path");
-    cr_assert(c.request().query.empty());
+    cr_assert(c.request().query_string.empty());
 }
 
-Test(query, percent_encoded_value)
+Test(query, percent_encoding_preserved_in_value)
 {
     Connection c = make_conn("GET /?msg=hello%20world HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.at("msg"), "hello world");
+    cr_assert_eq(c.request().query_string, "msg=hello%20world");
 }
 
-Test(query, percent_encoded_key)
+Test(query, percent_encoding_preserved_in_key)
 {
     Connection c = make_conn("GET /?my%20key=val HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.count("my key"), 1);
-    cr_assert_eq(c.request().query.at("my key"), "val");
+    cr_assert_eq(c.request().query_string, "my%20key=val");
 }
 
-Test(query, plus_decoded_as_space_in_value)
+Test(query, plus_preserved_in_value)
 {
     Connection c = make_conn("GET /?q=hello+world HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.at("q"), "hello world");
+    cr_assert_eq(c.request().query_string, "q=hello+world");
 }
 
-Test(query, plus_decoded_as_space_in_key)
+Test(query, plus_preserved_in_key)
 {
     Connection c = make_conn("GET /?my+key=val HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.count("my key"), 1);
+    cr_assert_eq(c.request().query_string, "my+key=val");
 }
 
-Test(query, duplicate_key_last_wins)
+Test(query, duplicate_keys_preserved)
 {
     Connection c = make_conn("GET /?x=first&x=second HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.at("x"), "second");
+    cr_assert_eq(c.request().query_string, "x=first&x=second");
 }
 
 Test(query, mixed_flags_and_values)
 {
     Connection c = make_conn("GET /?verbose&limit=10&debug HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.count("verbose"), 1);
-    cr_assert(c.request().query.at("verbose").empty());
-    cr_assert_eq(c.request().query.at("limit"), "10");
-    cr_assert_eq(c.request().query.count("debug"), 1);
-    cr_assert(c.request().query.at("debug").empty());
+    cr_assert_eq(c.request().query_string, "verbose&limit=10&debug");
 }
 
 Test(query, uri_and_query_together)
@@ -578,23 +567,21 @@ Test(query, uri_and_query_together)
     Connection c = make_conn("GET /search?q=openai&lang=en HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/search");
-    cr_assert_eq(c.request().query.at("q"), "openai");
-    cr_assert_eq(c.request().query.at("lang"), "en");
+    cr_assert_eq(c.request().query_string, "q=openai&lang=en");
 }
 
 Test(query, percent_encoded_ampersand_in_value)
 {
     Connection c = make_conn("GET /?a=1%262 HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.at("a"), "1&2");
-    cr_assert_eq(c.request().query.size(), 1);
+    cr_assert_eq(c.request().query_string, "a=1%262");
 }
 
 Test(query, percent_encoded_equals_in_value)
 {
     Connection c = make_conn("GET /?a=x%3Dy HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query.at("a"), "x=y");
+    cr_assert_eq(c.request().query_string, "a=x%3Dy");
 }
 
 Test(query, http09_with_query)
@@ -603,7 +590,7 @@ Test(query, http09_with_query)
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().version, http::versions::HTTP09);
     cr_assert_eq(c.request().uri, "/search");
-    cr_assert_eq(c.request().query.at("q"), "test");
+    cr_assert_eq(c.request().query_string, "q=test");
 }
 
 // -----------------------------------------------------------------------------
