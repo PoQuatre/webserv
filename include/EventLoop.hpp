@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 22:07:06 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 22:43:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -91,6 +91,7 @@ private:
     void process_cgi_stdout(int32_t fd, uint32_t events);
     int32_t cgi_epoll_timeout() const;
     void expire_cgi_jobs();
+    void reap_pending_children();
     void dispatch_pending(int32_t fd, uint32_t events, Connection &conn);
     bool start_cgi_request(
         int32_t clientfd, Connection &conn, http::status::type &error_status);
@@ -102,5 +103,6 @@ private:
     std::map<int32_t, EventSource> _sources;
     std::map<int32_t, Connection> _connections;
     std::map<int32_t, CgiJob> _cgi_jobs;
+    std::vector<pid_t> _pending_reaps;
     int32_t _epollfd;
 };
