@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 22:23:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 22:43:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -56,12 +56,26 @@ void drain_signal_pipe()
             L_DEBUG("Received signal {}, shutting down", (int)buf[j]);
 }
 
-void kill_child(pid_t pid, int options)
+bool reap_child(pid_t pid, int options)
+{
+    while (true) {
+        pid_t waited = waitpid(pid, NULL, options);
+
+        if (waited == pid || (waited == -1 && errno == ECHILD))
+            return true;
+        if (waited == 0)
+            return false;
+        if (errno != EINTR)
+            return true;
+    }
+}
+
+bool terminate_child(pid_t pid, int options)
 {
     if (pid <= 0)
-        return;
+        return true;
     kill(pid, SIGKILL);
-    waitpid(pid, NULL, options);
+    return reap_child(pid, options);
 }
 
 uint64_t monotonic_millis()
@@ -169,6 +183,7 @@ bool EventLoop::run()
     bool ok = true;
     while (running) {
         L_TRACE("Waiting for events");
+        reap_pending_children();
         expire_cgi_jobs();
         int32_t nfds
             = epoll_wait(_epollfd, events, MAX_EVENTS, cgi_epoll_timeout());
@@ -181,6 +196,7 @@ bool EventLoop::run()
         }
 
         expire_cgi_jobs();
+        reap_pending_children();
         L_TRACE("Got {} events", nfds);
         for (int32_t i = 0; i < nfds; ++i)
             process_io_event(events[i].data.fd, events[i].events, running);
@@ -308,9 +324,14 @@ void EventLoop::cleanup()
             remove_source(it->second.stdin_fd);
             close(it->second.stdin_fd);
         }
-        kill_child(it->second.pid, 0);
+        terminate_child(it->second.pid, 0);
     }
     _cgi_jobs.clear();
+
+    for (std::vector<pid_t>::iterator it = _pending_reaps.begin();
+        it != _pending_reaps.end(); ++it)
+        reap_child(*it, 0);
+    _pending_reaps.clear();
 
     for (std::map<int32_t, Connection>::iterator it = _connections.begin();
         it != _connections.end(); ++it) {
@@ -475,11 +496,11 @@ bool EventLoop::start_cgi_request(
         remove_source(process.stdin_fd);
         close(process.stdin_fd);
         close(process.stdout_fd);
-        kill_child(process.pid, WNOHANG);
+        terminate_child(process.pid, WNOHANG);
         return false;
     }
     conn.wait_for_cgi();
-    update_source_events(clientfd, EPOLL_CLOSED);
+    update_source_events(clientfd, EPOLL_RDONLY);
     return true;
 }
 
@@ -548,6 +569,8 @@ int32_t EventLoop::cgi_epoll_timeout() const
     uint64_t now;
     uint64_t nearest = 0;
 
+    if (!_pending_reaps.empty())
+        return 0;
     if (_cgi_jobs.empty())
         return -1;
     now = monotonic_millis();
@@ -560,6 +583,17 @@ int32_t EventLoop::cgi_epoll_timeout() const
     }
     return static_cast<int32_t>(
         std::min(nearest - now, static_cast<uint64_t>(INT32_MAX)));
+}
+
+void EventLoop::reap_pending_children()
+{
+    for (std::vector<pid_t>::iterator it = _pending_reaps.begin();
+        it != _pending_reaps.end();) {
+        if (reap_child(*it, WNOHANG))
+            it = _pending_reaps.erase(it);
+        else
+            ++it;
+    }
 }
 
 void EventLoop::expire_cgi_jobs()
@@ -604,7 +638,7 @@ void EventLoop::finish_cgi_job(int32_t fd)
     if (waited == job.pid)
         child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     else if (waited == 0)
-        kill_child(job.pid, 0);
+        terminate_child(job.pid, 0);
     std::map<int32_t, Connection>::iterator conn_it
         = _connections.find(job.clientfd);
     if (conn_it == _connections.end())
@@ -639,7 +673,8 @@ void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
                 remove_source(stdin_fd);
                 close(stdin_fd);
             }
-            kill_child(pid, WNOHANG);
+            if (!terminate_child(pid, WNOHANG))
+                _pending_reaps.push_back(pid);
         } else {
             ++it;
         }

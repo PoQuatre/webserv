@@ -6,13 +6,14 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 22:07:06 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 22:43:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <criterion/criterion.h>
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <signal.h>
@@ -70,6 +71,8 @@ static int connect_to_loopback(uint16_t port)
     for (int attempts = 0; attempts < 500; ++attempts) {
         int fd = socket(AF_INET, SOCK_STREAM, 0);
         cr_assert_neq(fd, -1, "socket() failed: %s", strerror(errno));
+        cr_assert_neq(fcntl(fd, F_SETFD, FD_CLOEXEC), -1, "fcntl() failed: %s",
+            strerror(errno));
 
         sockaddr_in addr = { };
         addr.sin_family = AF_INET;
@@ -145,6 +148,40 @@ static void write_file(const std::string &path, const std::string &content)
     cr_assert(out.is_open(), "failed to open %s", path.c_str());
     out << content;
     cr_assert(!out.fail(), "failed to write %s", path.c_str());
+}
+
+static pid_t wait_for_pid_file(const std::string &path)
+{
+    for (int attempts = 0; attempts < 1000; ++attempts) {
+        std::ifstream in(path.c_str());
+        long pid = 0;
+
+        if (in >> pid && pid > 0)
+            return static_cast<pid_t>(pid);
+        usleep(1000);
+    }
+    cr_assert_fail("timed out waiting for pid file %s", path.c_str());
+    return -1;
+}
+
+static bool process_exists(pid_t pid)
+{
+    errno = 0;
+    if (kill(pid, 0) == 0)
+        return true;
+    cr_assert_eq(errno, ESRCH, "kill(%ld, 0) failed: %s",
+        static_cast<long>(pid), strerror(errno));
+    return false;
+}
+
+static bool wait_process_gone(pid_t pid)
+{
+    for (int attempts = 0; attempts < 1000; ++attempts) {
+        if (!process_exists(pid))
+            return true;
+        usleep(1000);
+    }
+    return false;
 }
 
 static Server make_cgi_server(uint16_t port, const std::string &root,
@@ -531,4 +568,52 @@ Test(event_loop, cgi_output_cap_returns_bad_gateway)
     close(clientfd);
 
     cr_assert(args.result);
+}
+
+Test(event_loop, disconnect_while_cgi_runs_cleans_up_child_and_keeps_clients)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    std::string pidfile = root + "/cgi.pid";
+    write_file(root + "/cgi/linger.sh",
+        "printf '%s\\n' \"$$\" > '" + pidfile
+            + "'\n"
+              "printf 'Content-Type: text/plain\\r\\n\\r\\npartial output\\n'\n"
+              "while :; do :; done\n");
+    write_file(root + "/static.txt", "static still works\n");
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(port, root));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int cgi_fd = connect_to_loopback(port);
+    write_all(cgi_fd, "GET /cgi/linger.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    pid_t cgi_pid = wait_for_pid_file(pidfile);
+
+    int static_fd = connect_to_loopback(port);
+    close(cgi_fd);
+    write_all(static_fd, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+    std::string static_response = read_response(static_fd);
+    cr_assert_neq(static_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    cr_assert_neq(
+        static_response.find("static still works\n"), std::string::npos);
+    bool cgi_gone = wait_process_gone(cgi_pid);
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(static_fd);
+
+    cr_assert(args.result);
+    cr_assert(cgi_gone, "process %ld still exists", static_cast<long>(cgi_pid));
 }
