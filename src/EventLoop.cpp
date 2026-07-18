@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 20:54:07 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:37:17 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -109,6 +109,7 @@ EventLoop::CgiJob::CgiJob()
     : clientfd(-1)
     , pid(-1)
     , stdin_fd(-1)
+    , body_written(0)
     , max_output(0)
     , request()
     , failed(false)
@@ -121,6 +122,7 @@ EventLoop::CgiJob::CgiJob(int32_t cgi_clientfd, pid_t cgi_pid,
     : clientfd(cgi_clientfd)
     , pid(cgi_pid)
     , stdin_fd(cgi_stdin_fd)
+    , body_written(0)
     , max_output(cgi_max_output)
     , request(cgi_request)
     , failed(false)
@@ -219,6 +221,7 @@ bool EventLoop::init_signal_handlers()
     (void)signal(SIGINT, &signal_handler);
     (void)signal(SIGTERM, &signal_handler);
     (void)signal(SIGQUIT, &signal_handler);
+    (void)signal(SIGPIPE, SIG_IGN);
 
     return add_source(g_signal_pipe[0], EPOLLIN, EventSource());
 }
@@ -347,7 +350,7 @@ void EventLoop::dispatch_source(int32_t fd, uint32_t events,
         break;
 
     case EventSource::SOURCE_CGI_STDIN:
-        process_cgi_stdin(fd);
+        process_cgi_stdin(fd, events);
         break;
 
     case EventSource::SOURCE_CGI_STDOUT:
@@ -397,8 +400,7 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
 
         if (conn.is_waiting_cgi())
             return;
-        if (cfg.cgi_enabled && cfg.allowed_methods[conn.request().method]
-            && conn.request().method == http::methods::GET) {
+        if (cfg.cgi_enabled && cfg.allowed_methods[conn.request().method]) {
             if (start_cgi_request(fd, conn))
                 return;
             conn.enqueue_response(
@@ -421,8 +423,9 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn)
     std::string script_path = dispatcher::filesystem_path(conn.request(), cfg);
     cgi::Process process;
 
-    L_DEBUG("CGI GET {} -> {}", conn.request().uri, script_path);
-    if (!cgi::start_get(conn.request(), cfg, script_path, process))
+    L_DEBUG("CGI {} {} -> {}", http::methods::strings[conn.request().method],
+        conn.request().uri, script_path);
+    if (!cgi::start_process(conn.request(), cfg, script_path, process))
         return false;
     _cgi_jobs[process.stdout_fd] = CgiJob(clientfd, process.pid,
         process.stdin_fd, cfg.cgi_output_buffer_size, conn.request());
@@ -443,14 +446,29 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn)
     return true;
 }
 
-void EventLoop::process_cgi_stdin(int32_t fd)
+void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
 {
     for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
         it != _cgi_jobs.end(); ++it) {
         if (it->second.stdin_fd == fd) {
+            CgiJob &job = it->second;
+            const std::string &body = job.request.body;
+
+            if (events & EPOLLERR)
+                job.failed = true;
+            if (job.body_written < body.size()) {
+                ssize_t n = write(fd, body.c_str() + job.body_written,
+                    body.size() - job.body_written);
+                if (n > 0)
+                    job.body_written += static_cast<std::size_t>(n);
+                else if (!(events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)))
+                    return;
+            }
+            if (job.body_written < body.size() && !job.failed)
+                return;
             remove_source(fd);
             close(fd);
-            it->second.stdin_fd = -1;
+            job.stdin_fd = -1;
             return;
         }
     }
@@ -478,10 +496,9 @@ void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
         }
     } else if (bytes_read == 0) {
         done = true;
-    } else if (events & EPOLLERR) {
-        it->second.failed = true;
-        done = true;
-    } else if (events & (EPOLLHUP | EPOLLRDHUP)) {
+    } else if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+        if (events & EPOLLERR)
+            it->second.failed = true;
         done = true;
     }
     if (done)
@@ -499,6 +516,8 @@ void EventLoop::finish_cgi_job(int32_t fd)
     remove_source(fd);
     close(fd);
     if (job.stdin_fd != -1) {
+        if (job.body_written < job.request.body.size())
+            job.failed = true;
         remove_source(job.stdin_fd);
         close(job.stdin_fd);
     }

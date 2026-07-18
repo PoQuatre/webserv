@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 07:06:46 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:23:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -28,7 +28,7 @@ struct Process {
     int32_t stdout_fd;
 };
 
-bool start_get(const http::request &req, const Config &cfg,
+bool start_process(const http::request &req, const Config &cfg,
     const std::string &script_path, Process &process);
 
 std::string translate_output(

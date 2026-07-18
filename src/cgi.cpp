@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 07:41:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:23:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -374,11 +374,9 @@ std::vector<std::string> make_cgi_environment(
     const http::request &req, const Config &cfg, const std::string &script_path)
 {
     std::vector<std::string> env;
-    std::string content_length = header_value(req, "content-length");
+    std::string content_length = number_string(req.body.size());
     std::string content_type = header_value(req, "content-type");
 
-    if (content_length.empty())
-        content_length = number_string(req.body.size());
     add_env(env, "PATH", "/usr/bin:/bin");
     add_env(env, "GATEWAY_INTERFACE", "CGI/1.1");
     add_env(env, "REQUEST_METHOD", http::methods::strings[req.method]);
@@ -425,6 +423,7 @@ void child_exec_cgi(const http::request &req, const Config &cfg,
         _exit(127);
     close(stdin_pipe[0]);
     close(stdout_pipe[1]);
+    (void)signal(SIGPIPE, SIG_DFL);
     std::vector<std::string> env_values
         = make_cgi_environment(req, cfg, script_path);
     std::vector<char *> envp = make_envp(env_values);
@@ -528,7 +527,7 @@ std::string cgi::translate_output(
     return translate_parsed(output, req, header_end);
 }
 
-bool cgi::start_get(const http::request &req, const Config &cfg,
+bool cgi::start_process(const http::request &req, const Config &cfg,
     const std::string &script_path, cgi::Process &process)
 {
     int32_t stdin_pipe[2] = { -1, -1 };
