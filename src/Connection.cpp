@@ -6,18 +6,45 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 06:59:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 07:34:38 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Connection.hpp"
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include "logger.hpp"
 
 #define RECV_CHUNK 4096
+
+namespace {
+
+std::string peer_address(int32_t fd)
+{
+    sockaddr_storage addr;
+    socklen_t len = sizeof(addr);
+    char buffer[INET6_ADDRSTRLEN];
+    const void *src = NULL;
+
+    if (getpeername(fd, reinterpret_cast<sockaddr *>(&addr), &len) != 0)
+        return "";
+    if (addr.ss_family == AF_INET) {
+        src = &reinterpret_cast<sockaddr_in *>(&addr)->sin_addr;
+    } else if (addr.ss_family == AF_INET6) {
+        src = &reinterpret_cast<sockaddr_in6 *>(&addr)->sin6_addr;
+    } else {
+        return "";
+    }
+    if (inet_ntop(addr.ss_family, src, buffer, sizeof(buffer)) == NULL)
+        return "";
+    return buffer;
+}
+
+}
 
 Connection::Connection()
     : _fd(-1)
@@ -31,6 +58,7 @@ Connection::Connection(int32_t fd, const Server &server)
     , _server(&server)
     , _send_state(IDLE)
 {
+    _parser.set_remote_addr(peer_address(fd));
 }
 
 bool Connection::on_readable()

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 07:34:38 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -143,6 +143,7 @@ struct request {
     std::map<std::string, std::string> headers;
     std::string query_string;
     std::string body;
+    std::string remote_addr;
     bool keep_alive;
 };
 

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 07:34:38 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -50,12 +50,15 @@ void HttpParser::set_eof()
 
 void HttpParser::reset()
 {
+    std::string remote_addr = _request.remote_addr;
+
     _state = READING_REQUEST_LINE;
     _content_length = 0;
     _eof = false;
     _chunked = false;
     _error_code = http::status::OK;
     _request = http::request();
+    _request.remote_addr = remote_addr;
     run();
 }
 
