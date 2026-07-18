@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/05/30 06:09:19 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -141,7 +141,7 @@ struct request {
     std::string uri;
     versions::type version;
     std::map<std::string, std::string> headers;
-    std::map<std::string, std::string> query;
+    std::string query_string;
     std::string body;
     bool keep_alive;
 };
