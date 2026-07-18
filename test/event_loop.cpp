@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:40:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -147,8 +147,8 @@ static void write_file(const std::string &path, const std::string &content)
     cr_assert(!out.fail(), "failed to write %s", path.c_str());
 }
 
-static Server make_cgi_server(
-    uint16_t port, const std::string &root, bool allow_delete = false)
+static Server make_cgi_server(uint16_t port, const std::string &root,
+    bool allow_delete = false, const std::string &cgi_pass = "/bin/sh")
 {
     std::ostringstream listen_addr;
     Config config = { };
@@ -164,7 +164,7 @@ static Server make_cgi_server(
 
     cgi_config = config;
     cgi_config.cgi_enabled = true;
-    cgi_config.cgi_pass = "/bin/sh";
+    cgi_config.cgi_pass = cgi_pass;
     cgi_config.cgi_timeout = DEFAULT_CGI_TIMEOUT;
     cgi_config.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
 
@@ -174,6 +174,12 @@ static Server make_cgi_server(
     locations.push_back(cgi_location);
 
     return Server(locations, "test", listen_addr.str(), config);
+}
+
+static void assert_status(const std::string &response, const char *status)
+{
+    cr_assert_neq(response.find(status), std::string::npos,
+        "missing status '%s' in response:\n%s", status, response.c_str());
 }
 
 Test(event_loop, listener_and_signal_sources_dispatch_readiness)
@@ -367,6 +373,92 @@ Test(event_loop, cgi_executes_allowed_delete_method)
         kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
     cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
     close(delete_fd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, cgi_script_path_errors_map_to_http_statuses)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    write_file(root + "/cgi/unreadable.sh",
+        "printf 'Content-Type: text/plain\\r\\n\\r\\nnope\\n'\n");
+    cr_assert_eq(chmod((root + "/cgi/unreadable.sh").c_str(), 0000), 0,
+        "chmod() failed: %s", strerror(errno));
+    cr_assert_eq(mkdir((root + "/cgi/directory").c_str(), 0700), 0,
+        "mkdir() failed: %s", strerror(errno));
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(port, root));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int missing_fd = connect_to_loopback(port);
+    write_all(
+        missing_fd, "GET /cgi/missing.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(read_response(missing_fd), "HTTP/1.1 404 Not Found");
+
+    int unreadable_fd = connect_to_loopback(port);
+    write_all(unreadable_fd,
+        "GET /cgi/unreadable.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(read_response(unreadable_fd), "HTTP/1.1 403 Forbidden");
+
+    int directory_fd = connect_to_loopback(port);
+    write_all(
+        directory_fd, "GET /cgi/directory HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(read_response(directory_fd), "HTTP/1.1 403 Forbidden");
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(missing_fd);
+    close(unreadable_fd);
+    close(directory_fd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, cgi_invalid_interpreter_maps_to_bad_gateway)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    write_file(root + "/cgi/hello.sh",
+        "printf 'Content-Type: text/plain\\r\\n\\r\\nhello\\n'\n");
+    write_file(root + "/not-executable", "not an interpreter\n");
+    cr_assert_eq(chmod((root + "/not-executable").c_str(), 0600), 0,
+        "chmod() failed: %s", strerror(errno));
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(
+        make_cgi_server(port, root, false, root + "/not-executable"));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int clientfd = connect_to_loopback(port);
+    write_all(
+        clientfd, "GET /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(read_response(clientfd), "HTTP/1.1 502 Bad Gateway");
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(clientfd);
 
     cr_assert(args.result);
 }

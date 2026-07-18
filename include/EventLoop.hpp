@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:28:28 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -87,7 +87,8 @@ private:
     void process_cgi_stdin(int32_t fd, uint32_t events);
     void process_cgi_stdout(int32_t fd, uint32_t events);
     void dispatch_pending(int32_t fd, uint32_t events, Connection &conn);
-    bool start_cgi_request(int32_t clientfd, Connection &conn);
+    bool start_cgi_request(
+        int32_t clientfd, Connection &conn, http::status::type &error_status);
     void finish_cgi_job(int32_t fd);
     void cancel_cgi_jobs_for(int32_t clientfd);
     void close_client(int32_t clientfd, Connection &conn);

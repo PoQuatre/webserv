@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:37:17 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -60,6 +60,15 @@ void kill_child(pid_t pid, int options)
         return;
     kill(pid, SIGKILL);
     waitpid(pid, NULL, options);
+}
+
+http::status::type cgi_start_error(cgi::start::result result)
+{
+    if (result == cgi::start::NOT_FOUND)
+        return http::status::NOT_FOUND;
+    if (result == cgi::start::FORBIDDEN)
+        return http::status::FORBIDDEN;
+    return http::status::BAD_GATEWAY;
 }
 
 }
@@ -401,10 +410,12 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
         if (conn.is_waiting_cgi())
             return;
         if (cfg.cgi_enabled && cfg.allowed_methods[conn.request().method]) {
-            if (start_cgi_request(fd, conn))
+            http::status::type error_status = http::status::BAD_GATEWAY;
+
+            if (start_cgi_request(fd, conn, error_status))
                 return;
             conn.enqueue_response(
-                dispatcher::error_response(http::status::BAD_GATEWAY));
+                dispatcher::error_response(conn.request(), cfg, error_status));
         } else {
             conn.enqueue_response(
                 dispatcher::handle(conn.request(), conn.server()));
@@ -417,16 +428,21 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
     }
 }
 
-bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn)
+bool EventLoop::start_cgi_request(
+    int32_t clientfd, Connection &conn, http::status::type &error_status)
 {
     const Config &cfg = dispatcher::config_for(conn.request(), conn.server());
     std::string script_path = dispatcher::filesystem_path(conn.request(), cfg);
     cgi::Process process;
+    cgi::start::result result;
 
     L_DEBUG("CGI {} {} -> {}", http::methods::strings[conn.request().method],
         conn.request().uri, script_path);
-    if (!cgi::start_process(conn.request(), cfg, script_path, process))
+    result = cgi::start_process(conn.request(), cfg, script_path, process);
+    if (result != cgi::start::STARTED) {
+        error_status = cgi_start_error(result);
         return false;
+    }
     _cgi_jobs[process.stdout_fd] = CgiJob(clientfd, process.pid,
         process.stdin_fd, cfg.cgi_output_buffer_size, conn.request());
     if (!add_source(process.stdout_fd, EPOLL_RDONLY,
@@ -529,17 +545,20 @@ void EventLoop::finish_cgi_job(int32_t fd)
         child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     else if (waited == 0)
         kill_child(job.pid, WNOHANG);
-
     std::map<int32_t, Connection>::iterator conn_it
         = _connections.find(job.clientfd);
     if (conn_it == _connections.end())
         return;
-    if (job.failed || !child_ok)
-        conn_it->second.enqueue_response(
-            dispatcher::error_response(http::status::BAD_GATEWAY));
-    else
+    if (job.failed || !child_ok) {
+        const Config &cfg
+            = dispatcher::config_for(job.request, conn_it->second.server());
+
+        conn_it->second.enqueue_response(dispatcher::error_response(
+            job.request, cfg, http::status::BAD_GATEWAY));
+    } else {
         conn_it->second.enqueue_response(
             cgi::translate_output(job.output, job.request));
+    }
     conn_it->second.on_writable();
     update_source_events(job.clientfd, EPOLL_WRONLY);
 }

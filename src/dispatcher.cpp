@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 06:59:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -202,4 +202,10 @@ std::string dispatcher::error_response(http::status::type status)
     Config empty_cfg = { };
     http::request empty_req = { };
     return make_error_response_impl(empty_req, status, empty_cfg);
+}
+
+std::string dispatcher::error_response(
+    const http::request &req, const Config &cfg, http::status::type status)
+{
+    return make_error_response_impl(req, status, cfg);
 }
