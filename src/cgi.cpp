@@ -6,13 +6,20 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 06:06:48 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 07:06:46 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "cgi.hpp"
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <cctype>
+#include <csignal>
+#include <cstdlib>
 #include <sstream>
 #include <vector>
 
@@ -209,6 +216,73 @@ std::string make_bad_gateway(const http::request &req)
         "<html><body><h1>502 Bad Gateway</h1></body></html>\n");
 }
 
+bool set_nonblock_cloexec(int32_t fd)
+{
+    int flags = fcntl(fd, F_GETFL, 0);
+
+    if (flags == -1)
+        return false;
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+        return false;
+    return fcntl(fd, F_SETFD, FD_CLOEXEC) != -1;
+}
+
+void close_if_open(int32_t &fd)
+{
+    if (fd != -1) {
+        close(fd);
+        fd = -1;
+    }
+}
+
+bool is_readable_script(const std::string &path)
+{
+    struct stat st;
+
+    if (stat(path.c_str(), &st) != 0)
+        return false;
+    return S_ISREG(st.st_mode) && access(path.c_str(), R_OK) == 0;
+}
+
+void set_cgi_environment(
+    const http::request &req, const std::string &script_path)
+{
+    setenv("GATEWAY_INTERFACE", "CGI/1.1", 1);
+    setenv("REQUEST_METHOD", http::methods::strings[req.method], 1);
+    setenv("QUERY_STRING", req.query_string.c_str(), 1);
+    setenv("SCRIPT_FILENAME", script_path.c_str(), 1);
+    setenv("SCRIPT_NAME", req.uri.c_str(), 1);
+    setenv("SERVER_PROTOCOL", version_string(req).c_str(), 1);
+    setenv("CONTENT_LENGTH", "0", 1);
+    if (req.headers.count("host"))
+        setenv("HTTP_HOST", req.headers.find("host")->second.c_str(), 1);
+}
+
+void child_exec_cgi(const http::request &req, const Config &cfg,
+    const std::string &script_path, int32_t stdin_pipe[2],
+    int32_t stdout_pipe[2])
+{
+    close(stdin_pipe[1]);
+    close(stdout_pipe[0]);
+    if (dup2(stdin_pipe[0], STDIN_FILENO) == -1
+        || dup2(stdout_pipe[1], STDOUT_FILENO) == -1)
+        _exit(127);
+    close(stdin_pipe[0]);
+    close(stdout_pipe[1]);
+    set_cgi_environment(req, script_path);
+    execl(cfg.cgi_pass.c_str(), cfg.cgi_pass.c_str(), script_path.c_str(),
+        static_cast<char *>(NULL));
+    _exit(127);
+}
+
+void kill_child(pid_t pid)
+{
+    if (pid <= 0)
+        return;
+    kill(pid, SIGKILL);
+    waitpid(pid, NULL, 0);
+}
+
 bool parse_nph_status_line(const std::string &line)
 {
     std::size_t first_space = line.find(' ');
@@ -293,4 +367,49 @@ std::string cgi::translate_output(
     if (!find_header_end(output, header_end))
         return make_body_response(req, output);
     return translate_parsed(output, req, header_end);
+}
+
+bool cgi::start_get(const http::request &req, const Config &cfg,
+    const std::string &script_path, cgi::Process &process)
+{
+    int32_t stdin_pipe[2] = { -1, -1 };
+    int32_t stdout_pipe[2] = { -1, -1 };
+
+    process.pid = -1;
+    process.stdin_fd = -1;
+    process.stdout_fd = -1;
+    if (cfg.cgi_pass.empty() || !is_readable_script(script_path))
+        return false;
+    if (pipe(stdin_pipe) == -1)
+        return false;
+    if (pipe(stdout_pipe) == -1) {
+        close_if_open(stdin_pipe[0]);
+        close_if_open(stdin_pipe[1]);
+        return false;
+    }
+
+    process.pid = fork();
+    if (process.pid == -1) {
+        close_if_open(stdin_pipe[0]);
+        close_if_open(stdin_pipe[1]);
+        close_if_open(stdout_pipe[0]);
+        close_if_open(stdout_pipe[1]);
+        return false;
+    }
+    if (process.pid == 0)
+        child_exec_cgi(req, cfg, script_path, stdin_pipe, stdout_pipe);
+
+    close_if_open(stdin_pipe[0]);
+    close_if_open(stdout_pipe[1]);
+    if (!set_nonblock_cloexec(stdin_pipe[1])
+        || !set_nonblock_cloexec(stdout_pipe[0])) {
+        close_if_open(stdin_pipe[1]);
+        close_if_open(stdout_pipe[0]);
+        kill_child(process.pid);
+        process.pid = -1;
+        return false;
+    }
+    process.stdin_fd = stdin_pipe[1];
+    process.stdout_fd = stdout_pipe[0];
+    return true;
 }

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/06/03 01:51:37 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 06:59:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -165,10 +165,23 @@ std::string handle_get(
 
 }
 
-std::string dispatcher::handle(const http::request &req, const Server &server)
+const Config &dispatcher::config_for(
+    const http::request &req, const Server &server)
 {
     const Location *loc = server.find_location(req.uri);
-    const Config &cfg = loc ? loc->config : server.default_config();
+
+    return loc ? loc->config : server.default_config();
+}
+
+std::string dispatcher::filesystem_path(
+    const http::request &req, const Config &cfg)
+{
+    return cfg.root + req.uri;
+}
+
+std::string dispatcher::handle(const http::request &req, const Server &server)
+{
+    const Config &cfg = config_for(req, server);
 
     if (!cfg.allowed_methods[req.method])
         return make_error_response_impl(
@@ -178,7 +191,7 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
         return make_error_response_impl(
             req, http::status::NOT_IMPLEMENTED, cfg);
 
-    std::string fs_path = cfg.root + req.uri;
+    std::string fs_path = filesystem_path(req, cfg);
     L_DEBUG("GET {} -> {}", req.uri, fs_path);
 
     return handle_get(req, fs_path, cfg);

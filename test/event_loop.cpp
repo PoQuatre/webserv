@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/17 19:23:49 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 06:59:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,12 +17,15 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -110,6 +113,66 @@ static std::string read_response(int fd)
     return response;
 }
 
+static std::string read_response_with_timeout(int fd, long usec)
+{
+    timeval timeout = { };
+    timeout.tv_usec = usec;
+    cr_assert_eq(
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0,
+        "setsockopt() failed: %s", strerror(errno));
+
+    std::string response;
+    char buffer[256];
+    ssize_t n = read(fd, buffer, sizeof(buffer));
+    cr_assert_gt(n, 0, "read() failed: %s", strerror(errno));
+    response.append(buffer, static_cast<std::size_t>(n));
+    return response;
+}
+
+static std::string make_tmpdir()
+{
+    char tmpl[] = "/tmp/webserv-cgi-test-XXXXXX";
+    char *dir = mkdtemp(tmpl);
+
+    cr_assert_not_null(dir, "mkdtemp() failed: %s", strerror(errno));
+    return dir;
+}
+
+static void write_file(const std::string &path, const std::string &content)
+{
+    std::ofstream out(path.c_str(), std::ios::binary);
+
+    cr_assert(out.is_open(), "failed to open %s", path.c_str());
+    out << content;
+    cr_assert(!out.fail(), "failed to write %s", path.c_str());
+}
+
+static Server make_cgi_server(uint16_t port, const std::string &root)
+{
+    std::ostringstream listen_addr;
+    Config config = { };
+    Config cgi_config = { };
+    Location cgi_location;
+    std::vector<Location> locations;
+
+    listen_addr << "127.0.0.1:" << port;
+    config.root = root;
+    config.allowed_methods[http::methods::GET] = true;
+
+    cgi_config = config;
+    cgi_config.cgi_enabled = true;
+    cgi_config.cgi_pass = "/bin/sh";
+    cgi_config.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    cgi_config.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
+
+    cgi_location.path = "/cgi";
+    cgi_location.config = cgi_config;
+    cgi_location.type = location::CLASSIC;
+    locations.push_back(cgi_location);
+
+    return Server(locations, "test", listen_addr.str(), config);
+}
+
 Test(event_loop, listener_and_signal_sources_dispatch_readiness)
 {
     logger::log_level() = logger::levels::NOTHING;
@@ -140,6 +203,58 @@ Test(event_loop, listener_and_signal_sources_dispatch_readiness)
         kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
     cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
     close(clientfd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, cgi_get_executes_script_and_static_requests_still_work)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    write_file(root + "/cgi/hello.sh",
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'method=%s query=%s\\n' \"$REQUEST_METHOD\" "
+        "\"$QUERY_STRING\"\n");
+    write_file(root + "/cgi/slow.sh", "sleep 1\nprintf 'slow\\n'\n");
+    write_file(root + "/static.txt", "static body\n");
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(port, root));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int cgi_fd = connect_to_loopback(port);
+    write_all(cgi_fd,
+        "GET /cgi/hello.sh?name=webserv HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::string cgi_response = read_response(cgi_fd);
+    cr_assert_neq(cgi_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    cr_assert_neq(
+        cgi_response.find("Content-Type: text/plain"), std::string::npos);
+    cr_assert_neq(cgi_response.find("method=GET query=name=webserv\n"),
+        std::string::npos);
+
+    int slow_fd = connect_to_loopback(port);
+    write_all(slow_fd, "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    int static_fd = connect_to_loopback(port);
+    write_all(static_fd, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::string static_response = read_response_with_timeout(static_fd, 200000);
+    cr_assert_neq(static_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    cr_assert_neq(static_response.find("static body\n"), std::string::npos);
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(cgi_fd);
+    close(slow_fd);
+    close(static_fd);
 
     cr_assert(args.result);
 }
