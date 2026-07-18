@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 21:56:00 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:39:01 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,6 +59,47 @@ std::size_t convert_string_to_size(const std::string &val)
     return 0;
 }
 
+std::size_t convert_time_to_seconds(const std::string &val)
+{
+    int64_t amount = 0;
+    std::size_t total_seconds = 0;
+    const char *cursor = val.c_str();
+    char *end;
+
+    while (1) {
+        amount = std::strtol(cursor, &end, 10);
+        if (amount < 0)
+            return 0;
+        cursor = end;
+        if (!*cursor)
+            return total_seconds + (amount / 1000);
+        if (cursor[1] && cursor[0] == 'm' && cursor[1] == 's') {
+            total_seconds += (amount / 1000);
+            cursor += 2;
+        } else {
+            switch (*cursor) {
+            case 's':
+                total_seconds += amount;
+                cursor++;
+                break;
+            case 'm':
+                total_seconds += amount * 60;
+                cursor++;
+                break;
+            case 'h':
+                total_seconds += amount * 3600;
+                cursor++;
+                break;
+            default:
+                return total_seconds;
+            }
+        }
+        if (!*end)
+            return total_seconds;
+    }
+    return 0;
+}
+
 void push_configuration(const config_node &node,
     std::map<keywords::type, std::vector<std::string> > &conf)
 {
@@ -87,9 +128,30 @@ void set_location_value(const config_node &node, Config &location_conf)
             = std::strtol(node.vals.begin()->c_str(), &p, 10);
         // TODO: handle error
         break;
+    case keywords::CGI_PASS:
+        location_conf.cgi_enabled = true;
+        location_conf.cgi_pass = *(node.vals.begin());
+        break;
+    case keywords::CGI_TIMEOUT:
+        location_conf.cgi_timeout = convert_time_to_seconds(*node.vals.begin());
+        break;
+    case keywords::CGI_OUTPUT_BUFFER_SIZE:
+        location_conf.cgi_output_buffer_size
+            = convert_string_to_size(*node.vals.begin());
+        break;
     default:
         return;
     }
+}
+
+void apply_cgi_defaults(Config &location_conf)
+{
+    if (!location_conf.cgi_enabled)
+        return;
+    if (location_conf.conf.cgi_timeout.empty())
+        location_conf.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    if (location_conf.conf.cgi_output_buffer_size.empty())
+        location_conf.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
 }
 
 void create_location(
@@ -129,6 +191,7 @@ void create_location(
             }
         }
     }
+    apply_cgi_defaults(location_conf);
 }
 
 void create_all_location(const config_node &node, Config &inital_config,
@@ -242,6 +305,10 @@ void ConfigParser::create_one_server(const config_node &node,
     inital_config.root = "/";
     inital_config.autoindex = false;
     inital_config.client_max_body_size = 0;
+    inital_config.cgi_enabled = false;
+    inital_config.cgi_pass.clear();
+    inital_config.cgi_timeout = 0;
+    inital_config.cgi_output_buffer_size = 0;
     std::memset(
         inital_config.allowed_methods, 1, sizeof(bool) * http::methods::COUNT);
 

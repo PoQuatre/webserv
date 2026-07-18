@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/17 18:35:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:33:23 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,10 +22,18 @@
 #include "config-parser-def.hpp"
 #include "http.hpp"
 
+#define DEFAULT_CGI_TIMEOUT 5
+#define DEFAULT_CGI_OUTPUT_BUFFER_SIZE                                         \
+    (static_cast<std::size_t>(8) * 1024 * 1024)
+
 struct Config {
     std::map<uint32_t, std::string> error_pages;
     std::string root;
     std::size_t client_max_body_size;
+    bool cgi_enabled;
+    std::string cgi_pass;
+    uint32_t cgi_timeout;
+    std::size_t cgi_output_buffer_size;
     bool autoindex;
     bool allowed_methods[http::methods::COUNT];
     config_webserv conf;
