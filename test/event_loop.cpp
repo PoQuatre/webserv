@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 22:43:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 22:51:50 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -199,9 +199,11 @@ static Server make_cgi_server(uint16_t port, const std::string &root,
     config.root = root;
     config.allowed_methods[http::methods::GET] = true;
     config.allowed_methods[http::methods::POST] = true;
-    config.allowed_methods[http::methods::DELETE] = allow_delete;
+    config.allowed_methods[http::methods::HEAD] = true;
+    config.allowed_methods[http::methods::DELETE] = true;
 
     cgi_config = config;
+    cgi_config.allowed_methods[http::methods::DELETE] = allow_delete;
     cgi_config.cgi_enabled = true;
     cgi_config.cgi_pass = cgi_pass;
     cgi_config.cgi_timeout = cgi_timeout;
@@ -412,6 +414,91 @@ Test(event_loop, cgi_executes_allowed_delete_method)
         kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
     cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
     close(delete_fd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, cgi_rejects_disallowed_method_without_running_script)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    std::string marker = root + "/ran-delete";
+    write_file(root + "/cgi/method.sh",
+        "printf marker > '" + marker
+            + "'\n"
+              "printf 'Content-Type: text/plain\r\n\r\n'\n"
+              "printf 'method=%s\n' \"$REQUEST_METHOD\"\n");
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(port, root));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int delete_fd = connect_to_loopback(port);
+    write_all(
+        delete_fd, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::string delete_response = read_response(delete_fd);
+    cr_assert_neq(delete_response.find("HTTP/1.1 405 Method Not Allowed"),
+        std::string::npos);
+    cr_assert_eq(access(marker.c_str(), F_OK), -1,
+        "disallowed CGI method executed script and created %s", marker.c_str());
+    cr_assert_eq(errno, ENOENT, "access() failed: %s", strerror(errno));
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(delete_fd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, cgi_head_executes_script_and_discards_response_body)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    std::string marker = root + "/ran-head";
+    write_file(root + "/cgi/head.sh",
+        "printf marker > '" + marker
+            + "'\n"
+              "printf 'Content-Type: text/plain\r\n\r\n'\n"
+              "printf 'method=%s\n' \"$REQUEST_METHOD\"\n");
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(port, root));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int head_fd = connect_to_loopback(port);
+    write_all(head_fd, "HEAD /cgi/head.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::string head_response = read_response(head_fd);
+    cr_assert_neq(head_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    cr_assert_neq(
+        head_response.find("Content-Length: 12\r\n"), std::string::npos);
+    cr_assert_eq(head_response.find("method=HEAD\n"), std::string::npos,
+        "HEAD response leaked CGI body:\n%s", head_response.c_str());
+    cr_assert_eq(access(marker.c_str(), F_OK), 0,
+        "HEAD did not execute CGI script: %s", strerror(errno));
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(head_fd);
 
     cr_assert(args.result);
 }
