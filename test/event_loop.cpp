@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 06:59:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:40:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -147,7 +147,8 @@ static void write_file(const std::string &path, const std::string &content)
     cr_assert(!out.fail(), "failed to write %s", path.c_str());
 }
 
-static Server make_cgi_server(uint16_t port, const std::string &root)
+static Server make_cgi_server(
+    uint16_t port, const std::string &root, bool allow_delete = false)
 {
     std::ostringstream listen_addr;
     Config config = { };
@@ -158,6 +159,8 @@ static Server make_cgi_server(uint16_t port, const std::string &root)
     listen_addr << "127.0.0.1:" << port;
     config.root = root;
     config.allowed_methods[http::methods::GET] = true;
+    config.allowed_methods[http::methods::POST] = true;
+    config.allowed_methods[http::methods::DELETE] = allow_delete;
 
     cgi_config = config;
     cgi_config.cgi_enabled = true;
@@ -255,6 +258,115 @@ Test(event_loop, cgi_get_executes_script_and_static_requests_still_work)
     close(cgi_fd);
     close(slow_fd);
     close(static_fd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    write_file(root + "/cgi/echo.sh",
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "body=$(dd bs=1 count=\"${CONTENT_LENGTH:-0}\" 2>/dev/null)\n"
+        "extra=$(dd bs=1 count=1 2>/dev/null)\n"
+        "printf 'method=%s\\n' \"$REQUEST_METHOD\"\n"
+        "printf 'content_length=%s\\n' \"$CONTENT_LENGTH\"\n"
+        "printf 'content_type=%s\\n' \"$CONTENT_TYPE\"\n"
+        "printf 'body=%s\\n' \"$body\"\n"
+        "if [ -z \"$extra\" ]; then printf 'stdin_eof=yes\\n'; fi\n");
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(port, root));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int post_fd = connect_to_loopback(port);
+    write_all(post_fd,
+        "POST /cgi/echo.sh HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Content-Type: application/x-www-form-urlencoded\r\n"
+        "Content-Length: 18\r\n"
+        "\r\n"
+        "alpha=one&beta=two");
+    std::string post_response = read_response(post_fd);
+    cr_assert_neq(post_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    cr_assert_neq(post_response.find("method=POST\n"), std::string::npos);
+    cr_assert_neq(post_response.find("content_length=18\n"), std::string::npos);
+    cr_assert_neq(
+        post_response.find("content_type=application/x-www-form-urlencoded\n"),
+        std::string::npos);
+    cr_assert_neq(
+        post_response.find("body=alpha=one&beta=two\n"), std::string::npos);
+    cr_assert_neq(post_response.find("stdin_eof=yes\n"), std::string::npos);
+
+    int chunked_fd = connect_to_loopback(port);
+    write_all(chunked_fd,
+        "POST /cgi/echo.sh HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: 999\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n"
+        "4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n");
+    std::string chunked_response = read_response(chunked_fd);
+    cr_assert_neq(chunked_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    cr_assert_neq(
+        chunked_response.find("content_length=9\n"), std::string::npos);
+    cr_assert_neq(
+        chunked_response.find("content_type=text/plain\n"), std::string::npos);
+    cr_assert_neq(chunked_response.find("body=Wikipedia\n"), std::string::npos);
+    cr_assert_neq(chunked_response.find("stdin_eof=yes\n"), std::string::npos);
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(post_fd);
+    close(chunked_fd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, cgi_executes_allowed_delete_method)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    std::string root = make_tmpdir();
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    write_file(root + "/cgi/method.sh",
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'method=%s\\n' \"$REQUEST_METHOD\"\n");
+
+    uint16_t port = reserve_loopback_port();
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(port, root, true));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int delete_fd = connect_to_loopback(port);
+    write_all(
+        delete_fd, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::string delete_response = read_response(delete_fd);
+    cr_assert_neq(delete_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    cr_assert_neq(delete_response.find("method=DELETE\n"), std::string::npos);
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(delete_fd);
 
     cr_assert(args.result);
 }

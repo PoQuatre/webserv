@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 07:38:28 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/18 21:23:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -212,7 +212,7 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     cfg.conf.server_name.push_back("example.test");
     cfg.conf.listen.push_back("127.0.0.1:8080");
     cgi::Process process;
-    cr_assert(cgi::start_get(req, cfg, script, process));
+    cr_assert(cgi::start_process(req, cfg, script, process));
     close(process.stdin_fd);
     std::string output = read_all(process.stdout_fd);
     close(process.stdout_fd);
@@ -232,7 +232,7 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     assert_contains(output, "SERVER_PORT=8080\n");
     assert_contains(output, "SERVER_PROTOCOL=HTTP/1.1\n");
     assert_contains(output, "SERVER_SOFTWARE=webserv\n");
-    assert_contains(output, "CONTENT_LENGTH=123\n");
+    assert_contains(output, "CONTENT_LENGTH=0\n");
     assert_contains(output, "CONTENT_TYPE=text/plain; charset=utf-8\n");
     assert_contains(output, "HTTP_ACCEPT=text/plain\n");
     assert_contains(output, "HTTP_HOST=client.example:9999\n");
