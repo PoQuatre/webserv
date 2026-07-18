@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 22:05:16 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:37:48 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -83,6 +83,9 @@ namespace keywords {
     X(SENDFILE, sendfile, 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html#sendfile", 1, 1, 1, bool_check, bool)                                                                          \
     X(TRY_FILES, try_files, 6, "https://nginx.org/en/docs/http/ngx_http_core_module.html#try_files", 0, 0, 1, string_check, std::string)                                                              \
     X(PROXY_PASS, proxy_pass, 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html#proxy_pass", 0, 0, 1, string_check, std::string)                                                           \
+    X(CGI_PASS, cgi_pass, 1, "CGI interpreter path", 0, 0, 1, string_check, std::string)                                                                                                                 \
+    X(CGI_TIMEOUT, cgi_timeout, 1, "CGI execution timeout", 0, 0, 1, time_check, uint32_t)                                                                                                              \
+    X(CGI_OUTPUT_BUFFER_SIZE, cgi_output_buffer_size, 1, "CGI output buffer size", 0, 0, 1, size_check, std::size_t)                                                                                    \
     X(AUTOINDEX, autoindex, 1, "https://nginx.org/en/docs/http/ngx_http_autoindex_module.html", 1, 1, 1, bool_check, bool)                                                                            \
     X(ABSOLUTE_REDIRECT, absolute_redirect, 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html#absolute_redirect", 1, 1, 1, bool_check, bool)                                               \
     X(AIO, aio, 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html#aio", 1, 1, 1, bool_check, bool)                                                                                         \

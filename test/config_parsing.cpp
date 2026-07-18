@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 20:16:35 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/18 05:32:27 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -249,4 +249,43 @@ Test(config_parsing, good_simple)
     path = "test/data/conf-3.conf";
     cr_assert_eq(ConfigParser::parse_config(path, servers), false);
     servers.clear();
+}
+
+Test(config_parsing, cgi_location_directives)
+{
+    std::vector<Server> servers;
+    std::string path = "test/data/conf-cgi-location.conf";
+
+    cr_assert_eq(ConfigParser::parse_config(path, servers), true);
+    cr_assert_eq(servers.size(), 1);
+
+    const Location *default_cgi = servers[0].find_location("/cgi/script.py");
+    cr_assert_not_null(default_cgi);
+    cr_assert_eq(default_cgi->config.cgi_enabled, true);
+    cr_assert_str_eq(default_cgi->config.cgi_pass.c_str(), "/usr/bin/python3");
+    cr_assert_eq(default_cgi->config.cgi_timeout, 5);
+    cr_assert_eq(default_cgi->config.cgi_output_buffer_size,
+        static_cast<std::size_t>(8) * 1024 * 1024);
+
+    const Location *explicit_cgi = servers[0].find_location("/bin/run.cgi");
+    cr_assert_not_null(explicit_cgi);
+    cr_assert_eq(explicit_cgi->config.cgi_enabled, true);
+    cr_assert_str_eq(explicit_cgi->config.cgi_pass.c_str(), "/bin/sh");
+    cr_assert_eq(explicit_cgi->config.cgi_timeout, 30);
+    cr_assert_eq(explicit_cgi->config.cgi_output_buffer_size,
+        static_cast<std::size_t>(4) * 1024 * 1024);
+
+    const Location *static_loc = servers[0].find_location("/static/file.txt");
+    cr_assert_not_null(static_loc);
+    cr_assert_eq(static_loc->config.cgi_enabled, false);
+    cr_assert_eq(static_loc->config.cgi_pass.empty(), true);
+    cr_assert_str_eq(static_loc->config.root.c_str(), "/srv/static");
+}
+
+Test(config_parsing, cgi_directives_reject_non_location_scope)
+{
+    std::vector<Server> servers;
+    std::string path = "test/data/conf-cgi-invalid-scope.conf";
+
+    cr_assert_eq(ConfigParser::parse_config(path, servers), false);
 }
