@@ -6,13 +6,14 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 03:17:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "cgi.hpp"
 
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -267,6 +268,28 @@ std::string number_string(std::size_t value)
     return ss.str();
 }
 
+std::string directory_name(const std::string &path)
+{
+    std::size_t slash = path.rfind('/');
+
+    if (slash == std::string::npos)
+        return ".";
+    if (slash == 0)
+        return "/";
+    return path.substr(0, slash);
+}
+
+std::string path_from_current_directory(const std::string &path)
+{
+    char cwd[PATH_MAX];
+
+    if (path.empty() || path[0] == '/')
+        return path;
+    if (getcwd(cwd, sizeof(cwd)) == NULL)
+        return "";
+    return std::string(cwd) + "/" + path;
+}
+
 void add_env(std::vector<std::string> &env, const std::string &name,
     const std::string &value)
 {
@@ -438,12 +461,18 @@ void child_exec_cgi(const http::request &req, const Config &cfg,
     close(stdin_pipe[0]);
     close(stdout_pipe[1]);
     (void)signal(SIGPIPE, SIG_DFL);
+    std::string interpreter_path = path_from_current_directory(cfg.cgi_pass);
+    std::string script_filename = path_from_current_directory(script_path);
+    if (interpreter_path.empty() || script_filename.empty())
+        _exit(127);
+    if (chdir(directory_name(script_filename).c_str()) == -1)
+        _exit(127);
     std::vector<std::string> env_values
-        = make_cgi_environment(req, cfg, script_path);
+        = make_cgi_environment(req, cfg, script_filename);
     std::vector<char *> envp = make_envp(env_values);
     char *argv[] = { const_cast<char *>(cfg.cgi_pass.c_str()),
-        const_cast<char *>(script_path.c_str()), NULL };
-    execve(cfg.cgi_pass.c_str(), argv, &envp[0]);
+        const_cast<char *>(script_filename.c_str()), NULL };
+    execve(interpreter_path.c_str(), argv, &envp[0]);
     _exit(127);
 }
 
