@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 21:58:46 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 03:17:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -274,6 +274,80 @@ Test(cgi_process,
 
     cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
     assert_contains(output, "script-ran\n");
+}
+
+Test(cgi_process, runs_script_from_script_directory)
+{
+    std::string root = make_tmpdir();
+    std::string script = root + "/read-neighbor.sh";
+    write_file(root + "/data.txt", "neighbor-data\n");
+    write_file(script,
+        "printf 'Content-Type: text/plain\r\n\r\n'\n"
+        "cat data.txt\n");
+    cr_assert_eq(
+        chmod(script.c_str(), 0600), 0, "chmod() failed: %s", strerror(errno));
+
+    http::request req = make_req(http::methods::GET);
+    req.uri = "/cgi/read-neighbor.sh";
+    Config cfg = { };
+    cfg.cgi_pass = "/bin/sh";
+    cgi::Process process;
+    cr_assert_eq(
+        cgi::start_process(req, cfg, script, process), cgi::start::STARTED);
+    close(process.stdin_fd);
+    std::string output = read_all(process.stdout_fd);
+    close(process.stdout_fd);
+    int status = 0;
+    cr_assert_eq(waitpid(process.pid, &status, 0), process.pid,
+        "waitpid() failed: %s", strerror(errno));
+
+    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    assert_contains(output, "neighbor-data\n");
+}
+
+Test(cgi_process, resolves_relative_interpreter_before_script_chdir)
+{
+    char original_cwd[4096];
+    std::string root = make_tmpdir();
+    std::string script_dir = root + "/cgi-bin";
+    std::string script_rel = "cgi-bin/read-neighbor.sh";
+    std::string script = script_dir + "/read-neighbor.sh";
+
+    cr_assert_not_null(getcwd(original_cwd, sizeof(original_cwd)),
+        "getcwd() failed: %s", strerror(errno));
+    cr_assert_eq(mkdir(script_dir.c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    cr_assert_eq(symlink("/bin/sh", (root + "/sh").c_str()), 0,
+        "symlink() failed: %s", strerror(errno));
+    write_file(script_dir + "/data.txt", "relative-interpreter\n");
+    write_file(script,
+        "printf 'Content-Type: text/plain\r\n\r\n'\n"
+        "printf 'SCRIPT_FILENAME=%s\n' \"$SCRIPT_FILENAME\"\n"
+        "cat data.txt\n");
+    cr_assert_eq(
+        chmod(script.c_str(), 0600), 0, "chmod() failed: %s", strerror(errno));
+
+    http::request req = make_req(http::methods::GET);
+    req.uri = "/cgi/read-neighbor.sh";
+    Config cfg = { };
+    cfg.cgi_pass = "./sh";
+    cgi::Process process;
+    cr_assert_eq(chdir(root.c_str()), 0, "chdir() failed: %s", strerror(errno));
+    cgi::start::result result
+        = cgi::start_process(req, cfg, script_rel, process);
+    cr_assert_eq(
+        chdir(original_cwd), 0, "chdir() restore failed: %s", strerror(errno));
+    cr_assert_eq(result, cgi::start::STARTED);
+    close(process.stdin_fd);
+    std::string output = read_all(process.stdout_fd);
+    close(process.stdout_fd);
+    int status = 0;
+    cr_assert_eq(waitpid(process.pid, &status, 0), process.pid,
+        "waitpid() failed: %s", strerror(errno));
+
+    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    assert_contains(output, ("SCRIPT_FILENAME=" + script + "\n").c_str());
+    assert_contains(output, "relative-interpreter\n");
 }
 
 Test(cgi_process, rejects_missing_interpreter_path)
