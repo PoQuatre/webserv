@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 23:04:15 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 04:23:09 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -165,6 +165,15 @@ static std::string make_tmpdir()
     return dir;
 }
 
+static std::string make_cgi_root()
+{
+    std::string root = make_tmpdir();
+
+    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
+        strerror(errno));
+    return root;
+}
+
 static void write_file(const std::string &path, const std::string &content)
 {
     std::ofstream out(path.c_str(), std::ios::binary);
@@ -241,6 +250,127 @@ static Server make_cgi_server(uint16_t port, const std::string &root,
     return Server(locations, "test", listen_addr.str(), config);
 }
 
+struct CgiHarnessOptions {
+    CgiHarnessOptions()
+        : allow_delete(false)
+        , cgi_pass("/bin/sh")
+        , cgi_timeout(DEFAULT_CGI_TIMEOUT)
+        , cgi_output_buffer_size(DEFAULT_CGI_OUTPUT_BUFFER_SIZE)
+    {
+    }
+
+    bool allow_delete;
+    std::string cgi_pass;
+    uint32_t cgi_timeout;
+    std::size_t cgi_output_buffer_size;
+};
+
+struct CgiHarness {
+    CgiHarness()
+        : root(make_cgi_root())
+        , port(0)
+        , loop(NULL)
+        , running(false)
+    {
+        args.loop = NULL;
+        args.result = false;
+    }
+    ~CgiHarness();
+
+    std::string root;
+    uint16_t port;
+    std::vector<Server> servers;
+    EventLoop *loop;
+    LoopThreadArgs args;
+    pthread_t thread;
+    bool running;
+    CgiHarnessOptions options;
+};
+
+static void start_cgi_harness(CgiHarness &harness)
+{
+    cr_assert(!harness.running, "CGI harness is already running");
+    harness.port = reserve_loopback_port();
+    harness.servers.push_back(make_cgi_server(harness.port, harness.root,
+        harness.options.allow_delete, harness.options.cgi_pass,
+        harness.options.cgi_timeout, harness.options.cgi_output_buffer_size));
+    harness.loop = new EventLoop(harness.servers);
+    harness.args.loop = harness.loop;
+    harness.args.result = false;
+    cr_assert_eq(
+        pthread_create(&harness.thread, NULL, &run_loop, &harness.args), 0,
+        "pthread_create() failed");
+    harness.running = true;
+}
+
+static void ensure_cgi_harness_started(CgiHarness &harness)
+{
+    if (!harness.running)
+        start_cgi_harness(harness);
+}
+
+static uint16_t cgi_harness_port(CgiHarness &harness)
+{
+    ensure_cgi_harness_started(harness);
+    return harness.port;
+}
+
+static void stop_cgi_harness(CgiHarness &harness)
+{
+    if (!harness.running)
+        return;
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(
+        pthread_join(harness.thread, NULL), 0, "pthread_join() failed");
+    cr_assert(harness.args.result);
+    delete harness.loop;
+    harness.loop = NULL;
+    harness.args.loop = NULL;
+    harness.running = false;
+}
+
+CgiHarness::~CgiHarness() { stop_cgi_harness(*this); }
+
+static int send_request(CgiHarness &harness, const std::string &request)
+{
+    ensure_cgi_harness_started(harness);
+    int fd = connect_to_loopback(harness.port);
+
+    write_all(fd, request);
+    return fd;
+}
+
+static std::string perform_request(
+    CgiHarness &harness, const std::string &request)
+{
+    int fd = send_request(harness, request);
+    std::string response = read_response(fd);
+
+    close(fd);
+    return response;
+}
+
+static std::string perform_request_until_idle(
+    CgiHarness &harness, const std::string &request)
+{
+    int fd = send_request(harness, request);
+    std::string response = read_response_until_idle(fd);
+
+    close(fd);
+    return response;
+}
+
+static std::string perform_request_with_timeout(
+    CgiHarness &harness, const std::string &request, long usec)
+{
+    int fd = send_request(harness, request);
+    std::string response = read_response_with_timeout(fd, usec);
+
+    close(fd);
+    return response;
+}
+
 static void assert_status(const std::string &response, const char *status)
 {
     cr_assert_neq(response.find(status), std::string::npos,
@@ -285,62 +415,38 @@ Test(event_loop, cgi_get_executes_script_and_static_requests_still_work)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/hello.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/hello.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'method=%s query=%s\\n' \"$REQUEST_METHOD\" "
         "\"$QUERY_STRING\"\n");
-    write_file(root + "/cgi/slow.sh", "sleep 1\nprintf 'slow\\n'\n");
-    write_file(root + "/static.txt", "static body\n");
+    write_file(harness.root + "/cgi/slow.sh", "sleep 1\nprintf 'slow\\n'\n");
+    write_file(harness.root + "/static.txt", "static body\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int cgi_fd = connect_to_loopback(port);
-    write_all(cgi_fd,
+    std::string cgi_response = perform_request(harness,
         "GET /cgi/hello.sh?name=webserv HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string cgi_response = read_response(cgi_fd);
-    cr_assert_neq(cgi_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    assert_status(cgi_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         cgi_response.find("Content-Type: text/plain"), std::string::npos);
     cr_assert_neq(cgi_response.find("method=GET query=name=webserv\n"),
         std::string::npos);
 
-    int slow_fd = connect_to_loopback(port);
-    write_all(slow_fd, "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    int static_fd = connect_to_loopback(port);
-    write_all(static_fd, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string static_response = read_response_with_timeout(static_fd, 200000);
-    cr_assert_neq(static_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    int slow_fd = send_request(
+        harness, "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::string static_response = perform_request_with_timeout(
+        harness, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n", 200000);
+    assert_status(static_response, "HTTP/1.1 200 OK");
     cr_assert_neq(static_response.find("static body\n"), std::string::npos);
 
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(cgi_fd);
     close(slow_fd);
-    close(static_fd);
-
-    cr_assert(args.result);
 }
 
 Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/echo.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/echo.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "body=$(dd bs=1 count=\"${CONTENT_LENGTH:-0}\" 2>/dev/null)\n"
         "extra=$(dd bs=1 count=1 2>/dev/null)\n"
@@ -350,26 +456,14 @@ Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
         "printf 'body=%s\\n' \"$body\"\n"
         "if [ -z \"$extra\" ]; then printf 'stdin_eof=yes\\n'; fi\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int post_fd = connect_to_loopback(port);
-    write_all(post_fd,
+    std::string post_response = perform_request(harness,
         "POST /cgi/echo.sh HTTP/1.1\r\n"
         "Host: localhost\r\n"
         "Content-Type: application/x-www-form-urlencoded\r\n"
         "Content-Length: 18\r\n"
         "\r\n"
         "alpha=one&beta=two");
-    std::string post_response = read_response(post_fd);
-    cr_assert_neq(post_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    assert_status(post_response, "HTTP/1.1 200 OK");
     cr_assert_neq(post_response.find("method=POST\n"), std::string::npos);
     cr_assert_neq(post_response.find("content_length=18\n"), std::string::npos);
     cr_assert_neq(
@@ -379,8 +473,7 @@ Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
         post_response.find("body=alpha=one&beta=two\n"), std::string::npos);
     cr_assert_neq(post_response.find("stdin_eof=yes\n"), std::string::npos);
 
-    int chunked_fd = connect_to_loopback(port);
-    write_all(chunked_fd,
+    std::string chunked_response = perform_request(harness,
         "POST /cgi/echo.sh HTTP/1.1\r\n"
         "Host: localhost\r\n"
         "Content-Type: text/plain\r\n"
@@ -388,32 +481,21 @@ Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
         "Transfer-Encoding: chunked\r\n"
         "\r\n"
         "4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n");
-    std::string chunked_response = read_response(chunked_fd);
-    cr_assert_neq(chunked_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    assert_status(chunked_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         chunked_response.find("content_length=9\n"), std::string::npos);
     cr_assert_neq(
         chunked_response.find("content_type=text/plain\n"), std::string::npos);
     cr_assert_neq(chunked_response.find("body=Wikipedia\n"), std::string::npos);
     cr_assert_neq(chunked_response.find("stdin_eof=yes\n"), std::string::npos);
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(post_fd);
-    close(chunked_fd);
-
-    cr_assert(args.result);
 }
 
 Test(event_loop, cgi_exposes_raw_query_meta_variables_and_http_headers)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/env.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/env.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'REQUEST_METHOD=%s\\n' \"$REQUEST_METHOD\"\n"
         "printf 'QUERY_STRING=%s\\n' \"$QUERY_STRING\"\n"
@@ -429,40 +511,29 @@ Test(event_loop, cgi_exposes_raw_query_meta_variables_and_http_headers)
         "printf 'HTTP_HOST=%s\\n' \"$HTTP_HOST\"\n"
         "printf 'HTTP_X_CUSTOM_HEADER=%s\\n' \"$HTTP_X_CUSTOM_HEADER\"\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
     std::ostringstream request;
     request << "GET /cgi/env.sh?raw=a%2Bb+c HTTP/1.1\r\n"
-            << "Host: example.test:" << port << "\r\n"
+            << "Host: example.test:" << cgi_harness_port(harness) << "\r\n"
             << "Accept: text/plain\r\n"
             << "Content-Type: text/plain\r\n"
             << "Content-Length: 0\r\n"
             << "X-Custom-Header: kept\r\n"
             << "\r\n";
-    int clientfd = connect_to_loopback(port);
-    write_all(clientfd, request.str());
-    std::string response = read_response_until_idle(clientfd);
-    cr_assert_neq(response.find("HTTP/1.1 200 OK"), std::string::npos);
+    std::string response = perform_request_until_idle(harness, request.str());
+    assert_status(response, "HTTP/1.1 200 OK");
     cr_assert_neq(response.find("REQUEST_METHOD=GET\n"), std::string::npos);
     cr_assert_neq(
         response.find("QUERY_STRING=raw=a%2Bb+c\n"), std::string::npos);
     cr_assert_neq(
         response.find("SCRIPT_NAME=/cgi/env.sh\n"), std::string::npos);
-    std::string script_filename = "SCRIPT_FILENAME=" + root + "/cgi/env.sh\n";
+    std::string script_filename
+        = "SCRIPT_FILENAME=" + harness.root + "/cgi/env.sh\n";
     cr_assert_neq(response.find(script_filename), std::string::npos);
     cr_assert_neq(response.find("REMOTE_ADDR=127.0.0.1\n"), std::string::npos);
     cr_assert_neq(
         response.find("SERVER_NAME=example.test\n"), std::string::npos);
     std::ostringstream server_port;
-    server_port << "SERVER_PORT=" << port << "\n";
+    server_port << "SERVER_PORT=" << harness.port << "\n";
     cr_assert_neq(response.find(server_port.str()), std::string::npos);
     cr_assert_neq(
         response.find("SERVER_PROTOCOL=HTTP/1.1\n"), std::string::npos);
@@ -471,396 +542,203 @@ Test(event_loop, cgi_exposes_raw_query_meta_variables_and_http_headers)
         response.find("CONTENT_TYPE=text/plain\n"), std::string::npos);
     cr_assert_neq(response.find("HTTP_ACCEPT=text/plain\n"), std::string::npos);
     std::ostringstream http_host;
-    http_host << "HTTP_HOST=example.test:" << port << "\n";
+    http_host << "HTTP_HOST=example.test:" << harness.port << "\n";
     cr_assert_neq(response.find(http_host.str()), std::string::npos);
     cr_assert_neq(
         response.find("HTTP_X_CUSTOM_HEADER=kept\n"), std::string::npos);
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(clientfd);
-
-    cr_assert(args.result);
 }
 
 Test(event_loop, cgi_response_modes_cover_redirect_nph_and_body_only)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/redirect.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/redirect.sh",
         "printf 'Location: /elsewhere\\r\\n\\r\\n'\n");
-    write_file(root + "/cgi/nph-output.sh",
+    write_file(harness.root + "/cgi/nph-output.sh",
         "printf 'HTTP/1.1 204 No Content\\r\\nX-NPH: yes\\r\\n\\r\\n'\n");
-    write_file(root + "/cgi/body-only.sh", "printf 'body-only\\n'\n");
+    write_file(harness.root + "/cgi/body-only.sh", "printf 'body-only\\n'\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int redirect_fd = connect_to_loopback(port);
-    write_all(redirect_fd,
-        "GET /cgi/redirect.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string redirect_response = read_response_until_idle(redirect_fd);
-    cr_assert_neq(redirect_response.find("HTTP/1.1 302 Moved Temporarily"),
-        std::string::npos);
+    std::string redirect_response = perform_request_until_idle(
+        harness, "GET /cgi/redirect.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(redirect_response, "HTTP/1.1 302 Moved Temporarily");
     cr_assert_neq(
         redirect_response.find("Location: /elsewhere\r\n"), std::string::npos);
 
-    int nph_fd = connect_to_loopback(port);
-    write_all(
-        nph_fd, "GET /cgi/nph-output.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string nph_response = read_response_until_idle(nph_fd);
+    std::string nph_response = perform_request_until_idle(
+        harness, "GET /cgi/nph-output.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
     cr_assert_eq(
         nph_response.find("HTTP/1.1 204 No Content\r\n"), std::size_t(0));
     cr_assert_neq(nph_response.find("X-NPH: yes\r\n"), std::string::npos);
     cr_assert_eq(nph_response.find("Content-Length:"), std::string::npos);
 
-    int body_fd = connect_to_loopback(port);
-    write_all(
-        body_fd, "GET /cgi/body-only.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string body_response = read_response_until_idle(body_fd);
-    cr_assert_neq(body_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    std::string body_response = perform_request_until_idle(
+        harness, "GET /cgi/body-only.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(body_response, "HTTP/1.1 200 OK");
     cr_assert_neq(body_response.find("body-only\n"), std::string::npos);
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(redirect_fd);
-    close(nph_fd);
-    close(body_fd);
-
-    cr_assert(args.result);
 }
 
 Test(event_loop, cgi_executes_allowed_delete_method)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/method.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/method.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'method=%s\\n' \"$REQUEST_METHOD\"\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root, true));
+    harness.options.allow_delete = true;
 
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int delete_fd = connect_to_loopback(port);
-    write_all(
-        delete_fd, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string delete_response = read_response(delete_fd);
-    cr_assert_neq(delete_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    std::string delete_response = perform_request(
+        harness, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(delete_response, "HTTP/1.1 200 OK");
     cr_assert_neq(delete_response.find("method=DELETE\n"), std::string::npos);
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(delete_fd);
-
-    cr_assert(args.result);
 }
 
 Test(event_loop, cgi_rejects_disallowed_method_without_running_script)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    std::string marker = root + "/ran-delete";
-    write_file(root + "/cgi/method.sh",
+    CgiHarness harness;
+    std::string marker = harness.root + "/ran-delete";
+    write_file(harness.root + "/cgi/method.sh",
         "printf marker > '" + marker
             + "'\n"
               "printf 'Content-Type: text/plain\r\n\r\n'\n"
               "printf 'method=%s\n' \"$REQUEST_METHOD\"\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int delete_fd = connect_to_loopback(port);
-    write_all(
-        delete_fd, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string delete_response = read_response(delete_fd);
-    cr_assert_neq(delete_response.find("HTTP/1.1 405 Method Not Allowed"),
-        std::string::npos);
+    std::string delete_response = perform_request(
+        harness, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(delete_response, "HTTP/1.1 405 Method Not Allowed");
     cr_assert_eq(access(marker.c_str(), F_OK), -1,
         "disallowed CGI method executed script and created %s", marker.c_str());
     cr_assert_eq(errno, ENOENT, "access() failed: %s", strerror(errno));
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(delete_fd);
-
-    cr_assert(args.result);
 }
 
 Test(event_loop, cgi_head_executes_script_and_discards_response_body)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    std::string marker = root + "/ran-head";
-    write_file(root + "/cgi/head.sh",
+    CgiHarness harness;
+    std::string marker = harness.root + "/ran-head";
+    write_file(harness.root + "/cgi/head.sh",
         "printf marker > '" + marker
             + "'\n"
               "printf 'Content-Type: text/plain\r\n\r\n'\n"
               "printf 'method=%s\n' \"$REQUEST_METHOD\"\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int head_fd = connect_to_loopback(port);
-    write_all(head_fd, "HEAD /cgi/head.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string head_response = read_response(head_fd);
-    cr_assert_neq(head_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    std::string head_response = perform_request(
+        harness, "HEAD /cgi/head.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(head_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         head_response.find("Content-Length: 12\r\n"), std::string::npos);
     cr_assert_eq(head_response.find("method=HEAD\n"), std::string::npos,
         "HEAD response leaked CGI body:\n%s", head_response.c_str());
     cr_assert_eq(access(marker.c_str(), F_OK), 0,
         "HEAD did not execute CGI script: %s", strerror(errno));
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(head_fd);
-
-    cr_assert(args.result);
 }
 
 Test(event_loop, cgi_script_path_errors_map_to_http_statuses)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/unreadable.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/unreadable.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\nnope\\n'\n");
-    cr_assert_eq(chmod((root + "/cgi/unreadable.sh").c_str(), 0000), 0,
+    cr_assert_eq(chmod((harness.root + "/cgi/unreadable.sh").c_str(), 0000), 0,
         "chmod() failed: %s", strerror(errno));
-    cr_assert_eq(mkdir((root + "/cgi/directory").c_str(), 0700), 0,
+    cr_assert_eq(mkdir((harness.root + "/cgi/directory").c_str(), 0700), 0,
         "mkdir() failed: %s", strerror(errno));
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int missing_fd = connect_to_loopback(port);
-    write_all(
-        missing_fd, "GET /cgi/missing.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(read_response(missing_fd), "HTTP/1.1 404 Not Found");
-
-    int unreadable_fd = connect_to_loopback(port);
-    write_all(unreadable_fd,
-        "GET /cgi/unreadable.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(read_response(unreadable_fd), "HTTP/1.1 403 Forbidden");
-
-    int directory_fd = connect_to_loopback(port);
-    write_all(
-        directory_fd, "GET /cgi/directory HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(read_response(directory_fd), "HTTP/1.1 403 Forbidden");
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(missing_fd);
-    close(unreadable_fd);
-    close(directory_fd);
-
-    cr_assert(args.result);
+    assert_status(
+        perform_request(
+            harness, "GET /cgi/missing.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+        "HTTP/1.1 404 Not Found");
+    assert_status(
+        perform_request(harness,
+            "GET /cgi/unreadable.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+        "HTTP/1.1 403 Forbidden");
+    assert_status(perform_request(harness,
+                      "GET /cgi/directory HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+        "HTTP/1.1 403 Forbidden");
 }
 
 Test(event_loop, cgi_invalid_interpreter_maps_to_bad_gateway)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/hello.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/hello.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\nhello\\n'\n");
-    write_file(root + "/not-executable", "not an interpreter\n");
-    cr_assert_eq(chmod((root + "/not-executable").c_str(), 0600), 0,
+    write_file(harness.root + "/not-executable", "not an interpreter\n");
+    cr_assert_eq(chmod((harness.root + "/not-executable").c_str(), 0600), 0,
         "chmod() failed: %s", strerror(errno));
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(
-        make_cgi_server(port, root, false, root + "/not-executable"));
+    harness.options.cgi_pass = harness.root + "/not-executable";
 
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int clientfd = connect_to_loopback(port);
-    write_all(
-        clientfd, "GET /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(read_response(clientfd), "HTTP/1.1 502 Bad Gateway");
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(clientfd);
-
-    cr_assert(args.result);
+    assert_status(perform_request(harness,
+                      "GET /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+        "HTTP/1.1 502 Bad Gateway");
 }
 
 Test(event_loop, cgi_timeout_returns_gateway_timeout)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/slow.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/slow.sh",
         "sleep 5\n"
         "printf 'Content-Type: text/plain\\r\\n\\r\\nlate\\n'\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root, false, "/bin/sh", 1));
+    harness.options.cgi_timeout = 1;
 
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int clientfd = connect_to_loopback(port);
-    write_all(clientfd, "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(read_response(clientfd), "HTTP/1.1 504 Gateway Timeout");
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(clientfd);
-
-    cr_assert(args.result);
+    assert_status(perform_request(harness,
+                      "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+        "HTTP/1.1 504 Gateway Timeout");
 }
 
 Test(event_loop, cgi_output_cap_returns_bad_gateway)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    write_file(root + "/cgi/large.sh",
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/large.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'this output is too large for the configured cap\\n'\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(
-        make_cgi_server(port, root, false, "/bin/sh", DEFAULT_CGI_TIMEOUT, 32));
+    harness.options.cgi_output_buffer_size = 32;
 
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int clientfd = connect_to_loopback(port);
-    write_all(
-        clientfd, "GET /cgi/large.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(read_response(clientfd), "HTTP/1.1 502 Bad Gateway");
-
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(clientfd);
-
-    cr_assert(args.result);
+    assert_status(perform_request(harness,
+                      "GET /cgi/large.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+        "HTTP/1.1 502 Bad Gateway");
 }
 
 Test(event_loop, disconnect_while_cgi_runs_cleans_up_child_and_keeps_clients)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    std::string root = make_tmpdir();
-    cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
-    std::string pidfile = root + "/cgi.pid";
-    write_file(root + "/cgi/linger.sh",
+    CgiHarness harness;
+    std::string pidfile = harness.root + "/cgi.pid";
+    write_file(harness.root + "/cgi/linger.sh",
         "printf '%s\\n' \"$$\" > '" + pidfile
             + "'\n"
               "printf 'Content-Type: text/plain\\r\\n\\r\\npartial output\\n'\n"
               "while :; do :; done\n");
-    write_file(root + "/static.txt", "static still works\n");
+    write_file(harness.root + "/static.txt", "static still works\n");
 
-    uint16_t port = reserve_loopback_port();
-    std::vector<Server> servers;
-    servers.push_back(make_cgi_server(port, root));
-
-    EventLoop loop(servers);
-    LoopThreadArgs args = { &loop, false };
-    pthread_t thread;
-    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
-        "pthread_create() failed");
-
-    int cgi_fd = connect_to_loopback(port);
-    write_all(cgi_fd, "GET /cgi/linger.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    int cgi_fd = send_request(
+        harness, "GET /cgi/linger.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
     pid_t cgi_pid = wait_for_pid_file(pidfile);
 
-    int static_fd = connect_to_loopback(port);
+    int static_fd = connect_to_loopback(harness.port);
     close(cgi_fd);
     write_all(static_fd, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n");
-
     std::string static_response = read_response(static_fd);
-    cr_assert_neq(static_response.find("HTTP/1.1 200 OK"), std::string::npos);
+    close(static_fd);
+    assert_status(static_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         static_response.find("static still works\n"), std::string::npos);
     bool cgi_gone = wait_process_gone(cgi_pid);
 
-    cr_assert_eq(
-        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
-    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
-    close(static_fd);
-
-    cr_assert(args.result);
     cr_assert(cgi_gone, "process %ld still exists", static_cast<long>(cgi_pid));
 }
