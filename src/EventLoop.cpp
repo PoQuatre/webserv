@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 22:43:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 03:29:09 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -653,7 +653,6 @@ void EventLoop::finish_cgi_job(int32_t fd)
         conn_it->second.enqueue_response(
             cgi::translate_output(job.output, job.request));
     }
-    conn_it->second.on_writable();
     update_source_events(job.clientfd, EPOLL_WRONLY);
 }
 
