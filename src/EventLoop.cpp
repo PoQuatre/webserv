@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/19 03:29:09 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 03:36:43 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -76,6 +76,16 @@ bool terminate_child(pid_t pid, int options)
         return true;
     kill(pid, SIGKILL);
     return reap_child(pid, options);
+}
+
+pid_t wait_child_status(pid_t pid, int *status, int options)
+{
+    while (true) {
+        pid_t waited = waitpid(pid, status, options);
+
+        if (waited != -1 || errno != EINTR)
+            return waited;
+    }
 }
 
 uint64_t monotonic_millis()
@@ -324,13 +334,11 @@ void EventLoop::cleanup()
             remove_source(it->second.stdin_fd);
             close(it->second.stdin_fd);
         }
-        terminate_child(it->second.pid, 0);
+        terminate_child_nonblocking(it->second.pid);
     }
     _cgi_jobs.clear();
 
-    for (std::vector<pid_t>::iterator it = _pending_reaps.begin();
-        it != _pending_reaps.end(); ++it)
-        reap_child(*it, 0);
+    reap_pending_children();
     _pending_reaps.clear();
 
     for (std::map<int32_t, Connection>::iterator it = _connections.begin();
@@ -496,7 +504,7 @@ bool EventLoop::start_cgi_request(
         remove_source(process.stdin_fd);
         close(process.stdin_fd);
         close(process.stdout_fd);
-        terminate_child(process.pid, WNOHANG);
+        terminate_child_nonblocking(process.pid);
         return false;
     }
     conn.wait_for_cgi();
@@ -596,6 +604,21 @@ void EventLoop::reap_pending_children()
     }
 }
 
+void EventLoop::reap_child_later(pid_t pid)
+{
+    if (pid <= 0)
+        return;
+    if (std::find(_pending_reaps.begin(), _pending_reaps.end(), pid)
+        == _pending_reaps.end())
+        _pending_reaps.push_back(pid);
+}
+
+void EventLoop::terminate_child_nonblocking(pid_t pid)
+{
+    if (!terminate_child(pid, WNOHANG))
+        reap_child_later(pid);
+}
+
 void EventLoop::expire_cgi_jobs()
 {
     uint64_t now = monotonic_millis();
@@ -633,12 +656,12 @@ void EventLoop::finish_cgi_job(int32_t fd)
     }
 
     int status = 0;
-    pid_t waited = waitpid(job.pid, &status, WNOHANG);
-    bool child_ok = waited != -1;
+    pid_t waited = wait_child_status(job.pid, &status, WNOHANG);
+    bool child_ok = waited != -1 || errno == ECHILD;
     if (waited == job.pid)
         child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     else if (waited == 0)
-        terminate_child(job.pid, 0);
+        terminate_child_nonblocking(job.pid);
     std::map<int32_t, Connection>::iterator conn_it
         = _connections.find(job.clientfd);
     if (conn_it == _connections.end())
@@ -672,8 +695,7 @@ void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
                 remove_source(stdin_fd);
                 close(stdin_fd);
             }
-            if (!terminate_child(pid, WNOHANG))
-                _pending_reaps.push_back(pid);
+            terminate_child_nonblocking(pid);
         } else {
             ++it;
         }

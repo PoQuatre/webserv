@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/19 03:17:58 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 03:36:43 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -476,14 +476,6 @@ void child_exec_cgi(const http::request &req, const Config &cfg,
     _exit(127);
 }
 
-void kill_child(pid_t pid)
-{
-    if (pid <= 0)
-        return;
-    kill(pid, SIGKILL);
-    waitpid(pid, NULL, 0);
-}
-
 bool parse_nph_status_line(const std::string &line)
 {
     std::size_t first_space = line.find(' ');
@@ -592,6 +584,14 @@ cgi::start::result cgi::start_process(const http::request &req,
         close_if_open(stdin_pipe[1]);
         return cgi::start::BAD_GATEWAY;
     }
+    if (!set_nonblock_cloexec(stdin_pipe[1])
+        || !set_nonblock_cloexec(stdout_pipe[0])) {
+        close_if_open(stdin_pipe[0]);
+        close_if_open(stdin_pipe[1]);
+        close_if_open(stdout_pipe[0]);
+        close_if_open(stdout_pipe[1]);
+        return cgi::start::BAD_GATEWAY;
+    }
 
     process.pid = fork();
     if (process.pid == -1) {
@@ -606,14 +606,6 @@ cgi::start::result cgi::start_process(const http::request &req,
 
     close_if_open(stdin_pipe[0]);
     close_if_open(stdout_pipe[1]);
-    if (!set_nonblock_cloexec(stdin_pipe[1])
-        || !set_nonblock_cloexec(stdout_pipe[0])) {
-        close_if_open(stdin_pipe[1]);
-        close_if_open(stdout_pipe[0]);
-        kill_child(process.pid);
-        process.pid = -1;
-        return cgi::start::BAD_GATEWAY;
-    }
     process.stdin_fd = stdin_pipe[1];
     process.stdout_fd = stdout_pipe[0];
     return cgi::start::STARTED;
