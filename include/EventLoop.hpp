@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/19 03:36:43 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 03:56:11 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -78,6 +78,16 @@ private:
         bool failed;
     };
 
+    enum CgiCleanupAction { CGI_CLEANUP_COMPLETE, CGI_CLEANUP_ABORT };
+
+    struct CgiCleanupResult {
+        CgiCleanupResult();
+
+        CgiJob job;
+        bool child_ok;
+        bool found;
+    };
+
     bool add_source(int32_t fd, uint32_t events, const EventSource &source);
     bool update_source_events(int32_t fd, uint32_t events) const;
     void remove_source(int32_t fd);
@@ -94,6 +104,9 @@ private:
     void reap_pending_children();
     void reap_child_later(pid_t pid);
     void terminate_child_nonblocking(pid_t pid);
+    void close_cgi_fd(int32_t &fd);
+    CgiCleanupResult cleanup_cgi_job(
+        std::map<int32_t, CgiJob>::iterator job_it, CgiCleanupAction action);
     void dispatch_pending(int32_t fd, uint32_t events, Connection &conn);
     bool start_cgi_request(
         int32_t clientfd, Connection &conn, http::status::type &error_status);
