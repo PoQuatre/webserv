@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/19 03:36:43 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/19 03:57:56 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -179,6 +179,12 @@ EventLoop::CgiJob::CgiJob(int32_t cgi_clientfd, pid_t cgi_pid,
 {
 }
 
+EventLoop::CgiCleanupResult::CgiCleanupResult()
+    : child_ok(true)
+    , found(false)
+{
+}
+
 bool EventLoop::run()
 {
     if (!setup()) {
@@ -326,17 +332,8 @@ void EventLoop::remove_source(int32_t fd)
 
 void EventLoop::cleanup()
 {
-    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
-        it != _cgi_jobs.end(); ++it) {
-        remove_source(it->first);
-        close(it->first);
-        if (it->second.stdin_fd != -1) {
-            remove_source(it->second.stdin_fd);
-            close(it->second.stdin_fd);
-        }
-        terminate_child_nonblocking(it->second.pid);
-    }
-    _cgi_jobs.clear();
+    while (!_cgi_jobs.empty())
+        cleanup_cgi_job(_cgi_jobs.begin(), CGI_CLEANUP_ABORT);
 
     reap_pending_children();
     _pending_reaps.clear();
@@ -499,12 +496,7 @@ bool EventLoop::start_cgi_request(
             EventSource(EventSource::SOURCE_CGI_STDOUT, clientfd))
         || !add_source(process.stdin_fd, EPOLL_WRONLY,
             EventSource(EventSource::SOURCE_CGI_STDIN, clientfd))) {
-        _cgi_jobs.erase(process.stdout_fd);
-        remove_source(process.stdout_fd);
-        remove_source(process.stdin_fd);
-        close(process.stdin_fd);
-        close(process.stdout_fd);
-        terminate_child_nonblocking(process.pid);
+        cleanup_cgi_job(_cgi_jobs.find(process.stdout_fd), CGI_CLEANUP_ABORT);
         return false;
     }
     conn.wait_for_cgi();
@@ -532,9 +524,7 @@ void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
             }
             if (job.body_written < body.size() && !job.failed)
                 return;
-            remove_source(fd);
-            close(fd);
-            job.stdin_fd = -1;
+            close_cgi_fd(job.stdin_fd);
             return;
         }
     }
@@ -619,6 +609,51 @@ void EventLoop::terminate_child_nonblocking(pid_t pid)
         reap_child_later(pid);
 }
 
+void EventLoop::close_cgi_fd(int32_t &fd)
+{
+    if (fd == -1)
+        return;
+    if (_sources.find(fd) != _sources.end())
+        remove_source(fd);
+    close(fd);
+    fd = -1;
+}
+
+EventLoop::CgiCleanupResult EventLoop::cleanup_cgi_job(
+    std::map<int32_t, CgiJob>::iterator job_it,
+    EventLoop::CgiCleanupAction action)
+{
+    CgiCleanupResult result;
+    int32_t stdout_fd;
+    int32_t stdin_fd;
+    int status;
+    pid_t waited;
+
+    if (job_it == _cgi_jobs.end())
+        return result;
+    result.found = true;
+    result.job = job_it->second;
+    stdout_fd = job_it->first;
+    stdin_fd = result.job.stdin_fd;
+    _cgi_jobs.erase(job_it);
+    close_cgi_fd(stdout_fd);
+    close_cgi_fd(stdin_fd);
+    if (action == CGI_CLEANUP_ABORT) {
+        terminate_child_nonblocking(result.job.pid);
+        return result;
+    }
+    if (result.job.pid <= 0)
+        return result;
+    status = 0;
+    waited = wait_child_status(result.job.pid, &status, WNOHANG);
+    result.child_ok = waited != -1 || errno == ECHILD;
+    if (waited == result.job.pid)
+        result.child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    else if (waited == 0)
+        terminate_child_nonblocking(result.job.pid);
+    return result;
+}
+
 void EventLoop::expire_cgi_jobs()
 {
     uint64_t now = monotonic_millis();
@@ -640,43 +675,29 @@ void EventLoop::expire_cgi_jobs()
 
 void EventLoop::finish_cgi_job(int32_t fd)
 {
-    std::map<int32_t, CgiJob>::iterator job_it = _cgi_jobs.find(fd);
-    if (job_it == _cgi_jobs.end())
+    CgiCleanupResult result;
+
+    result = cleanup_cgi_job(_cgi_jobs.find(fd), CGI_CLEANUP_COMPLETE);
+    if (!result.found)
         return;
-
-    CgiJob job = job_it->second;
-    _cgi_jobs.erase(job_it);
-    remove_source(fd);
-    close(fd);
-    if (job.stdin_fd != -1) {
-        if (job.body_written < job.request.body.size())
-            job.failed = true;
-        remove_source(job.stdin_fd);
-        close(job.stdin_fd);
-    }
-
-    int status = 0;
-    pid_t waited = wait_child_status(job.pid, &status, WNOHANG);
-    bool child_ok = waited != -1 || errno == ECHILD;
-    if (waited == job.pid)
-        child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    else if (waited == 0)
-        terminate_child_nonblocking(job.pid);
+    if (result.job.stdin_fd != -1
+        && result.job.body_written < result.job.request.body.size())
+        result.job.failed = true;
     std::map<int32_t, Connection>::iterator conn_it
-        = _connections.find(job.clientfd);
+        = _connections.find(result.job.clientfd);
     if (conn_it == _connections.end())
         return;
-    if (job.failed || !child_ok) {
-        const Config &cfg
-            = dispatcher::config_for(job.request, conn_it->second.server());
+    if (result.job.failed || !result.child_ok) {
+        const Config &cfg = dispatcher::config_for(
+            result.job.request, conn_it->second.server());
 
-        conn_it->second.enqueue_response(
-            dispatcher::error_response(job.request, cfg, job.failure_status));
+        conn_it->second.enqueue_response(dispatcher::error_response(
+            result.job.request, cfg, result.job.failure_status));
     } else {
         conn_it->second.enqueue_response(
-            cgi::translate_output(job.output, job.request));
+            cgi::translate_output(result.job.output, result.job.request));
     }
-    update_source_events(job.clientfd, EPOLL_WRONLY);
+    update_source_events(result.job.clientfd, EPOLL_WRONLY);
 }
 
 void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
@@ -684,18 +705,9 @@ void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
     for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
         it != _cgi_jobs.end();) {
         if (it->second.clientfd == clientfd) {
-            int32_t fd = it->first;
-            pid_t pid = it->second.pid;
-            int32_t stdin_fd = it->second.stdin_fd;
+            std::map<int32_t, CgiJob>::iterator current = it++;
 
-            _cgi_jobs.erase(it++);
-            remove_source(fd);
-            close(fd);
-            if (stdin_fd != -1) {
-                remove_source(stdin_fd);
-                close(stdin_fd);
-            }
-            terminate_child_nonblocking(pid);
+            cleanup_cgi_job(current, CGI_CLEANUP_ABORT);
         } else {
             ++it;
         }
