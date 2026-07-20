@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:02:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:20:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -100,6 +101,22 @@ struct CompletionResult {
     bool failed;
 };
 
+namespace job_cleanup {
+
+enum action {
+    COMPLETE,
+    ABORT,
+};
+
+}
+
+struct CleanupResult {
+    CleanupResult();
+
+    Job job;
+    bool child_ok;
+};
+
 struct StartedRequest {
     StartedRequest();
 
@@ -116,6 +133,17 @@ public:
     static ReadinessResult process_stdin(Job &job, uint32_t events);
     static ReadinessResult process_stdout(Job &job, uint32_t events);
     static CompletionResult complete(Job job, bool child_ok);
+
+    int32_t wait_timeout(const std::map<int32_t, Job> &jobs) const;
+    static std::vector<int32_t> expire_jobs(std::map<int32_t, Job> &jobs);
+    void reap_pending_children();
+    CleanupResult cleanup(const Job &job, job_cleanup::action action);
+
+private:
+    void reap_child_later(pid_t pid);
+    void terminate_child_nonblocking(pid_t pid);
+
+    std::vector<pid_t> _pending_reaps;
 };
 
 cgi::start::result start_process(const http::request &req, const Config &cfg,

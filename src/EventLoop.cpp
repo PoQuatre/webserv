@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:02:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:15:08 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,11 +15,8 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
-#include <sys/wait.h>
-#include <time.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -54,48 +51,6 @@ void drain_signal_pipe()
     while ((n = read(g_signal_pipe[0], buf, sizeof(buf))) > 0)
         for (ssize_t j = 0; j < n; ++j)
             L_DEBUG("Received signal {}, shutting down", (int)buf[j]);
-}
-
-bool reap_child(pid_t pid, int options)
-{
-    while (true) {
-        pid_t waited = waitpid(pid, NULL, options);
-
-        if (waited == pid || (waited == -1 && errno == ECHILD))
-            return true;
-        if (waited == 0)
-            return false;
-        if (errno != EINTR)
-            return true;
-    }
-}
-
-bool terminate_child(pid_t pid, int options)
-{
-    if (pid <= 0)
-        return true;
-    kill(pid, SIGKILL);
-    return reap_child(pid, options);
-}
-
-pid_t wait_child_status(pid_t pid, int *status, int options)
-{
-    while (true) {
-        pid_t waited = waitpid(pid, status, options);
-
-        if (waited != -1 || errno != EINTR)
-            return waited;
-    }
-}
-
-uint64_t monotonic_millis()
-{
-    timespec ts;
-
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1)
-        return 0;
-    return (static_cast<uint64_t>(ts.tv_sec) * 1000)
-        + static_cast<uint64_t>(ts.tv_nsec / 1000000);
 }
 
 http::status::type cgi_start_error(cgi::start::result result)
@@ -170,7 +125,7 @@ bool EventLoop::run()
     bool ok = true;
     while (running) {
         L_TRACE("Waiting for events");
-        reap_pending_children();
+        _cgi_lifecycle.reap_pending_children();
         expire_cgi_jobs();
         int32_t nfds
             = epoll_wait(_epollfd, events, MAX_EVENTS, cgi_epoll_timeout());
@@ -183,7 +138,7 @@ bool EventLoop::run()
         }
 
         expire_cgi_jobs();
-        reap_pending_children();
+        _cgi_lifecycle.reap_pending_children();
         L_TRACE("Got {} events", nfds);
         for (int32_t i = 0; i < nfds; ++i)
             process_io_event(events[i].data.fd, events[i].events, running);
@@ -304,10 +259,9 @@ void EventLoop::remove_source(int32_t fd)
 void EventLoop::cleanup()
 {
     while (!_cgi_jobs.empty())
-        cleanup_cgi_job(_cgi_jobs.begin(), CGI_CLEANUP_ABORT);
+        cleanup_cgi_job(_cgi_jobs.begin(), cgi::job_cleanup::ABORT);
 
-    reap_pending_children();
-    _pending_reaps.clear();
+    _cgi_lifecycle.reap_pending_children();
 
     for (std::map<int32_t, Connection>::iterator it = _connections.begin();
         it != _connections.end(); ++it) {
@@ -471,7 +425,7 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
         if (!add_source(
                 descriptor.fd, events, EventSource(source_type, clientfd))) {
             cleanup_cgi_job(
-                _cgi_jobs.find(started.job.stdout_fd), CGI_CLEANUP_ABORT);
+                _cgi_jobs.find(started.job.stdout_fd), cgi::job_cleanup::ABORT);
             return false;
         }
     }
@@ -509,49 +463,7 @@ void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
 
 int32_t EventLoop::cgi_epoll_timeout() const
 {
-    uint64_t now;
-    uint64_t nearest = 0;
-
-    if (!_pending_reaps.empty())
-        return 0;
-    if (_cgi_jobs.empty())
-        return -1;
-    now = monotonic_millis();
-    for (std::map<int32_t, cgi::Job>::const_iterator it = _cgi_jobs.begin();
-        it != _cgi_jobs.end(); ++it) {
-        if (it->second.deadline_millis <= now)
-            return 0;
-        if (nearest == 0 || it->second.deadline_millis < nearest)
-            nearest = it->second.deadline_millis;
-    }
-    return static_cast<int32_t>(
-        std::min(nearest - now, static_cast<uint64_t>(INT32_MAX)));
-}
-
-void EventLoop::reap_pending_children()
-{
-    for (std::vector<pid_t>::iterator it = _pending_reaps.begin();
-        it != _pending_reaps.end();) {
-        if (reap_child(*it, WNOHANG))
-            it = _pending_reaps.erase(it);
-        else
-            ++it;
-    }
-}
-
-void EventLoop::reap_child_later(pid_t pid)
-{
-    if (pid <= 0)
-        return;
-    if (std::find(_pending_reaps.begin(), _pending_reaps.end(), pid)
-        == _pending_reaps.end())
-        _pending_reaps.push_back(pid);
-}
-
-void EventLoop::terminate_child_nonblocking(pid_t pid)
-{
-    if (!terminate_child(pid, WNOHANG))
-        reap_child_later(pid);
+    return _cgi_lifecycle.wait_timeout(_cgi_jobs);
 }
 
 void EventLoop::close_cgi_fd(int32_t &fd)
@@ -566,13 +478,12 @@ void EventLoop::close_cgi_fd(int32_t &fd)
 
 EventLoop::CgiCleanupResult EventLoop::cleanup_cgi_job(
     std::map<int32_t, cgi::Job>::iterator job_it,
-    EventLoop::CgiCleanupAction action)
+    cgi::job_cleanup::action action)
 {
     CgiCleanupResult result;
+    cgi::CleanupResult cleanup;
     int32_t stdout_fd;
     int32_t stdin_fd;
-    int status;
-    pid_t waited;
 
     if (job_it == _cgi_jobs.end())
         return result;
@@ -583,39 +494,18 @@ EventLoop::CgiCleanupResult EventLoop::cleanup_cgi_job(
     _cgi_jobs.erase(job_it);
     close_cgi_fd(stdout_fd);
     close_cgi_fd(stdin_fd);
-    if (action == CGI_CLEANUP_ABORT) {
-        terminate_child_nonblocking(result.job.pid);
-        return result;
-    }
-    if (result.job.pid <= 0)
-        return result;
-    status = 0;
-    waited = wait_child_status(result.job.pid, &status, WNOHANG);
-    result.child_ok = waited != -1 || errno == ECHILD;
-    if (waited == result.job.pid)
-        result.child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    else if (waited == 0)
-        terminate_child_nonblocking(result.job.pid);
+    cleanup = _cgi_lifecycle.cleanup(result.job, action);
+    result.job = cleanup.job;
+    result.child_ok = cleanup.child_ok;
     return result;
 }
 
 void EventLoop::expire_cgi_jobs()
 {
-    uint64_t now = monotonic_millis();
+    std::vector<int32_t> expired = _cgi_lifecycle.expire_jobs(_cgi_jobs);
 
-    for (std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.begin();
-        it != _cgi_jobs.end();) {
-        int32_t fd = it->first;
-
-        if (it->second.deadline_millis > now) {
-            ++it;
-            continue;
-        }
-        it->second.failed = true;
-        it->second.failure_status = http::status::GATEWAY_TIMEOUT;
-        ++it;
-        finish_cgi_job(fd);
-    }
+    for (std::size_t i = 0; i < expired.size(); ++i)
+        finish_cgi_job(expired[i]);
 }
 
 void EventLoop::finish_cgi_job(int32_t fd)
@@ -623,7 +513,7 @@ void EventLoop::finish_cgi_job(int32_t fd)
     CgiCleanupResult result;
     cgi::CompletionResult completion;
 
-    result = cleanup_cgi_job(_cgi_jobs.find(fd), CGI_CLEANUP_COMPLETE);
+    result = cleanup_cgi_job(_cgi_jobs.find(fd), cgi::job_cleanup::COMPLETE);
     if (!result.found)
         return;
     completion = cgi::Lifecycle::complete(result.job, result.child_ok);
@@ -651,7 +541,7 @@ void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
         if (it->second.clientfd == clientfd) {
             std::map<int32_t, cgi::Job>::iterator current = it++;
 
-            cleanup_cgi_job(current, CGI_CLEANUP_ABORT);
+            cleanup_cgi_job(current, cgi::job_cleanup::ABORT);
         } else {
             ++it;
         }
