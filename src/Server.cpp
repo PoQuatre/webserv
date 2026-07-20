@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/18 05:31:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 13:19:11 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -72,7 +72,7 @@ std::vector<Location> sort_locations(std::vector<Location> locs)
 
 Server::Server(const std::vector<Location> &locations,
     const std::string &server_name, const std::string &listen_addr,
-    const Config &default_config)
+    const Config &default_config, const bool &first)
     : _locations(sort_locations(locations))
     , _server_name(server_name)
     , _default_config(default_config)
@@ -80,6 +80,7 @@ Server::Server(const std::vector<Location> &locations,
     , _sockaddr6()
     , _sockfd(-1)
     , _is_ipv6(false)
+    , _first(first)
 {
     std::string addr;
     uint32_t port;
@@ -120,6 +121,7 @@ Server::Server(const Server &other)
     , _sockaddr6(other._sockaddr6)
     , _sockfd(-1)
     , _is_ipv6(other._is_ipv6)
+    , _first(false)
 {
 }
 
