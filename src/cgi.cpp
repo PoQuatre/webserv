@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 10:31:39 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 17:44:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <cctype>
@@ -210,6 +211,16 @@ std::string known_reason(int code)
             return http::status::reasons[i];
     }
     return "";
+}
+
+uint64_t monotonic_millis()
+{
+    timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == -1)
+        return 0;
+    return (static_cast<uint64_t>(ts.tv_sec) * 1000)
+        + static_cast<uint64_t>(ts.tv_nsec / 1000000);
 }
 
 bool parse_status_value(
@@ -642,6 +653,63 @@ std::string cgi::translate_output(
     if (!find_header_end(output, header_end))
         return make_bad_gateway(req);
     return translate_parsed(output, req, header_end);
+}
+
+cgi::Descriptor::Descriptor()
+    : type(cgi::descriptor::CGI_STDIN)
+    , fd(-1)
+{
+}
+
+cgi::Descriptor::Descriptor(
+    cgi::descriptor::type descriptor_type, int32_t descriptor_fd)
+    : type(descriptor_type)
+    , fd(descriptor_fd)
+{
+}
+
+cgi::Job::Job()
+    : clientfd(-1)
+    , pid(-1)
+    , stdin_fd(-1)
+    , stdout_fd(-1)
+    , body_written(0)
+    , max_output(0)
+    , deadline_millis(0)
+    , request()
+    , failure_status(http::status::BAD_GATEWAY)
+    , failed(false)
+{
+}
+
+cgi::StartedRequest::StartedRequest()
+    : status(cgi::start::BAD_GATEWAY)
+{
+}
+
+cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
+    const http::request &req, const Config &cfg, const std::string &script_path,
+    cgi::StartedRequest &request)
+{
+    cgi::Process process;
+
+    request = cgi::StartedRequest();
+    request.status = cgi::start_process(req, cfg, script_path, process);
+    if (request.status != cgi::start::STARTED)
+        return request.status;
+    request.job.clientfd = clientfd;
+    request.job.pid = process.pid;
+    request.job.stdin_fd = process.stdin_fd;
+    request.job.stdout_fd = process.stdout_fd;
+    request.job.max_output = cfg.cgi_output_buffer_size;
+    request.job.deadline_millis
+        = monotonic_millis() + (static_cast<uint64_t>(cfg.cgi_timeout) * 1000);
+    request.job.request = req;
+    request.descriptors.push_back(
+        cgi::Descriptor(cgi::descriptor::CGI_STDOUT, process.stdout_fd));
+    request.descriptors.push_back(
+        cgi::Descriptor(cgi::descriptor::CGI_STDIN, process.stdin_fd));
+    return request.status;
 }
 
 cgi::start::result cgi::start_process(const http::request &req,

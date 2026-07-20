@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 16:16:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 17:47:06 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -167,9 +167,7 @@ std::string handle_get(
 
 dispatcher::Outcome::Outcome()
     : type(RESPONSE_NOW)
-    , response()
     , config(NULL)
-    , filesystem_path()
 {
 }
 
