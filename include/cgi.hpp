@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 17:44:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:02:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -73,6 +73,33 @@ struct Job {
     bool failed;
 };
 
+namespace readiness {
+
+enum action {
+    CONTINUE,
+    CLOSE_STDIN,
+    COMPLETE,
+};
+
+}
+
+struct ReadinessResult {
+    ReadinessResult();
+
+    readiness::action action;
+    int32_t descriptor_fd;
+};
+
+struct CompletionResult {
+    CompletionResult();
+
+    int32_t clientfd;
+    http::request request;
+    std::string output;
+    http::status::type failure_status;
+    bool failed;
+};
+
 struct StartedRequest {
     StartedRequest();
 
@@ -86,6 +113,9 @@ public:
     static start::result start_request(int32_t clientfd,
         const http::request &req, const Config &cfg,
         const std::string &script_path, StartedRequest &request);
+    static ReadinessResult process_stdin(Job &job, uint32_t events);
+    static ReadinessResult process_stdout(Job &job, uint32_t events);
+    static CompletionResult complete(Job job, bool child_ok);
 };
 
 cgi::start::result start_process(const http::request &req, const Config &cfg,

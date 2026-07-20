@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 17:44:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:03:43 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,7 @@
 
 #include <fcntl.h>
 #include <limits.h>
+#include <sys/epoll.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -682,6 +683,20 @@ cgi::Job::Job()
 {
 }
 
+cgi::ReadinessResult::ReadinessResult()
+    : action(cgi::readiness::CONTINUE)
+    , descriptor_fd(-1)
+{
+}
+
+cgi::CompletionResult::CompletionResult()
+    : clientfd(-1)
+    , request()
+    , failure_status(http::status::BAD_GATEWAY)
+    , failed(false)
+{
+}
+
 cgi::StartedRequest::StartedRequest()
     : status(cgi::start::BAD_GATEWAY)
 {
@@ -710,6 +725,73 @@ cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
     request.descriptors.push_back(
         cgi::Descriptor(cgi::descriptor::CGI_STDIN, process.stdin_fd));
     return request.status;
+}
+
+cgi::ReadinessResult cgi::Lifecycle::process_stdin(
+    cgi::Job &job, uint32_t events)
+{
+    cgi::ReadinessResult result;
+    const std::string &body = job.request.body;
+
+    result.descriptor_fd = job.stdin_fd;
+    if (events & EPOLLERR)
+        job.failed = true;
+    if (job.body_written < body.size()) {
+        ssize_t n = write(job.stdin_fd, body.c_str() + job.body_written,
+            body.size() - job.body_written);
+
+        if (n > 0)
+            job.body_written += static_cast<std::size_t>(n);
+        else if (!(events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)))
+            return result;
+    }
+    if (job.body_written < body.size() && !job.failed)
+        return result;
+    result.action = cgi::readiness::CLOSE_STDIN;
+    return result;
+}
+
+cgi::ReadinessResult cgi::Lifecycle::process_stdout(
+    cgi::Job &job, uint32_t events)
+{
+    cgi::ReadinessResult result;
+    char buffer[4096];
+    ssize_t bytes_read;
+
+    result.descriptor_fd = job.stdout_fd;
+    bytes_read = read(job.stdout_fd, buffer, sizeof(buffer));
+    if (bytes_read > 0) {
+        if (job.max_output != 0
+            && job.output.size() + static_cast<std::size_t>(bytes_read)
+                > job.max_output) {
+            job.failed = true;
+            job.failure_status = http::status::BAD_GATEWAY;
+            result.action = cgi::readiness::COMPLETE;
+        } else {
+            job.output.append(buffer, static_cast<std::size_t>(bytes_read));
+        }
+    } else if (bytes_read == 0) {
+        result.action = cgi::readiness::COMPLETE;
+    } else if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+        if (events & EPOLLERR)
+            job.failed = true;
+        result.action = cgi::readiness::COMPLETE;
+    }
+    return result;
+}
+
+cgi::CompletionResult cgi::Lifecycle::complete(cgi::Job job, bool child_ok)
+{
+    cgi::CompletionResult result;
+
+    if (job.stdin_fd != -1 && job.body_written < job.request.body.size())
+        job.failed = true;
+    result.clientfd = job.clientfd;
+    result.request = job.request;
+    result.output = job.output;
+    result.failure_status = job.failure_status;
+    result.failed = job.failed || !child_ok;
+    return result;
 }
 
 cgi::start::result cgi::start_process(const http::request &req,
