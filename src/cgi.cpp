@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 09:54:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 10:14:56 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -72,6 +72,62 @@ bool starts_with(const std::string &s, const char *prefix)
         ++i;
     }
     return true;
+}
+
+bool should_filter_cgi_response_header(const std::string &lower_name)
+{
+    return lower_name == "status" || lower_name == "content-length"
+        || lower_name == "connection" || lower_name == "keep-alive"
+        || lower_name == "proxy-authenticate"
+        || lower_name == "proxy-authorization" || lower_name == "te"
+        || lower_name == "trailer" || lower_name == "transfer-encoding"
+        || lower_name == "upgrade";
+}
+
+bool contains_header_name(
+    const std::vector<std::string> &names, const std::string &name)
+{
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        if (names[i] == name)
+            return true;
+    }
+    return false;
+}
+
+void add_connection_options(
+    std::vector<std::string> &options, const std::string &value)
+{
+    std::size_t start = 0;
+
+    while (start <= value.size()) {
+        std::size_t comma = value.find(',', start);
+        std::string option = trim(value.substr(start,
+            comma == std::string::npos ? std::string::npos : comma - start));
+
+        if (!option.empty())
+            options.push_back(lowercase(option));
+        if (comma == std::string::npos)
+            break;
+        start = comma + 1;
+    }
+}
+
+std::vector<std::string> connection_options(const std::vector<Header> &headers)
+{
+    std::vector<std::string> options;
+
+    for (std::size_t i = 0; i < headers.size(); ++i) {
+        if (headers[i].lower_name == "connection")
+            add_connection_options(options, headers[i].value);
+    }
+    return options;
+}
+
+bool should_filter_cgi_response_header(const std::string &lower_name,
+    const std::vector<std::string> &connection_header_options)
+{
+    return should_filter_cgi_response_header(lower_name)
+        || contains_header_name(connection_header_options, lower_name);
 }
 
 bool find_header_end(const std::string &output, HeaderEnd &end)
@@ -181,6 +237,30 @@ std::string version_string(const http::request &req)
     return "HTTP/1.1";
 }
 
+void append_forwarded_cgi_headers(
+    std::ostringstream &ss, const std::vector<Header> &headers)
+{
+    std::vector<std::string> connection_header_options
+        = connection_options(headers);
+
+    for (std::size_t i = 0; i < headers.size(); ++i) {
+        if (should_filter_cgi_response_header(
+                headers[i].lower_name, connection_header_options))
+            continue;
+        ss << headers[i].name << ": " << headers[i].value << "\r\n";
+    }
+}
+
+void append_server_framing_and_body(
+    std::ostringstream &ss, const http::request &req, const std::string &body)
+{
+    ss << "Content-Length: " << body.size() << "\r\n";
+    ss << "Connection: " << (req.keep_alive ? "keep-alive" : "close") << "\r\n";
+    ss << "\r\n";
+    if (req.method != http::methods::HEAD)
+        ss << body;
+}
+
 std::string make_response(const http::request &req, int code,
     const std::string &reason, const std::vector<Header> &headers,
     const std::string &body)
@@ -188,17 +268,20 @@ std::string make_response(const http::request &req, int code,
     std::ostringstream ss;
 
     ss << version_string(req) << " " << code << " " << reason << "\r\n";
-    for (std::size_t i = 0; i < headers.size(); ++i) {
-        if (headers[i].lower_name == "status"
-            || headers[i].lower_name == "content-length")
-            continue;
-        ss << headers[i].name << ": " << headers[i].value << "\r\n";
-    }
-    ss << "Content-Length: " << body.size() << "\r\n";
-    ss << "Connection: " << (req.keep_alive ? "keep-alive" : "close") << "\r\n";
-    ss << "\r\n";
-    if (req.method != http::methods::HEAD)
-        ss << body;
+    append_forwarded_cgi_headers(ss, headers);
+    append_server_framing_and_body(ss, req, body);
+    return ss.str();
+}
+
+std::string make_nph_response(const std::string &first_line,
+    const std::vector<Header> &headers, const std::string &body,
+    const http::request &req)
+{
+    std::ostringstream ss;
+
+    ss << first_line << "\r\n";
+    append_forwarded_cgi_headers(ss, headers);
+    append_server_framing_and_body(ss, req, body);
     return ss.str();
 }
 
@@ -521,9 +604,8 @@ std::string translate_nph(const std::string &output, const http::request &req)
             output.substr(line_end + 1, header_end.pos - line_end - 1),
             headers))
         return make_bad_gateway(req);
-    if (req.method == http::methods::HEAD)
-        return output.substr(0, header_end.pos + header_end.len);
-    return output;
+    return make_nph_response(first_line, headers,
+        output.substr(header_end.pos + header_end.len), req);
 }
 
 std::string translate_parsed(const std::string &output,

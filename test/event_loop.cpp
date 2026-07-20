@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 09:54:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 10:25:00 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -571,7 +571,11 @@ Test(event_loop, cgi_response_modes_cover_redirect_nph_and_body_only)
     write_file(harness.root + "/cgi/redirect.sh",
         "printf 'Location: /elsewhere\\r\\n\\r\\n'\n");
     write_file(harness.root + "/cgi/nph-output.sh",
-        "printf 'HTTP/1.1 204 No Content\\r\\nX-NPH: yes\\r\\n\\r\\n'\n");
+        "printf 'HTTP/1.1 204 No Content\\r\\n'\n"
+        "printf 'X-NPH: yes\\r\\n'\n"
+        "printf 'Connection: close\\r\\n'\n"
+        "printf 'Transfer-Encoding: chunked\\r\\n'\n"
+        "printf '\\r\\n'\n");
     write_file(harness.root + "/cgi/body-only.sh", "printf 'body-only\\n'\n");
 
     std::string redirect_response = perform_request_until_idle(
@@ -585,12 +589,54 @@ Test(event_loop, cgi_response_modes_cover_redirect_nph_and_body_only)
     cr_assert_eq(
         nph_response.find("HTTP/1.1 204 No Content\r\n"), std::size_t(0));
     cr_assert_neq(nph_response.find("X-NPH: yes\r\n"), std::string::npos);
-    cr_assert_eq(nph_response.find("Content-Length:"), std::string::npos);
+    cr_assert_neq(
+        nph_response.find("Content-Length: 0\r\n"), std::string::npos);
+    cr_assert_neq(
+        nph_response.find("Connection: keep-alive\r\n"), std::string::npos);
+    cr_assert_eq(nph_response.find("Connection: close\r\n"), std::string::npos);
+    cr_assert_eq(
+        nph_response.find("Transfer-Encoding: chunked\r\n"), std::string::npos);
 
     std::string body_response = perform_request_until_idle(
         harness, "GET /cgi/body-only.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
     assert_status(body_response, "HTTP/1.1 200 OK");
     cr_assert_neq(body_response.find("body-only\n"), std::string::npos);
+}
+
+Test(event_loop, cgi_response_filters_unsafe_headers)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    CgiHarness harness;
+    write_file(harness.root + "/cgi/headers.sh",
+        "printf 'Status: 201 Created\\r\\n'\n"
+        "printf 'Content-Type: text/plain\\r\\n'\n"
+        "printf 'Set-Cookie: session=abc\\r\\n'\n"
+        "printf 'X-App-Header: kept\\r\\n'\n"
+        "printf 'Content-Length: 999\\r\\n'\n"
+        "printf 'Connection: close, X-Hop\\r\\n'\n"
+        "printf 'X-Hop: dropped\\r\\n'\n"
+        "printf 'Transfer-Encoding: chunked\\r\\n'\n"
+        "printf '\\r\\nbody\\n'\n");
+
+    std::string response = perform_request_until_idle(
+        harness, "GET /cgi/headers.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+    assert_status(response, "HTTP/1.1 201 Created");
+    cr_assert_neq(
+        response.find("Content-Type: text/plain\r\n"), std::string::npos);
+    cr_assert_neq(
+        response.find("Set-Cookie: session=abc\r\n"), std::string::npos);
+    cr_assert_neq(response.find("X-App-Header: kept\r\n"), std::string::npos);
+    cr_assert_neq(response.find("Content-Length: 5\r\n"), std::string::npos);
+    cr_assert_eq(response.find("Status:"), std::string::npos);
+    cr_assert_eq(response.find("Content-Length: 999\r\n"), std::string::npos);
+    cr_assert_eq(
+        response.find("Connection: close, X-Hop\r\n"), std::string::npos);
+    cr_assert_eq(response.find("X-Hop: dropped\r\n"), std::string::npos);
+    cr_assert_eq(
+        response.find("Transfer-Encoding: chunked\r\n"), std::string::npos);
+    cr_assert_neq(response.find("body\n"), std::string::npos);
 }
 
 Test(event_loop, cgi_executes_allowed_delete_method)
@@ -619,8 +665,8 @@ Test(event_loop, cgi_rejects_disallowed_method_without_running_script)
     write_file(harness.root + "/cgi/method.sh",
         "printf marker > '" + marker
             + "'\n"
-              "printf 'Content-Type: text/plain\r\n\r\n'\n"
-              "printf 'method=%s\n' \"$REQUEST_METHOD\"\n");
+              "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+              "printf 'method=%s\\n' \"$REQUEST_METHOD\"\n");
 
     std::string delete_response = perform_request(
         harness, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
