@@ -107,6 +107,7 @@ SRCS =	$(LIB_SRCS) \
 ##begin: TEST_SRCS
 TEST_SRCS =	cgi_response.cpp \
 			config_parsing.cpp \
+			dispatcher.cpp \
 			event_loop.cpp \
 			http_parsing.cpp \
 			server_socket.cpp
