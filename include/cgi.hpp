@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:20:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:32:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -136,6 +136,8 @@ public:
 
     int32_t wait_timeout(const std::map<int32_t, Job> &jobs) const;
     static std::vector<int32_t> expire_jobs(std::map<int32_t, Job> &jobs);
+    std::vector<int32_t> jobs_to_cancel_for(
+        int32_t clientfd, const std::map<int32_t, Job> &jobs) const;
     void reap_pending_children();
     CleanupResult cleanup(const Job &job, job_cleanup::action action);
 

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:15:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:35:55 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -536,16 +536,12 @@ void EventLoop::finish_cgi_job(int32_t fd)
 
 void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
 {
-    for (std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.begin();
-        it != _cgi_jobs.end();) {
-        if (it->second.clientfd == clientfd) {
-            std::map<int32_t, cgi::Job>::iterator current = it++;
+    std::vector<int32_t> jobs_to_cancel
+        = _cgi_lifecycle.jobs_to_cancel_for(clientfd, _cgi_jobs);
 
-            cleanup_cgi_job(current, cgi::job_cleanup::ABORT);
-        } else {
-            ++it;
-        }
-    }
+    for (std::size_t i = 0; i < jobs_to_cancel.size(); ++i)
+        cleanup_cgi_job(
+            _cgi_jobs.find(jobs_to_cancel[i]), cgi::job_cleanup::ABORT);
 }
 
 void EventLoop::process_client(int32_t fd, uint32_t events, Connection &conn)

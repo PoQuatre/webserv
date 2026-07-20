@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:20:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:35:55 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -869,6 +869,19 @@ std::vector<int32_t> cgi::Lifecycle::expire_jobs(
         expired.push_back(it->first);
     }
     return expired;
+}
+
+std::vector<int32_t> cgi::Lifecycle::jobs_to_cancel_for(
+    int32_t clientfd, const std::map<int32_t, cgi::Job> &jobs) const
+{
+    std::vector<int32_t> jobs_to_cancel;
+
+    for (std::map<int32_t, cgi::Job>::const_iterator it = jobs.begin();
+        it != jobs.end(); ++it) {
+        if (it->second.clientfd == clientfd)
+            jobs_to_cancel.push_back(it->first);
+    }
+    return jobs_to_cancel;
 }
 
 void cgi::Lifecycle::reap_pending_children()
