@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/17 19:23:49 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 13:40:35 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -121,8 +121,8 @@ Test(event_loop, listener_and_signal_sources_dispatch_readiness)
     Config config = { };
     config.allowed_methods[http::methods::GET] = true;
     std::vector<Server> servers;
-    servers.push_back(
-        Server(std::vector<Location>(), "test", listen_addr.str(), config));
+    servers.push_back(Server(
+        std::vector<Location>(), "test", listen_addr.str(), config, true));
 
     EventLoop loop(servers);
     LoopThreadArgs args = { &loop, false };

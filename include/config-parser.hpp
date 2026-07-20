@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 19:50:49 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/20 13:37:01 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -70,6 +70,7 @@ private:
     uint32_t _err_count;
     int32_t _depth;
     bool _valid;
+    std::vector<std::string> _listens;
     // #ifndef NDEBUG
     void debug_tree(config_node *tree, int i);
     // #endif

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 18:34:27 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/17 18:38:42 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 13:40:11 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,7 +26,7 @@ Test(server_socket, init_and_shutdown_without_epoll)
 {
     logger::log_level() = logger::levels::NOTHING;
 
-    Server server(std::vector<Location>(), "test", "127.0.0.1:0", Config());
+    Server server(std::vector<Location>(), "test", "127.0.0.1:0", Config(), 1);
 
     cr_assert(server.init_socket());
 

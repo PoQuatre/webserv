@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 21:56:00 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/20 13:41:57 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -233,6 +233,37 @@ std::vector<Server> ConfigParser::get_all_servers(std::vector<Server> &servers)
     return _servers;
 }
 
+namespace {
+
+std::string get_port(const std::string &listen)
+{
+    std::string port;
+    std::size_t n = listen.find(':', 0);
+
+    if (n == std::string::npos) {
+        port = listen;
+    } else {
+        while (n < listen.length() && listen[n] == ':')
+            n++;
+        port = listen.substr(n, listen.length() - n);
+    }
+    return port;
+}
+
+std::string get_ip(const std::string &listen)
+{
+    std::string ip;
+    std::size_t n = listen.find(':', 0);
+
+    if (n == std::string::npos || n <= 1)
+        ip = "127.0.0.1";
+    else
+        ip = listen.substr(0, n);
+    return ip;
+}
+
+}
+
 void ConfigParser::create_one_server(const config_node &node,
     std::vector<Location> location_vector,
     std::map<keywords::type, std::vector<std::string> > &server_conf)
@@ -256,6 +287,20 @@ void ConfigParser::create_one_server(const config_node &node,
     if (server_conf.find(keywords::LISTEN) == server_conf.end())
         L_WARN("No listen address, using '{}' as the default ", DEFAULT_LISTEN);
 
+    std::string listen_act
+        = server_conf.find(keywords::LISTEN) != server_conf.end()
+        ? *server_conf.find(keywords::LISTEN)->second.begin()
+        : DEFAULT_LISTEN;
+    std::string ip = get_ip(listen_act);
+    std::string port = get_port(listen_act);
+    bool first = true;
+    for (std::vector<std::string>::iterator it = _listens.begin();
+        it != _listens.end(); it++) {
+        std::string tmp = ip += ":" + port;
+        if (tmp == (*it))
+            first = false;
+    }
+
     Server n_server = Server(location_vector,
         server_conf.find(keywords::SERVER_NAME) != server_conf.end()
             ? *server_conf.find(keywords::SERVER_NAME)->second.begin()
@@ -263,8 +308,8 @@ void ConfigParser::create_one_server(const config_node &node,
         server_conf.find(keywords::LISTEN) != server_conf.end()
             ? *server_conf.find(keywords::LISTEN)->second.begin()
             : DEFAULT_LISTEN,
-        inital_config);
-
+        inital_config, first);
+    _listens.push_back(ip + ":" + port);
     _servers.push_back(n_server);
 }
 

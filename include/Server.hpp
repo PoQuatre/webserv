@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/17 18:35:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 13:37:27 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,7 +47,7 @@ class Server {
 public:
     Server(const std::vector<Location> &locations,
         const std::string &server_name, const std::string &listen_addr,
-        const Config &default_config);
+        const Config &default_config, const bool &first);
     Server(const Server &other);
     ~Server();
 
@@ -69,4 +69,5 @@ private:
     struct sockaddr_in6 _sockaddr6;
     int32_t _sockfd;
     bool _is_ipv6;
+    bool _first;
 };
