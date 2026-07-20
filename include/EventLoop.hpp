@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 16:16:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 17:44:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@
 
 #include "Connection.hpp"
 #include "Server.hpp"
+#include "cgi.hpp"
 #include "http.hpp"
 
 class EventLoop {
@@ -60,30 +61,12 @@ private:
         int32_t clientfd;
     };
 
-    struct CgiJob {
-        CgiJob();
-        CgiJob(int32_t cgi_clientfd, pid_t cgi_pid, int32_t cgi_stdin_fd,
-            std::size_t cgi_max_output, uint32_t cgi_timeout,
-            const http::request &cgi_request);
-
-        int32_t clientfd;
-        pid_t pid;
-        int32_t stdin_fd;
-        std::size_t body_written;
-        std::size_t max_output;
-        uint64_t deadline_millis;
-        std::string output;
-        http::request request;
-        http::status::type failure_status;
-        bool failed;
-    };
-
     enum CgiCleanupAction { CGI_CLEANUP_COMPLETE, CGI_CLEANUP_ABORT };
 
     struct CgiCleanupResult {
         CgiCleanupResult();
 
-        CgiJob job;
+        cgi::Job job;
         bool child_ok;
         bool found;
     };
@@ -106,7 +89,7 @@ private:
     void terminate_child_nonblocking(pid_t pid);
     void close_cgi_fd(int32_t &fd);
     CgiCleanupResult cleanup_cgi_job(
-        std::map<int32_t, CgiJob>::iterator job_it, CgiCleanupAction action);
+        std::map<int32_t, cgi::Job>::iterator job_it, CgiCleanupAction action);
     void dispatch_pending(int32_t fd, uint32_t events, Connection &conn);
     bool start_cgi_request(int32_t clientfd, Connection &conn,
         const Config &cfg, const std::string &script_path,
@@ -118,7 +101,7 @@ private:
     std::vector<Server> &_servers;
     std::map<int32_t, EventSource> _sources;
     std::map<int32_t, Connection> _connections;
-    std::map<int32_t, CgiJob> _cgi_jobs;
+    std::map<int32_t, cgi::Job> _cgi_jobs;
     std::vector<pid_t> _pending_reaps;
     int32_t _epollfd;
 };

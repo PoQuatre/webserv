@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 10:31:39 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 17:14:57 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -410,4 +410,51 @@ Test(cgi_process, reports_script_error_before_interpreter_error)
 
     cr_assert_eq(cgi::start_process(req, cfg, root + "/missing.sh", process),
         cgi::start::NOT_FOUND);
+}
+
+Test(cgi_lifecycle, start_request_reports_descriptors_to_monitor)
+{
+    std::string root = make_tmpdir();
+    std::string script = root + "/hello.sh";
+    write_file(script,
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'hello-lifecycle\\n'\n");
+    cr_assert_eq(
+        chmod(script.c_str(), 0600), 0, "chmod() failed: %s", strerror(errno));
+
+    http::request req = make_req(http::methods::GET);
+    req.uri = "/cgi/hello.sh";
+    Config cfg = { };
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = 1;
+    cfg.cgi_output_buffer_size = 4096;
+    cgi::Lifecycle lifecycle;
+    cgi::StartedRequest started;
+    bool reported_stdin = false;
+    bool reported_stdout = false;
+
+    cr_assert_eq(lifecycle.start_request(42, req, cfg, script, started),
+        cgi::start::STARTED);
+    cr_assert_eq(started.job.clientfd, 42);
+    cr_assert_gt(started.job.pid, 0);
+    cr_assert_eq(started.descriptors.size(), 2);
+    for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
+        if (started.descriptors[i].type == cgi::descriptor::CGI_STDIN
+            && started.descriptors[i].fd == started.job.stdin_fd)
+            reported_stdin = true;
+        if (started.descriptors[i].type == cgi::descriptor::CGI_STDOUT
+            && started.descriptors[i].fd == started.job.stdout_fd)
+            reported_stdout = true;
+    }
+    cr_assert(reported_stdin);
+    cr_assert(reported_stdout);
+
+    close(started.job.stdin_fd);
+    std::string output = read_all(started.job.stdout_fd);
+    close(started.job.stdout_fd);
+    int status = 0;
+    cr_assert_eq(waitpid(started.job.pid, &status, 0), started.job.pid,
+        "waitpid() failed: %s", strerror(errno));
+    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    assert_contains(output, "hello-lifecycle\n");
 }

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 16:16:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 17:44:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -147,35 +147,6 @@ EventLoop::EventSource::EventSource(
     , server(NULL)
     , connection(NULL)
     , clientfd(owner_clientfd)
-{
-}
-
-EventLoop::CgiJob::CgiJob()
-    : clientfd(-1)
-    , pid(-1)
-    , stdin_fd(-1)
-    , body_written(0)
-    , max_output(0)
-    , deadline_millis(0)
-    , request()
-    , failure_status(http::status::BAD_GATEWAY)
-    , failed(false)
-{
-}
-
-EventLoop::CgiJob::CgiJob(int32_t cgi_clientfd, pid_t cgi_pid,
-    int32_t cgi_stdin_fd, std::size_t cgi_max_output, uint32_t cgi_timeout,
-    const http::request &cgi_request)
-    : clientfd(cgi_clientfd)
-    , pid(cgi_pid)
-    , stdin_fd(cgi_stdin_fd)
-    , body_written(0)
-    , max_output(cgi_max_output)
-    , deadline_millis(
-          monotonic_millis() + (static_cast<uint64_t>(cgi_timeout) * 1000))
-    , request(cgi_request)
-    , failure_status(http::status::BAD_GATEWAY)
-    , failed(false)
 {
 }
 
@@ -478,23 +449,31 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
     const Config &cfg, const std::string &script_path,
     http::status::type &error_status)
 {
-    cgi::Process process;
+    cgi::StartedRequest started;
     cgi::start::result result;
 
-    result = cgi::start_process(conn.request(), cfg, script_path, process);
+    result = cgi::Lifecycle::start_request(
+        clientfd, conn.request(), cfg, script_path, started);
     if (result != cgi::start::STARTED) {
         error_status = cgi_start_error(result);
         return false;
     }
-    _cgi_jobs[process.stdout_fd]
-        = CgiJob(clientfd, process.pid, process.stdin_fd,
-            cfg.cgi_output_buffer_size, cfg.cgi_timeout, conn.request());
-    if (!add_source(process.stdout_fd, EPOLL_RDONLY,
-            EventSource(EventSource::SOURCE_CGI_STDOUT, clientfd))
-        || !add_source(process.stdin_fd, EPOLL_WRONLY,
-            EventSource(EventSource::SOURCE_CGI_STDIN, clientfd))) {
-        cleanup_cgi_job(_cgi_jobs.find(process.stdout_fd), CGI_CLEANUP_ABORT);
-        return false;
+    _cgi_jobs[started.job.stdout_fd] = started.job;
+    for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
+        const cgi::Descriptor &descriptor = started.descriptors[i];
+        EventSource::Type source_type = EventSource::SOURCE_CGI_STDOUT;
+        uint32_t events = EPOLL_RDONLY;
+
+        if (descriptor.type == cgi::descriptor::CGI_STDIN) {
+            source_type = EventSource::SOURCE_CGI_STDIN;
+            events = EPOLL_WRONLY;
+        }
+        if (!add_source(
+                descriptor.fd, events, EventSource(source_type, clientfd))) {
+            cleanup_cgi_job(
+                _cgi_jobs.find(started.job.stdout_fd), CGI_CLEANUP_ABORT);
+            return false;
+        }
     }
     conn.wait_for_cgi();
     update_source_events(clientfd, EPOLL_RDONLY);
@@ -503,10 +482,10 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
 
 void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
 {
-    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
+    for (std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.begin();
         it != _cgi_jobs.end(); ++it) {
         if (it->second.stdin_fd == fd) {
-            CgiJob &job = it->second;
+            cgi::Job &job = it->second;
             const std::string &body = job.request.body;
 
             if (events & EPOLLERR)
@@ -529,7 +508,7 @@ void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
 
 void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
 {
-    std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.find(fd);
+    std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.find(fd);
     char buffer[4096];
     ssize_t bytes_read;
     bool done = false;
@@ -569,7 +548,7 @@ int32_t EventLoop::cgi_epoll_timeout() const
     if (_cgi_jobs.empty())
         return -1;
     now = monotonic_millis();
-    for (std::map<int32_t, CgiJob>::const_iterator it = _cgi_jobs.begin();
+    for (std::map<int32_t, cgi::Job>::const_iterator it = _cgi_jobs.begin();
         it != _cgi_jobs.end(); ++it) {
         if (it->second.deadline_millis <= now)
             return 0;
@@ -617,7 +596,7 @@ void EventLoop::close_cgi_fd(int32_t &fd)
 }
 
 EventLoop::CgiCleanupResult EventLoop::cleanup_cgi_job(
-    std::map<int32_t, CgiJob>::iterator job_it,
+    std::map<int32_t, cgi::Job>::iterator job_it,
     EventLoop::CgiCleanupAction action)
 {
     CgiCleanupResult result;
@@ -655,7 +634,7 @@ void EventLoop::expire_cgi_jobs()
 {
     uint64_t now = monotonic_millis();
 
-    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
+    for (std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.begin();
         it != _cgi_jobs.end();) {
         int32_t fd = it->first;
 
@@ -699,10 +678,10 @@ void EventLoop::finish_cgi_job(int32_t fd)
 
 void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
 {
-    for (std::map<int32_t, CgiJob>::iterator it = _cgi_jobs.begin();
+    for (std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.begin();
         it != _cgi_jobs.end();) {
         if (it->second.clientfd == clientfd) {
-            std::map<int32_t, CgiJob>::iterator current = it++;
+            std::map<int32_t, cgi::Job>::iterator current = it++;
 
             cleanup_cgi_job(current, CGI_CLEANUP_ABORT);
         } else {
