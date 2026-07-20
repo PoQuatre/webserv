@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/19 03:17:58 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 09:48:02 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -229,7 +229,7 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     assert_contains(output, "SCRIPT_NAME=/cgi/env.sh\n");
     assert_contains(output, ("SCRIPT_FILENAME=" + script + "\n").c_str());
     assert_contains(output, "REMOTE_ADDR=127.0.0.1\n");
-    assert_contains(output, "SERVER_NAME=example.test\n");
+    assert_contains(output, "SERVER_NAME=client.example\n");
     assert_contains(output, "SERVER_PORT=8080\n");
     assert_contains(output, "SERVER_PROTOCOL=HTTP/1.1\n");
     assert_contains(output, "SERVER_SOFTWARE=webserv\n");

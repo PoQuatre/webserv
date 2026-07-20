@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/19 03:36:43 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 09:54:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,6 +24,8 @@
 #include <map>
 #include <sstream>
 #include <vector>
+
+#include "config-parser.hpp"
 
 namespace {
 
@@ -315,12 +317,19 @@ std::string host_name(const std::string &host)
         return "";
     if (host[0] == '[') {
         end = host.find(']');
-        if (end != std::string::npos)
+        if (end != std::string::npos && end > 1
+            && (end + 1 == host.size() || host[end + 1] == ':'))
             return host.substr(1, end - 1);
+        return "";
     }
     colon = host.find(':');
-    if (colon != std::string::npos)
+    if (colon == 0)
+        return "";
+    if (colon != std::string::npos) {
+        if (host.find(':', colon + 1) != std::string::npos)
+            return "";
         return host.substr(0, colon);
+    }
     return host;
 }
 
@@ -353,20 +362,20 @@ std::string first_config_value(const std::vector<std::string> &values)
 
 std::string server_name(const http::request &req, const Config &cfg)
 {
-    std::string name = first_config_value(cfg.conf.server_name);
+    std::string name = host_name(header_value(req, "host"));
 
     if (!name.empty())
         return name;
-    return host_name(header_value(req, "host"));
+    return first_config_value(cfg.conf.server_name);
 }
 
-std::string server_port(const http::request &req, const Config &cfg)
+std::string server_port(const Config &cfg)
 {
     std::string port = port_from_authority(first_config_value(cfg.conf.listen));
 
     if (!port.empty())
         return port;
-    port = port_from_authority(header_value(req, "host"));
+    port = port_from_authority(DEFAULT_LISTEN);
     if (!port.empty())
         return port;
     return "80";
@@ -422,7 +431,7 @@ std::vector<std::string> make_cgi_environment(
     add_env(env, "SCRIPT_NAME", req.uri);
     add_env(env, "REMOTE_ADDR", req.remote_addr);
     add_env(env, "SERVER_NAME", server_name(req, cfg));
-    add_env(env, "SERVER_PORT", server_port(req, cfg));
+    add_env(env, "SERVER_PORT", server_port(cfg));
     add_env(env, "SERVER_PROTOCOL", version_string(req));
     add_env(env, "SERVER_SOFTWARE", "webserv");
     add_env(env, "CONTENT_LENGTH", content_length);
