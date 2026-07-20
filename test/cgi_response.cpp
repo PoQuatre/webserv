@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:15:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:35:55 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -23,6 +23,7 @@
 #include <fstream>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "cgi.hpp"
 #include "http.hpp"
@@ -578,6 +579,22 @@ Test(cgi_lifecycle, expire_jobs_marks_timed_out_jobs)
     cr_assert_eq(expired[0], 12);
     cr_assert(jobs[12].failed);
     cr_assert_eq(jobs[12].failure_status, http::status::GATEWAY_TIMEOUT);
+}
+
+Test(cgi_lifecycle, jobs_to_cancel_for_client_reports_only_matching_jobs)
+{
+    cgi::Lifecycle lifecycle;
+    std::map<int32_t, cgi::Job> jobs;
+
+    jobs[10].clientfd = 42;
+    jobs[20].clientfd = 99;
+    jobs[30].clientfd = 42;
+    std::vector<int32_t> jobs_to_cancel
+        = lifecycle.jobs_to_cancel_for(42, jobs);
+
+    cr_assert_eq(jobs_to_cancel.size(), 2);
+    cr_assert_eq(jobs_to_cancel[0], 10);
+    cr_assert_eq(jobs_to_cancel[1], 30);
 }
 
 Test(cgi_lifecycle, abort_cleanup_terminates_and_reaps_child)
