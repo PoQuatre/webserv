@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 10:14:56 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 10:31:39 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -283,15 +283,6 @@ std::string make_nph_response(const std::string &first_line,
     append_forwarded_cgi_headers(ss, headers);
     append_server_framing_and_body(ss, req, body);
     return ss.str();
-}
-
-std::string make_body_response(
-    const http::request &req, const std::string &body)
-{
-    std::vector<Header> headers;
-
-    headers.push_back(make_header("Content-Type", "text/html"));
-    return make_response(req, 200, "OK", headers, body);
 }
 
 std::string make_bad_gateway(const http::request &req)
@@ -620,7 +611,7 @@ std::string translate_parsed(const std::string &output,
     bool has_location = false;
 
     if (block.empty())
-        return make_body_response(req, output);
+        return make_bad_gateway(req);
     if (!parse_headers(block, headers))
         return make_bad_gateway(req);
     for (std::size_t i = 0; i < headers.size(); ++i) {
@@ -649,7 +640,7 @@ std::string cgi::translate_output(
     if (starts_with(output, "HTTP/"))
         return translate_nph(output, req);
     if (!find_header_end(output, header_end))
-        return make_body_response(req, output);
+        return make_bad_gateway(req);
     return translate_parsed(output, req, header_end);
 }
 
