@@ -16,6 +16,12 @@
 
 #include "Server.hpp"
 #include "http.hpp"
+#include "logger.hpp"
+
+// FIXME: remove that
+#define make_error_response_impl(req, st, cfg)                                 \
+    (L_DEBUG("Responded with error code {}", http::status::codes[st]),         \
+        make_error_response_impl_impl(req, st, cfg))
 
 namespace dispatcher {
 
