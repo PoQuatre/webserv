@@ -18,7 +18,9 @@
 
 #include <cerrno>
 #include <cstring>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 
 #include "logger.hpp"
@@ -89,7 +91,7 @@ std::string make_response(const http::request &req, http::status::type status,
     return ss.str();
 }
 
-std::string make_error_response_impl(
+std::string make_error_response_impl_impl(
     const http::request &req, http::status::type status, const Config &cfg)
 {
     int code = http::status::codes[status];
@@ -113,14 +115,70 @@ std::string make_error_response_impl(
     return make_response(req, status, body.str(), "text/html");
 }
 
+std::string create_index_directory(
+    const http::request &req, const std::string &fs_path, const Config &cfg)
+{
+    std::ostringstream ss;
+    ss << "<html><head><title>Index of " << req.uri << "</title></head>";
+    ss << "<body><h1>Index of " << req.uri << "</h1><hr>";
+    ss << "<pre>";
+
+    DIR *dp;
+    struct dirent *ep;
+    dp = opendir(fs_path.c_str());
+    if (dp != NULL) {
+        if (readdir(dp)) {}
+        while ((ep = readdir(dp)) != NULL) {
+
+            struct stat st;
+            std::string filename(ep->d_name);
+
+            if (stat((fs_path + filename).c_str(), &st) != 0) {}
+
+            std::tm *time_last_change = localtime(&st.st_mtim.tv_sec);
+
+            ss << "<a href=\"" << filename << "\">" << filename.substr(0, 39)
+               << "</a>";
+
+            if (std::strcmp(ep->d_name, "../") != 0) {
+                char date[256];
+                if (std::strftime(date, 256, "%d-%b-%Y %R", time_last_change)
+                    == 0) {
+                    return make_error_response_impl(
+                        req, http::status::INTERNAL_SERVER_ERROR, cfg);
+                }
+                ss << std::setw(static_cast<int>(40 - filename.size())) << " ";
+                ss << date;
+                ss << std::setw(20) << " ";
+                if (ep->d_type == DT_REG) {
+                    ss << st.st_size;
+                } else {
+                    ss << "-";
+                }
+            }
+            ss << "\n";
+        }
+        closedir(dp);
+    }
+
+    ss << "</pre>";
+    ss << "<hr></body>";
+    ss << "</html>";
+
+    return make_response(req, http::status::OK, ss.str(), "text/html");
+}
+
 std::string handle_get(
     const http::request &req, const std::string &fs_path, const Config &cfg)
 {
     struct stat st;
+
     if (stat(fs_path.c_str(), &st) != 0) {
+
+        if (errno == ENOENT)
+            return make_error_response_impl(req, http::status::NOT_FOUND, cfg);
         if (errno == EACCES)
             return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
-        return make_error_response_impl(req, http::status::NOT_FOUND, cfg);
     }
 
     std::string uri_path = req.uri;
@@ -145,6 +203,8 @@ std::string handle_get(
                     req, http::status::OK, content, "text/html");
         }
 
+        if (cfg.autoindex)
+            return create_index_directory(req, fs_path, cfg);
         return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
     }
 
@@ -195,8 +255,8 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
 
 std::string dispatcher::error_response(http::status::type status)
 {
-    Config empty_cfg = { };
-    http::request empty_req = { };
+    Config empty_cfg = {};
+    http::request empty_req = {};
     return make_error_response_impl(empty_req, status, empty_cfg);
 }
 
