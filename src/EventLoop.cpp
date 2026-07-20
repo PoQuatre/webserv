@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 17:44:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:02:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -485,22 +485,11 @@ void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
     for (std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.begin();
         it != _cgi_jobs.end(); ++it) {
         if (it->second.stdin_fd == fd) {
-            cgi::Job &job = it->second;
-            const std::string &body = job.request.body;
+            cgi::ReadinessResult result
+                = cgi::Lifecycle::process_stdin(it->second, events);
 
-            if (events & EPOLLERR)
-                job.failed = true;
-            if (job.body_written < body.size()) {
-                ssize_t n = write(fd, body.c_str() + job.body_written,
-                    body.size() - job.body_written);
-                if (n > 0)
-                    job.body_written += static_cast<std::size_t>(n);
-                else if (!(events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)))
-                    return;
-            }
-            if (job.body_written < body.size() && !job.failed)
-                return;
-            close_cgi_fd(job.stdin_fd);
+            if (result.action == cgi::readiness::CLOSE_STDIN)
+                close_cgi_fd(it->second.stdin_fd);
             return;
         }
     }
@@ -509,33 +498,13 @@ void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
 void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
 {
     std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.find(fd);
-    char buffer[4096];
-    ssize_t bytes_read;
-    bool done = false;
+    cgi::ReadinessResult result;
 
     if (it == _cgi_jobs.end())
         return;
-    bytes_read = read(fd, buffer, sizeof(buffer));
-    if (bytes_read > 0) {
-        if (it->second.max_output != 0
-            && it->second.output.size() + static_cast<std::size_t>(bytes_read)
-                > it->second.max_output) {
-            it->second.failed = true;
-            it->second.failure_status = http::status::BAD_GATEWAY;
-            done = true;
-        } else {
-            it->second.output.append(
-                buffer, static_cast<std::size_t>(bytes_read));
-        }
-    } else if (bytes_read == 0) {
-        done = true;
-    } else if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
-        if (events & EPOLLERR)
-            it->second.failed = true;
-        done = true;
-    }
-    if (done)
-        finish_cgi_job(fd);
+    result = cgi::Lifecycle::process_stdout(it->second, events);
+    if (result.action == cgi::readiness::COMPLETE)
+        finish_cgi_job(result.descriptor_fd);
 }
 
 int32_t EventLoop::cgi_epoll_timeout() const
@@ -652,28 +621,27 @@ void EventLoop::expire_cgi_jobs()
 void EventLoop::finish_cgi_job(int32_t fd)
 {
     CgiCleanupResult result;
+    cgi::CompletionResult completion;
 
     result = cleanup_cgi_job(_cgi_jobs.find(fd), CGI_CLEANUP_COMPLETE);
     if (!result.found)
         return;
-    if (result.job.stdin_fd != -1
-        && result.job.body_written < result.job.request.body.size())
-        result.job.failed = true;
+    completion = cgi::Lifecycle::complete(result.job, result.child_ok);
     std::map<int32_t, Connection>::iterator conn_it
-        = _connections.find(result.job.clientfd);
+        = _connections.find(completion.clientfd);
     if (conn_it == _connections.end())
         return;
-    if (result.job.failed || !result.child_ok) {
+    if (completion.failed) {
         const Config &cfg = dispatcher::config_for(
-            result.job.request, conn_it->second.server());
+            completion.request, conn_it->second.server());
 
         conn_it->second.enqueue_response(dispatcher::error_response(
-            result.job.request, cfg, result.job.failure_status));
+            completion.request, cfg, completion.failure_status));
     } else {
         conn_it->second.enqueue_response(
-            cgi::translate_output(result.job.output, result.job.request));
+            cgi::translate_output(completion.output, completion.request));
     }
-    update_source_events(result.job.clientfd, EPOLL_WRONLY);
+    update_source_events(completion.clientfd, EPOLL_WRONLY);
 }
 
 void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)

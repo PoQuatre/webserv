@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 17:14:57 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:02:54 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -457,4 +457,91 @@ Test(cgi_lifecycle, start_request_reports_descriptors_to_monitor)
         "waitpid() failed: %s", strerror(errno));
     cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
     assert_contains(output, "hello-lifecycle\n");
+}
+
+Test(cgi_lifecycle, stdin_readiness_writes_body_and_reports_fd_to_close)
+{
+    int pipefd[2];
+
+    cr_assert_eq(pipe(pipefd), 0, "pipe() failed: %s", strerror(errno));
+    http::request req = make_req(http::methods::POST);
+    req.body = "alpha=one&beta=two";
+    cgi::Job job;
+    job.clientfd = 77;
+    job.stdin_fd = pipefd[1];
+    job.request = req;
+
+    cgi::ReadinessResult result = cgi::Lifecycle::process_stdin(job, 0);
+    cr_assert_eq(result.action, cgi::readiness::CLOSE_STDIN);
+    cr_assert_eq(result.descriptor_fd, pipefd[1]);
+    cr_assert_eq(job.body_written, req.body.size());
+    close(pipefd[1]);
+    std::string body = read_all(pipefd[0]);
+    close(pipefd[0]);
+    cr_assert_str_eq(body.c_str(), req.body.c_str());
+}
+
+Test(cgi_lifecycle, stdout_readiness_accumulates_output_and_reports_completion)
+{
+    int pipefd[2];
+    const char *output = "Content-Type: text/plain\r\n\r\nhello";
+
+    cr_assert_eq(pipe(pipefd), 0, "pipe() failed: %s", strerror(errno));
+    cr_assert_gt(write(pipefd[1], output, strlen(output)), 0,
+        "write() failed: %s", strerror(errno));
+    close(pipefd[1]);
+    cgi::Job job;
+    job.clientfd = 88;
+    job.stdout_fd = pipefd[0];
+    job.max_output = 4096;
+
+    cgi::ReadinessResult result = cgi::Lifecycle::process_stdout(job, 0);
+    cr_assert_eq(result.action, cgi::readiness::CONTINUE);
+    cr_assert_str_eq(job.output.c_str(), output);
+    result = cgi::Lifecycle::process_stdout(job, 0);
+    cr_assert_eq(result.action, cgi::readiness::COMPLETE);
+    cr_assert_eq(result.descriptor_fd, pipefd[0]);
+    close(pipefd[0]);
+}
+
+Test(cgi_lifecycle, stdout_readiness_enforces_output_limit)
+{
+    int pipefd[2];
+    const char *output = "too-large";
+
+    cr_assert_eq(pipe(pipefd), 0, "pipe() failed: %s", strerror(errno));
+    cr_assert_gt(write(pipefd[1], output, strlen(output)), 0,
+        "write() failed: %s", strerror(errno));
+    close(pipefd[1]);
+    cgi::Job job;
+    job.clientfd = 99;
+    job.stdout_fd = pipefd[0];
+    job.max_output = 4;
+
+    cgi::ReadinessResult result = cgi::Lifecycle::process_stdout(job, 0);
+    cr_assert_eq(result.action, cgi::readiness::COMPLETE);
+    cr_assert_eq(result.descriptor_fd, pipefd[0]);
+    cr_assert(job.failed);
+    cr_assert_eq(job.failure_status, http::status::BAD_GATEWAY);
+    cr_assert(job.output.empty());
+    close(pipefd[0]);
+}
+
+Test(cgi_lifecycle, completion_identifies_waiting_client)
+{
+    http::request req = make_req(http::methods::POST);
+    req.uri = "/cgi/echo.sh";
+    req.body = "complete-body";
+    cgi::Job job;
+    job.clientfd = 123;
+    job.stdin_fd = -1;
+    job.body_written = req.body.size();
+    job.request = req;
+    job.output = "Content-Type: text/plain\r\n\r\nhello";
+
+    cgi::CompletionResult result = cgi::Lifecycle::complete(job, true);
+    cr_assert_eq(result.clientfd, 123);
+    cr_assert_not(result.failed);
+    cr_assert_str_eq(result.request.uri.c_str(), "/cgi/echo.sh");
+    cr_assert_str_eq(result.output.c_str(), job.output.c_str());
 }
