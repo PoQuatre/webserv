@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 17:44:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:15:08 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -61,8 +61,6 @@ private:
         int32_t clientfd;
     };
 
-    enum CgiCleanupAction { CGI_CLEANUP_COMPLETE, CGI_CLEANUP_ABORT };
-
     struct CgiCleanupResult {
         CgiCleanupResult();
 
@@ -84,12 +82,10 @@ private:
     void process_cgi_stdout(int32_t fd, uint32_t events);
     int32_t cgi_epoll_timeout() const;
     void expire_cgi_jobs();
-    void reap_pending_children();
-    void reap_child_later(pid_t pid);
-    void terminate_child_nonblocking(pid_t pid);
     void close_cgi_fd(int32_t &fd);
     CgiCleanupResult cleanup_cgi_job(
-        std::map<int32_t, cgi::Job>::iterator job_it, CgiCleanupAction action);
+        std::map<int32_t, cgi::Job>::iterator job_it,
+        cgi::job_cleanup::action action);
     void dispatch_pending(int32_t fd, uint32_t events, Connection &conn);
     bool start_cgi_request(int32_t clientfd, Connection &conn,
         const Config &cfg, const std::string &script_path,
@@ -102,6 +98,6 @@ private:
     std::map<int32_t, EventSource> _sources;
     std::map<int32_t, Connection> _connections;
     std::map<int32_t, cgi::Job> _cgi_jobs;
-    std::vector<pid_t> _pending_reaps;
+    cgi::Lifecycle _cgi_lifecycle;
     int32_t _epollfd;
 };

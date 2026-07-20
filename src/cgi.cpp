@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:03:43 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:20:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,6 +20,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cctype>
 #include <csignal>
 #include <cstdlib>
@@ -222,6 +223,38 @@ uint64_t monotonic_millis()
         return 0;
     return (static_cast<uint64_t>(ts.tv_sec) * 1000)
         + static_cast<uint64_t>(ts.tv_nsec / 1000000);
+}
+
+bool reap_child(pid_t pid, int options)
+{
+    while (true) {
+        pid_t waited = waitpid(pid, NULL, options);
+
+        if (waited == pid || (waited == -1 && errno == ECHILD))
+            return true;
+        if (waited == 0)
+            return false;
+        if (errno != EINTR)
+            return true;
+    }
+}
+
+bool terminate_child(pid_t pid, int options)
+{
+    if (pid <= 0)
+        return true;
+    kill(pid, SIGKILL);
+    return reap_child(pid, options);
+}
+
+pid_t wait_child_status(pid_t pid, int *status, int options)
+{
+    while (true) {
+        pid_t waited = waitpid(pid, status, options);
+
+        if (waited != -1 || errno != EINTR)
+            return waited;
+    }
 }
 
 bool parse_status_value(
@@ -697,6 +730,11 @@ cgi::CompletionResult::CompletionResult()
 {
 }
 
+cgi::CleanupResult::CleanupResult()
+    : child_ok(true)
+{
+}
+
 cgi::StartedRequest::StartedRequest()
     : status(cgi::start::BAD_GATEWAY)
 {
@@ -791,6 +829,95 @@ cgi::CompletionResult cgi::Lifecycle::complete(cgi::Job job, bool child_ok)
     result.output = job.output;
     result.failure_status = job.failure_status;
     result.failed = job.failed || !child_ok;
+    return result;
+}
+
+int32_t cgi::Lifecycle::wait_timeout(
+    const std::map<int32_t, cgi::Job> &jobs) const
+{
+    uint64_t now;
+    uint64_t nearest = 0;
+
+    if (!_pending_reaps.empty())
+        return 0;
+    if (jobs.empty())
+        return -1;
+    now = monotonic_millis();
+    for (std::map<int32_t, cgi::Job>::const_iterator it = jobs.begin();
+        it != jobs.end(); ++it) {
+        if (it->second.deadline_millis <= now)
+            return 0;
+        if (nearest == 0 || it->second.deadline_millis < nearest)
+            nearest = it->second.deadline_millis;
+    }
+    return static_cast<int32_t>(
+        std::min(nearest - now, static_cast<uint64_t>(INT32_MAX)));
+}
+
+std::vector<int32_t> cgi::Lifecycle::expire_jobs(
+    std::map<int32_t, cgi::Job> &jobs)
+{
+    std::vector<int32_t> expired;
+    uint64_t now = monotonic_millis();
+
+    for (std::map<int32_t, cgi::Job>::iterator it = jobs.begin();
+        it != jobs.end(); ++it) {
+        if (it->second.deadline_millis > now)
+            continue;
+        it->second.failed = true;
+        it->second.failure_status = http::status::GATEWAY_TIMEOUT;
+        expired.push_back(it->first);
+    }
+    return expired;
+}
+
+void cgi::Lifecycle::reap_pending_children()
+{
+    for (std::vector<pid_t>::iterator it = _pending_reaps.begin();
+        it != _pending_reaps.end();) {
+        if (reap_child(*it, WNOHANG))
+            it = _pending_reaps.erase(it);
+        else
+            ++it;
+    }
+}
+
+void cgi::Lifecycle::reap_child_later(pid_t pid)
+{
+    if (pid <= 0)
+        return;
+    if (std::find(_pending_reaps.begin(), _pending_reaps.end(), pid)
+        == _pending_reaps.end())
+        _pending_reaps.push_back(pid);
+}
+
+void cgi::Lifecycle::terminate_child_nonblocking(pid_t pid)
+{
+    if (!terminate_child(pid, WNOHANG))
+        reap_child_later(pid);
+}
+
+cgi::CleanupResult cgi::Lifecycle::cleanup(
+    const cgi::Job &job, cgi::job_cleanup::action action)
+{
+    cgi::CleanupResult result;
+    int status;
+    pid_t waited;
+
+    result.job = job;
+    if (action == cgi::job_cleanup::ABORT) {
+        terminate_child_nonblocking(job.pid);
+        return result;
+    }
+    if (job.pid <= 0)
+        return result;
+    status = 0;
+    waited = wait_child_status(job.pid, &status, WNOHANG);
+    result.child_ok = waited != -1 || errno == ECHILD;
+    if (waited == job.pid)
+        result.child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    else if (waited == 0)
+        terminate_child_nonblocking(job.pid);
     return result;
 }
 

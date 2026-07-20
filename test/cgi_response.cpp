@@ -6,12 +6,13 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:02:54 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 18:15:08 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <criterion/criterion.h>
 
+#include <signal.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -20,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <string>
 
 #include "cgi.hpp"
@@ -83,6 +85,11 @@ static void assert_not_contains(const std::string &haystack, const char *needle)
 {
     cr_assert_eq(haystack.find(needle), std::string::npos,
         "unexpected '%s' in output:\n%s", needle, haystack.c_str());
+}
+
+static bool process_is_gone(pid_t pid)
+{
+    return kill(pid, 0) == -1 && errno == ESRCH;
 }
 
 static void assert_bad_gateway(const std::string &response)
@@ -544,4 +551,74 @@ Test(cgi_lifecycle, completion_identifies_waiting_client)
     cr_assert_not(result.failed);
     cr_assert_str_eq(result.request.uri.c_str(), "/cgi/echo.sh");
     cr_assert_str_eq(result.output.c_str(), job.output.c_str());
+}
+
+Test(cgi_lifecycle, wait_timeout_comes_from_cgi_deadlines)
+{
+    cgi::Lifecycle lifecycle;
+    std::map<int32_t, cgi::Job> jobs;
+    cgi::Job job;
+
+    cr_assert_eq(lifecycle.wait_timeout(jobs), -1);
+    job.deadline_millis = 1;
+    jobs[12] = job;
+    cr_assert_eq(lifecycle.wait_timeout(jobs), 0);
+}
+
+Test(cgi_lifecycle, expire_jobs_marks_timed_out_jobs)
+{
+    cgi::Lifecycle lifecycle;
+    std::map<int32_t, cgi::Job> jobs;
+    cgi::Job job;
+
+    job.deadline_millis = 1;
+    jobs[12] = job;
+    std::vector<int32_t> expired = lifecycle.expire_jobs(jobs);
+    cr_assert_eq(expired.size(), 1);
+    cr_assert_eq(expired[0], 12);
+    cr_assert(jobs[12].failed);
+    cr_assert_eq(jobs[12].failure_status, http::status::GATEWAY_TIMEOUT);
+}
+
+Test(cgi_lifecycle, abort_cleanup_terminates_and_reaps_child)
+{
+    pid_t pid = fork();
+
+    cr_assert_neq(pid, -1, "fork() failed: %s", strerror(errno));
+    if (pid == 0) {
+        sleep(10);
+        _exit(0);
+    }
+
+    cgi::Lifecycle lifecycle;
+    cgi::Job job;
+    job.pid = pid;
+    lifecycle.cleanup(job, cgi::job_cleanup::ABORT);
+    for (int i = 0; i < 100; ++i) {
+        lifecycle.reap_pending_children();
+        if (process_is_gone(pid))
+            return;
+        usleep(1000);
+    }
+    kill(pid, SIGKILL);
+    waitpid(pid, NULL, 0);
+    cr_assert_fail("CGI lifecycle did not reap aborted child");
+}
+
+Test(cgi_lifecycle, complete_cleanup_reaps_exited_child)
+{
+    pid_t pid = fork();
+
+    cr_assert_neq(pid, -1, "fork() failed: %s", strerror(errno));
+    if (pid == 0)
+        _exit(0);
+
+    usleep(10000);
+    cgi::Lifecycle lifecycle;
+    cgi::Job job;
+    job.pid = pid;
+    cgi::CleanupResult result
+        = lifecycle.cleanup(job, cgi::job_cleanup::COMPLETE);
+    cr_assert(result.child_ok);
+    cr_assert(process_is_gone(pid));
 }
