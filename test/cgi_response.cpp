@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 09:48:02 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 10:23:33 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -124,12 +124,21 @@ Test(cgi_response, location_header_defaults_to_302_redirect)
         "\r\n");
 }
 
-Test(cgi_response, nph_output_is_passed_through_after_validation)
+Test(cgi_response, nph_output_filters_unsafe_headers)
 {
-    std::string raw = "HTTP/1.1 204 No Content\r\nX-NPH: yes\r\n\r\n";
-    std::string out = cgi::translate_output(raw, make_req(http::methods::GET));
+    std::string out = cgi::translate_output("HTTP/1.1 204 No Content\r\n"
+                                            "X-NPH: yes\r\n"
+                                            "Connection: close\r\n"
+                                            "Transfer-Encoding: chunked\r\n"
+                                            "\r\n",
+        make_req(http::methods::GET));
 
-    cr_assert_str_eq(out.c_str(), raw.c_str());
+    cr_assert_str_eq(out.c_str(),
+        "HTTP/1.1 204 No Content\r\n"
+        "X-NPH: yes\r\n"
+        "Content-Length: 0\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n");
 }
 
 Test(cgi_response, headerless_output_becomes_html_response)
@@ -282,7 +291,7 @@ Test(cgi_process, runs_script_from_script_directory)
     std::string script = root + "/read-neighbor.sh";
     write_file(root + "/data.txt", "neighbor-data\n");
     write_file(script,
-        "printf 'Content-Type: text/plain\r\n\r\n'\n"
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "cat data.txt\n");
     cr_assert_eq(
         chmod(script.c_str(), 0600), 0, "chmod() failed: %s", strerror(errno));
@@ -321,8 +330,8 @@ Test(cgi_process, resolves_relative_interpreter_before_script_chdir)
         "symlink() failed: %s", strerror(errno));
     write_file(script_dir + "/data.txt", "relative-interpreter\n");
     write_file(script,
-        "printf 'Content-Type: text/plain\r\n\r\n'\n"
-        "printf 'SCRIPT_FILENAME=%s\n' \"$SCRIPT_FILENAME\"\n"
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'SCRIPT_FILENAME=%s\\n' \"$SCRIPT_FILENAME\"\n"
         "cat data.txt\n");
     cr_assert_eq(
         chmod(script.c_str(), 0600), 0, "chmod() failed: %s", strerror(errno));
