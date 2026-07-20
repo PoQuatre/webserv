@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 10:23:33 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 10:31:39 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -85,6 +85,13 @@ static void assert_not_contains(const std::string &haystack, const char *needle)
         "unexpected '%s' in output:\n%s", needle, haystack.c_str());
 }
 
+static void assert_bad_gateway(const std::string &response)
+{
+    const char *status = "HTTP/1.1 502 Bad Gateway\r\n";
+
+    cr_assert(strncmp(response.c_str(), status, strlen(status)) == 0);
+}
+
 Test(cgi_response, parsed_headers_become_http_response)
 {
     std::string out = cgi::translate_output(
@@ -99,6 +106,19 @@ Test(cgi_response, parsed_headers_become_http_response)
         "Connection: keep-alive\r\n"
         "\r\n"
         "hello");
+}
+
+Test(cgi_response, header_only_output_with_separator_becomes_empty_response)
+{
+    std::string out = cgi::translate_output(
+        "Content-Type: text/plain\r\n\r\n", make_req(http::methods::GET));
+
+    cr_assert_str_eq(out.c_str(),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: 0\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n");
 }
 
 Test(cgi_response, status_header_controls_status_line)
@@ -141,18 +161,20 @@ Test(cgi_response, nph_output_filters_unsafe_headers)
         "\r\n");
 }
 
-Test(cgi_response, headerless_output_becomes_html_response)
+Test(cgi_response, headerless_output_becomes_bad_gateway)
 {
     std::string out = cgi::translate_output(
         "<h1>Hello</h1>\n", make_req(http::methods::GET));
 
-    cr_assert_str_eq(out.c_str(),
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "Content-Length: 15\r\n"
-        "Connection: keep-alive\r\n"
-        "\r\n"
-        "<h1>Hello</h1>\n");
+    assert_bad_gateway(out);
+}
+
+Test(cgi_response, header_like_output_without_separator_becomes_bad_gateway)
+{
+    std::string out = cgi::translate_output(
+        "Content-Type text/plain\r\nhello", make_req(http::methods::GET));
+
+    assert_bad_gateway(out);
 }
 
 Test(cgi_response, malformed_output_becomes_bad_gateway)
@@ -160,7 +182,7 @@ Test(cgi_response, malformed_output_becomes_bad_gateway)
     std::string out = cgi::translate_output(
         "Content-Type text/plain\r\n\r\nhello", make_req(http::methods::GET));
 
-    cr_assert(strncmp(out.c_str(), "HTTP/1.1 502 Bad Gateway\r\n", 26) == 0);
+    assert_bad_gateway(out);
 }
 
 Test(cgi_response, head_discards_body_and_preserves_content_length)

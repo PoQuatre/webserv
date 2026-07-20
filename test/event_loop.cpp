@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 10:25:00 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 10:31:39 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -563,7 +563,7 @@ Test(event_loop, cgi_exposes_raw_query_meta_variables_and_http_headers)
         unusable_host_response.find(server_port.str()), std::string::npos);
 }
 
-Test(event_loop, cgi_response_modes_cover_redirect_nph_and_body_only)
+Test(event_loop, cgi_response_modes_cover_redirect_nph_and_missing_separator)
 {
     logger::log_level() = logger::levels::NOTHING;
 
@@ -576,7 +576,8 @@ Test(event_loop, cgi_response_modes_cover_redirect_nph_and_body_only)
         "printf 'Connection: close\\r\\n'\n"
         "printf 'Transfer-Encoding: chunked\\r\\n'\n"
         "printf '\\r\\n'\n");
-    write_file(harness.root + "/cgi/body-only.sh", "printf 'body-only\\n'\n");
+    write_file(harness.root + "/cgi/missing-separator.sh",
+        "printf 'missing-separator\\n'\n");
 
     std::string redirect_response = perform_request_until_idle(
         harness, "GET /cgi/redirect.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
@@ -597,10 +598,11 @@ Test(event_loop, cgi_response_modes_cover_redirect_nph_and_body_only)
     cr_assert_eq(
         nph_response.find("Transfer-Encoding: chunked\r\n"), std::string::npos);
 
-    std::string body_response = perform_request_until_idle(
-        harness, "GET /cgi/body-only.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(body_response, "HTTP/1.1 200 OK");
-    cr_assert_neq(body_response.find("body-only\n"), std::string::npos);
+    std::string missing_separator_response = perform_request_until_idle(harness,
+        "GET /cgi/missing-separator.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    assert_status(missing_separator_response, "HTTP/1.1 502 Bad Gateway");
+    cr_assert_eq(missing_separator_response.find("missing-separator\n"),
+        std::string::npos);
 }
 
 Test(event_loop, cgi_response_filters_unsafe_headers)
