@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/19 04:23:09 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/20 09:54:22 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -229,6 +229,8 @@ static Server make_cgi_server(uint16_t port, const std::string &root,
     std::vector<Location> locations;
 
     listen_addr << "127.0.0.1:" << port;
+    config.conf.listen.push_back(listen_addr.str());
+    config.conf.server_name.push_back("test");
     config.root = root;
     config.allowed_methods[http::methods::GET] = true;
     config.allowed_methods[http::methods::POST] = true;
@@ -307,12 +309,6 @@ static void ensure_cgi_harness_started(CgiHarness &harness)
 {
     if (!harness.running)
         start_cgi_harness(harness);
-}
-
-static uint16_t cgi_harness_port(CgiHarness &harness)
-{
-    ensure_cgi_harness_started(harness);
-    return harness.port;
 }
 
 static void stop_cgi_harness(CgiHarness &harness)
@@ -511,9 +507,10 @@ Test(event_loop, cgi_exposes_raw_query_meta_variables_and_http_headers)
         "printf 'HTTP_HOST=%s\\n' \"$HTTP_HOST\"\n"
         "printf 'HTTP_X_CUSTOM_HEADER=%s\\n' \"$HTTP_X_CUSTOM_HEADER\"\n");
 
+    const std::string request_host = "example.test:1";
     std::ostringstream request;
     request << "GET /cgi/env.sh?raw=a%2Bb+c HTTP/1.1\r\n"
-            << "Host: example.test:" << cgi_harness_port(harness) << "\r\n"
+            << "Host: " << request_host << "\r\n"
             << "Accept: text/plain\r\n"
             << "Content-Type: text/plain\r\n"
             << "Content-Length: 0\r\n"
@@ -541,11 +538,29 @@ Test(event_loop, cgi_exposes_raw_query_meta_variables_and_http_headers)
     cr_assert_neq(
         response.find("CONTENT_TYPE=text/plain\n"), std::string::npos);
     cr_assert_neq(response.find("HTTP_ACCEPT=text/plain\n"), std::string::npos);
-    std::ostringstream http_host;
-    http_host << "HTTP_HOST=example.test:" << harness.port << "\n";
-    cr_assert_neq(response.find(http_host.str()), std::string::npos);
+    std::string http_host = "HTTP_HOST=" + request_host + "\n";
+    cr_assert_neq(response.find(http_host), std::string::npos);
     cr_assert_neq(
         response.find("HTTP_X_CUSTOM_HEADER=kept\n"), std::string::npos);
+
+    std::string fallback_response = perform_request_until_idle(harness,
+        "GET /cgi/env.sh HTTP/1.0\r\n"
+        "Accept: text/plain\r\n"
+        "\r\n");
+    assert_status(fallback_response, "HTTP/1.0 200 OK");
+    cr_assert_neq(
+        fallback_response.find("SERVER_NAME=test\n"), std::string::npos);
+    cr_assert_neq(fallback_response.find(server_port.str()), std::string::npos);
+
+    std::string unusable_host_response = perform_request_until_idle(harness,
+        "GET /cgi/env.sh HTTP/1.1\r\n"
+        "Host: 2001:db8::1\r\n"
+        "\r\n");
+    assert_status(unusable_host_response, "HTTP/1.1 200 OK");
+    cr_assert_neq(
+        unusable_host_response.find("SERVER_NAME=test\n"), std::string::npos);
+    cr_assert_neq(
+        unusable_host_response.find(server_port.str()), std::string::npos);
 }
 
 Test(event_loop, cgi_response_modes_cover_redirect_nph_and_body_only)
