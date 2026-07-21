@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:35:55 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -732,6 +732,7 @@ cgi::CompletionResult::CompletionResult()
 
 cgi::CleanupResult::CleanupResult()
     : child_ok(true)
+    , found(false)
 {
 }
 
@@ -745,24 +746,51 @@ cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
     cgi::StartedRequest &request)
 {
     cgi::Process process;
+    cgi::Job job;
 
     request = cgi::StartedRequest();
     request.status = cgi::start_process(req, cfg, script_path, process);
     if (request.status != cgi::start::STARTED)
         return request.status;
-    request.job.clientfd = clientfd;
-    request.job.pid = process.pid;
-    request.job.stdin_fd = process.stdin_fd;
-    request.job.stdout_fd = process.stdout_fd;
-    request.job.max_output = cfg.cgi_output_buffer_size;
-    request.job.deadline_millis
+    job.clientfd = clientfd;
+    job.pid = process.pid;
+    job.stdin_fd = process.stdin_fd;
+    job.stdout_fd = process.stdout_fd;
+    job.max_output = cfg.cgi_output_buffer_size;
+    job.deadline_millis
         = monotonic_millis() + (static_cast<uint64_t>(cfg.cgi_timeout) * 1000);
-    request.job.request = req;
+    job.request = req;
     request.descriptors.push_back(
         cgi::Descriptor(cgi::descriptor::CGI_STDOUT, process.stdout_fd));
     request.descriptors.push_back(
         cgi::Descriptor(cgi::descriptor::CGI_STDIN, process.stdin_fd));
+    _jobs[job.stdout_fd] = job;
     return request.status;
+}
+
+cgi::ReadinessResult cgi::Lifecycle::process_stdin(int32_t fd, uint32_t events)
+{
+    cgi::ReadinessResult result;
+
+    for (std::map<int32_t, cgi::Job>::iterator it = _jobs.begin();
+        it != _jobs.end(); ++it) {
+        if (it->second.stdin_fd != fd)
+            continue;
+        result = cgi::Lifecycle::process_stdin(it->second, events);
+        if (result.action == cgi::readiness::CLOSE_STDIN)
+            it->second.stdin_fd = -1;
+        return result;
+    }
+    return result;
+}
+
+cgi::ReadinessResult cgi::Lifecycle::process_stdout(int32_t fd, uint32_t events)
+{
+    std::map<int32_t, cgi::Job>::iterator it = _jobs.find(fd);
+
+    if (it == _jobs.end())
+        return cgi::ReadinessResult();
+    return cgi::Lifecycle::process_stdout(it->second, events);
 }
 
 cgi::ReadinessResult cgi::Lifecycle::process_stdin(
@@ -832,19 +860,18 @@ cgi::CompletionResult cgi::Lifecycle::complete(cgi::Job job, bool child_ok)
     return result;
 }
 
-int32_t cgi::Lifecycle::wait_timeout(
-    const std::map<int32_t, cgi::Job> &jobs) const
+int32_t cgi::Lifecycle::wait_timeout() const
 {
     uint64_t now;
     uint64_t nearest = 0;
 
     if (!_pending_reaps.empty())
         return 0;
-    if (jobs.empty())
+    if (_jobs.empty())
         return -1;
     now = monotonic_millis();
-    for (std::map<int32_t, cgi::Job>::const_iterator it = jobs.begin();
-        it != jobs.end(); ++it) {
+    for (std::map<int32_t, cgi::Job>::const_iterator it = _jobs.begin();
+        it != _jobs.end(); ++it) {
         if (it->second.deadline_millis <= now)
             return 0;
         if (nearest == 0 || it->second.deadline_millis < nearest)
@@ -854,14 +881,13 @@ int32_t cgi::Lifecycle::wait_timeout(
         std::min(nearest - now, static_cast<uint64_t>(INT32_MAX)));
 }
 
-std::vector<int32_t> cgi::Lifecycle::expire_jobs(
-    std::map<int32_t, cgi::Job> &jobs)
+std::vector<int32_t> cgi::Lifecycle::expire_jobs()
 {
     std::vector<int32_t> expired;
     uint64_t now = monotonic_millis();
 
-    for (std::map<int32_t, cgi::Job>::iterator it = jobs.begin();
-        it != jobs.end(); ++it) {
+    for (std::map<int32_t, cgi::Job>::iterator it = _jobs.begin();
+        it != _jobs.end(); ++it) {
         if (it->second.deadline_millis > now)
             continue;
         it->second.failed = true;
@@ -871,17 +897,62 @@ std::vector<int32_t> cgi::Lifecycle::expire_jobs(
     return expired;
 }
 
-std::vector<int32_t> cgi::Lifecycle::jobs_to_cancel_for(
-    int32_t clientfd, const std::map<int32_t, cgi::Job> &jobs) const
+std::vector<int32_t> cgi::Lifecycle::jobs_to_cancel_for(int32_t clientfd) const
 {
     std::vector<int32_t> jobs_to_cancel;
 
-    for (std::map<int32_t, cgi::Job>::const_iterator it = jobs.begin();
-        it != jobs.end(); ++it) {
+    for (std::map<int32_t, cgi::Job>::const_iterator it = _jobs.begin();
+        it != _jobs.end(); ++it) {
         if (it->second.clientfd == clientfd)
             jobs_to_cancel.push_back(it->first);
     }
     return jobs_to_cancel;
+}
+
+std::vector<int32_t> cgi::Lifecycle::active_stdout_fds() const
+{
+    std::vector<int32_t> stdout_fds;
+
+    for (std::map<int32_t, cgi::Job>::const_iterator it = _jobs.begin();
+        it != _jobs.end(); ++it)
+        stdout_fds.push_back(it->first);
+    return stdout_fds;
+}
+
+cgi::CleanupResult cgi::Lifecycle::cleanup_request(
+    int32_t stdout_fd, cgi::job_cleanup::action action)
+{
+    cgi::CleanupResult result;
+    std::map<int32_t, cgi::Job>::iterator job_it = _jobs.find(stdout_fd);
+    cgi::Job job;
+
+    if (job_it == _jobs.end())
+        return result;
+    job = job_it->second;
+    _jobs.erase(job_it);
+    result.found = true;
+    result.child_ok = cleanup_child(job, action);
+    result.descriptors.push_back(stdout_fd);
+    if (job.stdin_fd != -1)
+        result.descriptors.push_back(job.stdin_fd);
+    if (action == cgi::job_cleanup::COMPLETE)
+        result.completion = complete(job, result.child_ok);
+    return result;
+}
+
+std::vector<int32_t> cgi::Lifecycle::abort_all_requests()
+{
+    std::vector<int32_t> stdout_fds = active_stdout_fds();
+    std::vector<int32_t> descriptors;
+
+    for (std::size_t i = 0; i < stdout_fds.size(); ++i) {
+        cgi::CleanupResult cleanup
+            = cleanup_request(stdout_fds[i], cgi::job_cleanup::ABORT);
+
+        descriptors.insert(descriptors.end(), cleanup.descriptors.begin(),
+            cleanup.descriptors.end());
+    }
+    return descriptors;
 }
 
 void cgi::Lifecycle::reap_pending_children()
@@ -910,28 +981,27 @@ void cgi::Lifecycle::terminate_child_nonblocking(pid_t pid)
         reap_child_later(pid);
 }
 
-cgi::CleanupResult cgi::Lifecycle::cleanup(
+bool cgi::Lifecycle::cleanup_child(
     const cgi::Job &job, cgi::job_cleanup::action action)
 {
-    cgi::CleanupResult result;
     int status;
     pid_t waited;
+    bool child_ok = true;
 
-    result.job = job;
     if (action == cgi::job_cleanup::ABORT) {
         terminate_child_nonblocking(job.pid);
-        return result;
+        return child_ok;
     }
     if (job.pid <= 0)
-        return result;
+        return child_ok;
     status = 0;
     waited = wait_child_status(job.pid, &status, WNOHANG);
-    result.child_ok = waited != -1 || errno == ECHILD;
+    child_ok = waited != -1 || errno == ECHILD;
     if (waited == job.pid)
-        result.child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+        child_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
     else if (waited == 0)
         terminate_child_nonblocking(job.pid);
-    return result;
+    return child_ok;
 }
 
 cgi::start::result cgi::start_process(const http::request &req,
