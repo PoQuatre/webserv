@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:15:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -61,14 +61,6 @@ private:
         int32_t clientfd;
     };
 
-    struct CgiCleanupResult {
-        CgiCleanupResult();
-
-        cgi::Job job;
-        bool child_ok;
-        bool found;
-    };
-
     bool add_source(int32_t fd, uint32_t events, const EventSource &source);
     bool update_source_events(int32_t fd, uint32_t events) const;
     void remove_source(int32_t fd);
@@ -82,10 +74,10 @@ private:
     void process_cgi_stdout(int32_t fd, uint32_t events);
     int32_t cgi_epoll_timeout() const;
     void expire_cgi_jobs();
-    void close_cgi_fd(int32_t &fd);
-    CgiCleanupResult cleanup_cgi_job(
-        std::map<int32_t, cgi::Job>::iterator job_it,
-        cgi::job_cleanup::action action);
+    void close_cgi_fd(int32_t fd);
+    void close_cgi_descriptors(const std::vector<int32_t> &fds);
+    cgi::CleanupResult cleanup_cgi_job(
+        int32_t stdout_fd, cgi::job_cleanup::action action);
     void dispatch_pending(int32_t fd, uint32_t events, Connection &conn);
     bool start_cgi_request(int32_t clientfd, Connection &conn,
         const Config &cfg, const std::string &script_path,
@@ -97,7 +89,6 @@ private:
     std::vector<Server> &_servers;
     std::map<int32_t, EventSource> _sources;
     std::map<int32_t, Connection> _connections;
-    std::map<int32_t, cgi::Job> _cgi_jobs;
     cgi::Lifecycle _cgi_lifecycle;
     int32_t _epollfd;
 };

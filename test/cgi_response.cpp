@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:35:55 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,7 +21,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <map>
 #include <string>
 #include <vector>
 
@@ -91,6 +90,95 @@ static void assert_not_contains(const std::string &haystack, const char *needle)
 static bool process_is_gone(pid_t pid)
 {
     return kill(pid, 0) == -1 && errno == ESRCH;
+}
+
+static pid_t wait_for_pid_file(const std::string &path)
+{
+    for (int attempts = 0; attempts < 1000; ++attempts) {
+        std::ifstream in(path.c_str());
+        long pid = 0;
+
+        if (in >> pid && pid > 0)
+            return static_cast<pid_t>(pid);
+        usleep(1000);
+    }
+    cr_assert_fail("timed out waiting for pid file %s", path.c_str());
+    return -1;
+}
+
+static int32_t descriptor_fd(
+    const cgi::StartedRequest &request, cgi::descriptor::type type)
+{
+    for (std::size_t i = 0; i < request.descriptors.size(); ++i) {
+        if (request.descriptors[i].type == type)
+            return request.descriptors[i].fd;
+    }
+    cr_assert_fail("missing CGI descriptor");
+    return -1;
+}
+
+static void close_descriptors(const std::vector<int32_t> &fds)
+{
+    for (std::size_t i = 0; i < fds.size(); ++i)
+        close(fds[i]);
+}
+
+static void start_lifecycle_script(cgi::Lifecycle &lifecycle, int32_t clientfd,
+    const http::request &req, const Config &cfg, const std::string &script_body,
+    cgi::StartedRequest &started)
+{
+    std::string root = make_tmpdir();
+    std::string script = root + "/script.sh";
+
+    write_file(script, script_body);
+    cr_assert_eq(lifecycle.start_request(clientfd, req, cfg, script, started),
+        cgi::start::STARTED);
+}
+
+static void close_lifecycle_stdin(
+    cgi::Lifecycle &lifecycle, const cgi::StartedRequest &started)
+{
+    int32_t stdin_fd = descriptor_fd(started, cgi::descriptor::CGI_STDIN);
+    cgi::ReadinessResult result = lifecycle.process_stdin(stdin_fd, 0);
+
+    cr_assert_eq(result.action, cgi::readiness::CLOSE_STDIN);
+    close(result.descriptor_fd);
+}
+
+static cgi::CleanupResult finish_lifecycle_request(
+    cgi::Lifecycle &lifecycle, int32_t stdout_fd)
+{
+    for (int attempts = 0; attempts < 1000; ++attempts) {
+        cgi::ReadinessResult result = lifecycle.process_stdout(stdout_fd, 0);
+
+        if (result.action == cgi::readiness::COMPLETE) {
+            cgi::CleanupResult cleanup = lifecycle.cleanup_request(
+                stdout_fd, cgi::job_cleanup::COMPLETE);
+
+            close_descriptors(cleanup.descriptors);
+            return cleanup;
+        }
+        usleep(1000);
+    }
+    cr_assert_fail("timed out waiting for CGI lifecycle completion");
+    return cgi::CleanupResult();
+}
+
+static void start_lifecycle_request(cgi::Lifecycle &lifecycle, int32_t clientfd,
+    uint32_t timeout, cgi::StartedRequest &started)
+{
+    http::request req = make_req(http::methods::GET);
+    Config cfg = { };
+
+    req.uri = "/cgi/wait.sh";
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = timeout;
+    cfg.cgi_output_buffer_size = 4096;
+    start_lifecycle_script(lifecycle, clientfd, req, cfg,
+        "trap 'exit 0' TERM\n"
+        "sleep 10\n"
+        "printf 'Content-Type: text/plain\\r\\n\\r\\nlate\\n'\n",
+        started);
 }
 
 static void assert_bad_gateway(const std::string &response)
@@ -440,177 +528,233 @@ Test(cgi_lifecycle, start_request_reports_descriptors_to_monitor)
     cgi::StartedRequest started;
     bool reported_stdin = false;
     bool reported_stdout = false;
+    int32_t stdin_fd;
+    int32_t stdout_fd;
 
     cr_assert_eq(lifecycle.start_request(42, req, cfg, script, started),
         cgi::start::STARTED);
-    cr_assert_eq(started.job.clientfd, 42);
-    cr_assert_gt(started.job.pid, 0);
     cr_assert_eq(started.descriptors.size(), 2);
+    stdin_fd = descriptor_fd(started, cgi::descriptor::CGI_STDIN);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
     for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
         if (started.descriptors[i].type == cgi::descriptor::CGI_STDIN
-            && started.descriptors[i].fd == started.job.stdin_fd)
+            && started.descriptors[i].fd == stdin_fd)
             reported_stdin = true;
         if (started.descriptors[i].type == cgi::descriptor::CGI_STDOUT
-            && started.descriptors[i].fd == started.job.stdout_fd)
+            && started.descriptors[i].fd == stdout_fd)
             reported_stdout = true;
     }
     cr_assert(reported_stdin);
     cr_assert(reported_stdout);
 
-    close(started.job.stdin_fd);
-    std::string output = read_all(started.job.stdout_fd);
-    close(started.job.stdout_fd);
-    int status = 0;
-    cr_assert_eq(waitpid(started.job.pid, &status, 0), started.job.pid,
-        "waitpid() failed: %s", strerror(errno));
-    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    cgi::ReadinessResult stdin_result = lifecycle.process_stdin(stdin_fd, 0);
+    cr_assert_eq(stdin_result.action, cgi::readiness::CLOSE_STDIN);
+    close(stdin_result.descriptor_fd);
+    std::string output = read_all(stdout_fd);
+    cgi::CleanupResult cleanup
+        = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::COMPLETE);
+    close_descriptors(cleanup.descriptors);
+    cr_assert(cleanup.child_ok);
     assert_contains(output, "hello-lifecycle\n");
 }
 
 Test(cgi_lifecycle, stdin_readiness_writes_body_and_reports_fd_to_close)
 {
-    int pipefd[2];
-
-    cr_assert_eq(pipe(pipefd), 0, "pipe() failed: %s", strerror(errno));
+    cgi::Lifecycle lifecycle;
     http::request req = make_req(http::methods::POST);
-    req.body = "alpha=one&beta=two";
-    cgi::Job job;
-    job.clientfd = 77;
-    job.stdin_fd = pipefd[1];
-    job.request = req;
+    Config cfg = { };
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    int32_t stdout_fd;
 
-    cgi::ReadinessResult result = cgi::Lifecycle::process_stdin(job, 0);
-    cr_assert_eq(result.action, cgi::readiness::CLOSE_STDIN);
-    cr_assert_eq(result.descriptor_fd, pipefd[1]);
-    cr_assert_eq(job.body_written, req.body.size());
-    close(pipefd[1]);
-    std::string body = read_all(pipefd[0]);
-    close(pipefd[0]);
-    cr_assert_str_eq(body.c_str(), req.body.c_str());
+    req.uri = "/cgi/body.sh";
+    req.body = "alpha=one&beta=two";
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    cfg.cgi_output_buffer_size = 4096;
+    start_lifecycle_script(lifecycle, 77, req, cfg,
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "body=$(dd bs=1 count=18 2>/dev/null)\n"
+        "printf '%s' \"$body\"\n",
+        started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+
+    close_lifecycle_stdin(lifecycle, started);
+    cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
+    cr_assert_not(cleanup.completion.failed);
+    cr_assert_str_eq(cleanup.completion.output.c_str(),
+        "Content-Type: text/plain\r\n\r\nalpha=one&beta=two");
 }
 
 Test(cgi_lifecycle, stdout_readiness_accumulates_output_and_reports_completion)
 {
-    int pipefd[2];
+    cgi::Lifecycle lifecycle;
     const char *output = "Content-Type: text/plain\r\n\r\nhello";
+    http::request req = make_req(http::methods::GET);
+    Config cfg = { };
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    int32_t stdout_fd;
 
-    cr_assert_eq(pipe(pipefd), 0, "pipe() failed: %s", strerror(errno));
-    cr_assert_gt(write(pipefd[1], output, strlen(output)), 0,
-        "write() failed: %s", strerror(errno));
-    close(pipefd[1]);
-    cgi::Job job;
-    job.clientfd = 88;
-    job.stdout_fd = pipefd[0];
-    job.max_output = 4096;
+    req.uri = "/cgi/output.sh";
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    cfg.cgi_output_buffer_size = 4096;
+    start_lifecycle_script(lifecycle, 88, req, cfg,
+        "printf 'Content-Type: text/plain\\r\\n\\r\\nhello'\n", started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
 
-    cgi::ReadinessResult result = cgi::Lifecycle::process_stdout(job, 0);
-    cr_assert_eq(result.action, cgi::readiness::CONTINUE);
-    cr_assert_str_eq(job.output.c_str(), output);
-    result = cgi::Lifecycle::process_stdout(job, 0);
-    cr_assert_eq(result.action, cgi::readiness::COMPLETE);
-    cr_assert_eq(result.descriptor_fd, pipefd[0]);
-    close(pipefd[0]);
+    close_lifecycle_stdin(lifecycle, started);
+    cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
+    cr_assert_not(cleanup.completion.failed);
+    cr_assert_str_eq(cleanup.completion.output.c_str(), output);
 }
 
 Test(cgi_lifecycle, stdout_readiness_enforces_output_limit)
 {
-    int pipefd[2];
-    const char *output = "too-large";
+    cgi::Lifecycle lifecycle;
+    http::request req = make_req(http::methods::GET);
+    Config cfg = { };
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    int32_t stdout_fd;
 
-    cr_assert_eq(pipe(pipefd), 0, "pipe() failed: %s", strerror(errno));
-    cr_assert_gt(write(pipefd[1], output, strlen(output)), 0,
-        "write() failed: %s", strerror(errno));
-    close(pipefd[1]);
-    cgi::Job job;
-    job.clientfd = 99;
-    job.stdout_fd = pipefd[0];
-    job.max_output = 4;
+    req.uri = "/cgi/large.sh";
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    cfg.cgi_output_buffer_size = 4;
+    start_lifecycle_script(
+        lifecycle, 99, req, cfg, "printf 'too-large'\n", started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
 
-    cgi::ReadinessResult result = cgi::Lifecycle::process_stdout(job, 0);
-    cr_assert_eq(result.action, cgi::readiness::COMPLETE);
-    cr_assert_eq(result.descriptor_fd, pipefd[0]);
-    cr_assert(job.failed);
-    cr_assert_eq(job.failure_status, http::status::BAD_GATEWAY);
-    cr_assert(job.output.empty());
-    close(pipefd[0]);
+    close_lifecycle_stdin(lifecycle, started);
+    cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
+    cr_assert(cleanup.completion.failed);
+    cr_assert_eq(cleanup.completion.failure_status, http::status::BAD_GATEWAY);
+    cr_assert(cleanup.completion.output.empty());
 }
 
 Test(cgi_lifecycle, completion_identifies_waiting_client)
 {
+    cgi::Lifecycle lifecycle;
     http::request req = make_req(http::methods::POST);
+    Config cfg = { };
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    int32_t stdout_fd;
+
     req.uri = "/cgi/echo.sh";
     req.body = "complete-body";
-    cgi::Job job;
-    job.clientfd = 123;
-    job.stdin_fd = -1;
-    job.body_written = req.body.size();
-    job.request = req;
-    job.output = "Content-Type: text/plain\r\n\r\nhello";
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    cfg.cgi_output_buffer_size = 4096;
+    start_lifecycle_script(lifecycle, 123, req, cfg,
+        "dd bs=1 count=13 >/dev/null 2>/dev/null\n"
+        "printf 'Content-Type: text/plain\\r\\n\\r\\nhello'\n",
+        started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
 
-    cgi::CompletionResult result = cgi::Lifecycle::complete(job, true);
-    cr_assert_eq(result.clientfd, 123);
-    cr_assert_not(result.failed);
-    cr_assert_str_eq(result.request.uri.c_str(), "/cgi/echo.sh");
-    cr_assert_str_eq(result.output.c_str(), job.output.c_str());
+    close_lifecycle_stdin(lifecycle, started);
+    cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
+    cr_assert_eq(cleanup.completion.clientfd, 123);
+    cr_assert_not(cleanup.completion.failed);
+    cr_assert_str_eq(cleanup.completion.request.uri.c_str(), "/cgi/echo.sh");
+    cr_assert_str_eq(cleanup.completion.output.c_str(),
+        "Content-Type: text/plain\r\n\r\nhello");
 }
 
 Test(cgi_lifecycle, wait_timeout_comes_from_cgi_deadlines)
 {
     cgi::Lifecycle lifecycle;
-    std::map<int32_t, cgi::Job> jobs;
-    cgi::Job job;
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    int32_t stdout_fd;
 
-    cr_assert_eq(lifecycle.wait_timeout(jobs), -1);
-    job.deadline_millis = 1;
-    jobs[12] = job;
-    cr_assert_eq(lifecycle.wait_timeout(jobs), 0);
+    cr_assert_eq(lifecycle.wait_timeout(), -1);
+    start_lifecycle_request(lifecycle, 12, 0, started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    cr_assert_eq(lifecycle.wait_timeout(), 0);
+    cleanup = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::ABORT);
+    close_descriptors(cleanup.descriptors);
 }
 
 Test(cgi_lifecycle, expire_jobs_marks_timed_out_jobs)
 {
     cgi::Lifecycle lifecycle;
-    std::map<int32_t, cgi::Job> jobs;
-    cgi::Job job;
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    int32_t stdout_fd;
 
-    job.deadline_millis = 1;
-    jobs[12] = job;
-    std::vector<int32_t> expired = lifecycle.expire_jobs(jobs);
+    start_lifecycle_request(lifecycle, 12, 0, started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    std::vector<int32_t> expired = lifecycle.expire_jobs();
     cr_assert_eq(expired.size(), 1);
-    cr_assert_eq(expired[0], 12);
-    cr_assert(jobs[12].failed);
-    cr_assert_eq(jobs[12].failure_status, http::status::GATEWAY_TIMEOUT);
+    cr_assert_eq(expired[0], stdout_fd);
+    cleanup = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::COMPLETE);
+    close_descriptors(cleanup.descriptors);
+    cr_assert(cleanup.completion.failed);
+    cr_assert_eq(
+        cleanup.completion.failure_status, http::status::GATEWAY_TIMEOUT);
 }
 
 Test(cgi_lifecycle, jobs_to_cancel_for_client_reports_only_matching_jobs)
 {
     cgi::Lifecycle lifecycle;
-    std::map<int32_t, cgi::Job> jobs;
+    cgi::StartedRequest first;
+    cgi::StartedRequest other;
+    cgi::StartedRequest second;
+    int32_t first_stdout;
+    int32_t other_stdout;
+    int32_t second_stdout;
 
-    jobs[10].clientfd = 42;
-    jobs[20].clientfd = 99;
-    jobs[30].clientfd = 42;
-    std::vector<int32_t> jobs_to_cancel
-        = lifecycle.jobs_to_cancel_for(42, jobs);
+    start_lifecycle_request(lifecycle, 42, DEFAULT_CGI_TIMEOUT, first);
+    start_lifecycle_request(lifecycle, 99, DEFAULT_CGI_TIMEOUT, other);
+    start_lifecycle_request(lifecycle, 42, DEFAULT_CGI_TIMEOUT, second);
+    first_stdout = descriptor_fd(first, cgi::descriptor::CGI_STDOUT);
+    other_stdout = descriptor_fd(other, cgi::descriptor::CGI_STDOUT);
+    second_stdout = descriptor_fd(second, cgi::descriptor::CGI_STDOUT);
+    std::vector<int32_t> jobs_to_cancel = lifecycle.jobs_to_cancel_for(42);
 
     cr_assert_eq(jobs_to_cancel.size(), 2);
-    cr_assert_eq(jobs_to_cancel[0], 10);
-    cr_assert_eq(jobs_to_cancel[1], 30);
+    cr_assert_eq(jobs_to_cancel[0], first_stdout);
+    cr_assert_eq(jobs_to_cancel[1], second_stdout);
+    close_descriptors(
+        lifecycle.cleanup_request(first_stdout, cgi::job_cleanup::ABORT)
+            .descriptors);
+    close_descriptors(
+        lifecycle.cleanup_request(second_stdout, cgi::job_cleanup::ABORT)
+            .descriptors);
+    close_descriptors(
+        lifecycle.cleanup_request(other_stdout, cgi::job_cleanup::ABORT)
+            .descriptors);
 }
 
 Test(cgi_lifecycle, abort_cleanup_terminates_and_reaps_child)
 {
-    pid_t pid = fork();
-
-    cr_assert_neq(pid, -1, "fork() failed: %s", strerror(errno));
-    if (pid == 0) {
-        sleep(10);
-        _exit(0);
-    }
-
     cgi::Lifecycle lifecycle;
-    cgi::Job job;
-    job.pid = pid;
-    lifecycle.cleanup(job, cgi::job_cleanup::ABORT);
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    std::string root = make_tmpdir();
+    std::string pidfile = root + "/cgi.pid";
+    http::request req = make_req(http::methods::GET);
+    Config cfg = { };
+    int32_t stdout_fd;
+    pid_t pid;
+
+    req.uri = "/cgi/linger.sh";
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    cfg.cgi_output_buffer_size = 4096;
+    start_lifecycle_script(lifecycle, 77, req, cfg,
+        "printf '%s\\n' \"$$\" > '" + pidfile
+            + "'\n"
+              "while :; do :; done\n",
+        started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    pid = wait_for_pid_file(pidfile);
+
+    cleanup = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::ABORT);
+    close_descriptors(cleanup.descriptors);
     for (int i = 0; i < 100; ++i) {
         lifecycle.reap_pending_children();
         if (process_is_gone(pid))
@@ -624,18 +768,30 @@ Test(cgi_lifecycle, abort_cleanup_terminates_and_reaps_child)
 
 Test(cgi_lifecycle, complete_cleanup_reaps_exited_child)
 {
-    pid_t pid = fork();
-
-    cr_assert_neq(pid, -1, "fork() failed: %s", strerror(errno));
-    if (pid == 0)
-        _exit(0);
-
-    usleep(10000);
     cgi::Lifecycle lifecycle;
-    cgi::Job job;
-    job.pid = pid;
-    cgi::CleanupResult result
-        = lifecycle.cleanup(job, cgi::job_cleanup::COMPLETE);
-    cr_assert(result.child_ok);
+    cgi::StartedRequest started;
+    cgi::CleanupResult cleanup;
+    std::string root = make_tmpdir();
+    std::string pidfile = root + "/cgi.pid";
+    http::request req = make_req(http::methods::GET);
+    Config cfg = { };
+    int32_t stdout_fd;
+    pid_t pid;
+
+    req.uri = "/cgi/done.sh";
+    cfg.cgi_pass = "/bin/sh";
+    cfg.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    cfg.cgi_output_buffer_size = 4096;
+    start_lifecycle_script(lifecycle, 88, req, cfg,
+        "printf '%s\\n' \"$$\" > '" + pidfile
+            + "'\n"
+              "printf 'Content-Type: text/plain\\r\\n\\r\\ndone'\n",
+        started);
+    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    pid = wait_for_pid_file(pidfile);
+
+    close_lifecycle_stdin(lifecycle, started);
+    cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
+    cr_assert(cleanup.child_ok);
     cr_assert(process_is_gone(pid));
 }

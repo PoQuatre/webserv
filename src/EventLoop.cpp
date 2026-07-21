@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 18:35:55 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -102,12 +102,6 @@ EventLoop::EventSource::EventSource(
     , server(NULL)
     , connection(NULL)
     , clientfd(owner_clientfd)
-{
-}
-
-EventLoop::CgiCleanupResult::CgiCleanupResult()
-    : child_ok(true)
-    , found(false)
 {
 }
 
@@ -258,8 +252,7 @@ void EventLoop::remove_source(int32_t fd)
 
 void EventLoop::cleanup()
 {
-    while (!_cgi_jobs.empty())
-        cleanup_cgi_job(_cgi_jobs.begin(), cgi::job_cleanup::ABORT);
+    close_cgi_descriptors(_cgi_lifecycle.abort_all_requests());
 
     _cgi_lifecycle.reap_pending_children();
 
@@ -405,14 +398,18 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
 {
     cgi::StartedRequest started;
     cgi::start::result result;
+    int32_t stdout_fd = -1;
 
-    result = cgi::Lifecycle::start_request(
+    result = _cgi_lifecycle.start_request(
         clientfd, conn.request(), cfg, script_path, started);
     if (result != cgi::start::STARTED) {
         error_status = cgi_start_error(result);
         return false;
     }
-    _cgi_jobs[started.job.stdout_fd] = started.job;
+    for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
+        if (started.descriptors[i].type == cgi::descriptor::CGI_STDOUT)
+            stdout_fd = started.descriptors[i].fd;
+    }
     for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
         const cgi::Descriptor &descriptor = started.descriptors[i];
         EventSource::Type source_type = EventSource::SOURCE_CGI_STDOUT;
@@ -424,8 +421,7 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
         }
         if (!add_source(
                 descriptor.fd, events, EventSource(source_type, clientfd))) {
-            cleanup_cgi_job(
-                _cgi_jobs.find(started.job.stdout_fd), cgi::job_cleanup::ABORT);
+            cleanup_cgi_job(stdout_fd, cgi::job_cleanup::ABORT);
             return false;
         }
     }
@@ -436,73 +432,53 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
 
 void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
 {
-    for (std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.begin();
-        it != _cgi_jobs.end(); ++it) {
-        if (it->second.stdin_fd == fd) {
-            cgi::ReadinessResult result
-                = cgi::Lifecycle::process_stdin(it->second, events);
+    cgi::ReadinessResult result = _cgi_lifecycle.process_stdin(fd, events);
 
-            if (result.action == cgi::readiness::CLOSE_STDIN)
-                close_cgi_fd(it->second.stdin_fd);
-            return;
-        }
-    }
+    if (result.action == cgi::readiness::CLOSE_STDIN)
+        close_cgi_fd(result.descriptor_fd);
 }
 
 void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
 {
-    std::map<int32_t, cgi::Job>::iterator it = _cgi_jobs.find(fd);
-    cgi::ReadinessResult result;
+    cgi::ReadinessResult result = _cgi_lifecycle.process_stdout(fd, events);
 
-    if (it == _cgi_jobs.end())
-        return;
-    result = cgi::Lifecycle::process_stdout(it->second, events);
     if (result.action == cgi::readiness::COMPLETE)
         finish_cgi_job(result.descriptor_fd);
 }
 
 int32_t EventLoop::cgi_epoll_timeout() const
 {
-    return _cgi_lifecycle.wait_timeout(_cgi_jobs);
+    return _cgi_lifecycle.wait_timeout();
 }
 
-void EventLoop::close_cgi_fd(int32_t &fd)
+void EventLoop::close_cgi_fd(int32_t fd)
 {
     if (fd == -1)
         return;
     if (_sources.find(fd) != _sources.end())
         remove_source(fd);
     close(fd);
-    fd = -1;
 }
 
-EventLoop::CgiCleanupResult EventLoop::cleanup_cgi_job(
-    std::map<int32_t, cgi::Job>::iterator job_it,
-    cgi::job_cleanup::action action)
+void EventLoop::close_cgi_descriptors(const std::vector<int32_t> &fds)
 {
-    CgiCleanupResult result;
-    cgi::CleanupResult cleanup;
-    int32_t stdout_fd;
-    int32_t stdin_fd;
+    for (std::size_t i = 0; i < fds.size(); ++i)
+        close_cgi_fd(fds[i]);
+}
 
-    if (job_it == _cgi_jobs.end())
-        return result;
-    result.found = true;
-    result.job = job_it->second;
-    stdout_fd = job_it->first;
-    stdin_fd = result.job.stdin_fd;
-    _cgi_jobs.erase(job_it);
-    close_cgi_fd(stdout_fd);
-    close_cgi_fd(stdin_fd);
-    cleanup = _cgi_lifecycle.cleanup(result.job, action);
-    result.job = cleanup.job;
-    result.child_ok = cleanup.child_ok;
+cgi::CleanupResult EventLoop::cleanup_cgi_job(
+    int32_t stdout_fd, cgi::job_cleanup::action action)
+{
+    cgi::CleanupResult result
+        = _cgi_lifecycle.cleanup_request(stdout_fd, action);
+
+    close_cgi_descriptors(result.descriptors);
     return result;
 }
 
 void EventLoop::expire_cgi_jobs()
 {
-    std::vector<int32_t> expired = _cgi_lifecycle.expire_jobs(_cgi_jobs);
+    std::vector<int32_t> expired = _cgi_lifecycle.expire_jobs();
 
     for (std::size_t i = 0; i < expired.size(); ++i)
         finish_cgi_job(expired[i]);
@@ -510,13 +486,13 @@ void EventLoop::expire_cgi_jobs()
 
 void EventLoop::finish_cgi_job(int32_t fd)
 {
-    CgiCleanupResult result;
+    cgi::CleanupResult result;
     cgi::CompletionResult completion;
 
-    result = cleanup_cgi_job(_cgi_jobs.find(fd), cgi::job_cleanup::COMPLETE);
+    result = cleanup_cgi_job(fd, cgi::job_cleanup::COMPLETE);
     if (!result.found)
         return;
-    completion = cgi::Lifecycle::complete(result.job, result.child_ok);
+    completion = result.completion;
     std::map<int32_t, Connection>::iterator conn_it
         = _connections.find(completion.clientfd);
     if (conn_it == _connections.end())
@@ -537,11 +513,10 @@ void EventLoop::finish_cgi_job(int32_t fd)
 void EventLoop::cancel_cgi_jobs_for(int32_t clientfd)
 {
     std::vector<int32_t> jobs_to_cancel
-        = _cgi_lifecycle.jobs_to_cancel_for(clientfd, _cgi_jobs);
+        = _cgi_lifecycle.jobs_to_cancel_for(clientfd);
 
     for (std::size_t i = 0; i < jobs_to_cancel.size(); ++i)
-        cleanup_cgi_job(
-            _cgi_jobs.find(jobs_to_cancel[i]), cgi::job_cleanup::ABORT);
+        cleanup_cgi_job(jobs_to_cancel[i], cgi::job_cleanup::ABORT);
 }
 
 void EventLoop::process_client(int32_t fd, uint32_t events, Connection &conn)
