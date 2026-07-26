@@ -125,7 +125,8 @@ HDRS =	include/Connection.hpp \
 		include/dispatcher.hpp \
 		include/http.hpp \
 		include/logger.hpp \
-		include/webserv.hpp
+		include/webserv.hpp \
+		test/test_helpers.hpp
 ##end: HDRS
 
 OBJS = $(addprefix $(BUILD_DIR)/$(SRC_DIR)/,$(SRCS:%.cpp=%.o))

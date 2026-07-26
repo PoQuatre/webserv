@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:39:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 21:35:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,23 +22,7 @@
 #include <string>
 #include <vector>
 
-static std::string make_tmpdir()
-{
-    char tmpl[] = "/tmp/webserv-dispatcher-test-XXXXXX";
-    char *dir = mkdtemp(tmpl);
-
-    cr_assert_not_null(dir, "mkdtemp() failed: %s", strerror(errno));
-    return dir;
-}
-
-static void write_file(const std::string &path, const std::string &content)
-{
-    std::ofstream out(path.c_str(), std::ios::binary);
-
-    cr_assert(out.is_open(), "failed to open %s", path.c_str());
-    out << content;
-    cr_assert(!out.fail(), "failed to write %s", path.c_str());
-}
+#include "test_helpers.hpp"
 
 static Server make_dispatch_server(const std::string &root)
 {
@@ -86,11 +70,11 @@ static void assert_status(const std::string &response, const char *status)
 
 Test(dispatcher, static_get_returns_response_outcome)
 {
-    std::string root = make_tmpdir();
+    std::string root = test_tmpdir("webserv-dispatcher-test");
     Server server = make_dispatch_server(root);
     http::request req = make_request(http::methods::GET, "/static.txt");
 
-    write_file(root + "/static.txt", "static body\n");
+    test_write_file(root + "/static.txt", "static body\n");
 
     dispatcher::Outcome outcome = dispatcher::handle(req, server);
 
@@ -101,7 +85,7 @@ Test(dispatcher, static_get_returns_response_outcome)
 
 Test(dispatcher, allowed_static_non_get_still_returns_not_implemented)
 {
-    std::string root = make_tmpdir();
+    std::string root = test_tmpdir("webserv-dispatcher-test");
     Server server = make_dispatch_server(root);
     http::request req = make_request(http::methods::POST, "/static.txt");
 
@@ -113,7 +97,7 @@ Test(dispatcher, allowed_static_non_get_still_returns_not_implemented)
 
 Test(dispatcher, cgi_eligible_request_returns_cgi_outcome)
 {
-    std::string root = make_tmpdir();
+    std::string root = test_tmpdir("webserv-dispatcher-test");
     Server server = make_dispatch_server(root);
     http::request req = make_request(http::methods::POST, "/cgi/app.sh");
 
@@ -127,7 +111,7 @@ Test(dispatcher, cgi_eligible_request_returns_cgi_outcome)
 
 Test(dispatcher, disallowed_cgi_method_returns_response_outcome)
 {
-    std::string root = make_tmpdir();
+    std::string root = test_tmpdir("webserv-dispatcher-test");
     Server server = make_dispatch_server(root);
     http::request req = make_request(http::methods::DELETE, "/cgi/app.sh");
 

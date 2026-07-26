@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:39:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 21:35:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -115,8 +115,8 @@ bool EventLoop::run()
         L_TRACE("Waiting for events");
         _cgi_lifecycle.reap_pending_children();
         expire_cgi_jobs();
-        int32_t nfds
-            = epoll_wait(_epollfd, events, MAX_EVENTS, cgi_epoll_timeout());
+        int32_t nfds = epoll_wait(
+            _epollfd, events, MAX_EVENTS, _cgi_lifecycle.wait_timeout());
         if (nfds == -1) {
             if (errno == EINTR)
                 continue;
@@ -246,7 +246,9 @@ void EventLoop::remove_source(int32_t fd)
 
 void EventLoop::cleanup()
 {
-    close_cgi_descriptors(_cgi_lifecycle.abort_all_requests());
+    std::vector<int32_t> cgi_fds = _cgi_lifecycle.abort_all_requests();
+    for (std::size_t i = 0; i < cgi_fds.size(); ++i)
+        close_cgi_fd(cgi_fds[i]);
 
     _cgi_lifecycle.reap_pending_children();
 
@@ -390,23 +392,23 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
     const Config &cfg, const std::string &script_path,
     http::status::type &error_status)
 {
-    cgi::StartedRequest started;
+    cgi::Process process;
     cgi::start::result result;
 
     result = _cgi_lifecycle.start_request(
-        clientfd, conn.request(), cfg, script_path, started);
+        clientfd, conn.request(), cfg, script_path, process);
     if (result != cgi::start::STARTED) {
         error_status = cgi_start_error(result);
         return false;
     }
-    if (!add_source(started.stdout_fd, EPOLL_RDONLY,
+    if (!add_source(process.stdout_fd, EPOLL_RDONLY,
             EventSource(EventSource::SOURCE_CGI_STDOUT))) {
-        cleanup_cgi_job(started.stdout_fd, cgi::job_cleanup::ABORT);
+        cleanup_cgi_job(process.stdout_fd, cgi::job_cleanup::ABORT);
         return false;
     }
-    if (!add_source(started.stdin_fd, EPOLL_WRONLY,
+    if (!add_source(process.stdin_fd, EPOLL_WRONLY,
             EventSource(EventSource::SOURCE_CGI_STDIN))) {
-        cleanup_cgi_job(started.stdout_fd, cgi::job_cleanup::ABORT);
+        cleanup_cgi_job(process.stdout_fd, cgi::job_cleanup::ABORT);
         return false;
     }
     conn.wait_for_cgi();
@@ -416,23 +418,14 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
 
 void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
 {
-    cgi::ReadinessResult result = _cgi_lifecycle.process_stdin(fd, events);
-
-    if (result.action == cgi::readiness::CLOSE_STDIN)
-        close_cgi_fd(result.descriptor_fd);
+    if (_cgi_lifecycle.process_stdin(fd, events) == cgi::readiness::CLOSE_STDIN)
+        close_cgi_fd(fd);
 }
 
 void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
 {
-    cgi::ReadinessResult result = _cgi_lifecycle.process_stdout(fd, events);
-
-    if (result.action == cgi::readiness::COMPLETE)
-        finish_cgi_job(result.descriptor_fd);
-}
-
-int32_t EventLoop::cgi_epoll_timeout() const
-{
-    return _cgi_lifecycle.wait_timeout();
+    if (_cgi_lifecycle.process_stdout(fd, events) == cgi::readiness::COMPLETE)
+        finish_cgi_job(fd);
 }
 
 void EventLoop::close_cgi_fd(int32_t fd)
@@ -442,12 +435,6 @@ void EventLoop::close_cgi_fd(int32_t fd)
     if (_sources.find(fd) != _sources.end())
         remove_source(fd);
     close(fd);
-}
-
-void EventLoop::close_cgi_descriptors(const std::vector<int32_t> &fds)
-{
-    for (std::size_t i = 0; i < fds.size(); ++i)
-        close_cgi_fd(fds[i]);
 }
 
 cgi::CleanupResult EventLoop::cleanup_cgi_job(

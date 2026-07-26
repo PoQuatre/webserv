@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 21:38:15 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -67,13 +67,6 @@ enum action {
 
 }
 
-struct ReadinessResult {
-    ReadinessResult();
-
-    readiness::action action;
-    int32_t descriptor_fd;
-};
-
 struct CompletionResult {
     CompletionResult();
 
@@ -102,21 +95,12 @@ struct CleanupResult {
     bool found;
 };
 
-struct StartedRequest {
-    StartedRequest();
-
-    start::result status;
-    int32_t stdin_fd;
-    int32_t stdout_fd;
-};
-
 class Lifecycle {
 public:
     start::result start_request(int32_t clientfd, const http::request &req,
-        const Config &cfg, const std::string &script_path,
-        StartedRequest &request);
-    ReadinessResult process_stdin(int32_t fd, uint32_t events);
-    ReadinessResult process_stdout(int32_t fd, uint32_t events);
+        const Config &cfg, const std::string &script_path, Process &process);
+    readiness::action process_stdin(int32_t fd, uint32_t events);
+    readiness::action process_stdout(int32_t fd, uint32_t events);
     int32_t wait_timeout() const;
     std::vector<int32_t> expire_jobs();
     std::vector<int32_t> jobs_to_cancel_for(int32_t clientfd) const;
@@ -126,8 +110,8 @@ public:
     void reap_pending_children();
 
 private:
-    static ReadinessResult process_stdin(Job &job, uint32_t events);
-    static ReadinessResult process_stdout(Job &job, uint32_t events);
+    static readiness::action process_stdin(Job &job, uint32_t events);
+    static readiness::action process_stdout(Job &job, uint32_t events);
     static CompletionResult complete(Job job, bool child_ok);
     bool cleanup_child(const Job &job, job_cleanup::action action);
     void reap_child_later(pid_t pid);

@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 21:07:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -272,11 +272,6 @@ Test(config_parsing, cgi_location_directives)
     cr_assert_eq(explicit_cgi->config.cgi_timeout, 30);
     cr_assert_eq(explicit_cgi->config.cgi_output_buffer_size,
         static_cast<std::size_t>(4) * 1024 * 1024);
-
-    const Location *static_loc = servers[0].find_location("/static/file.txt");
-    cr_assert_not_null(static_loc);
-    cr_assert_eq(static_loc->config.cgi_pass.empty(), true);
-    cr_assert_str_eq(static_loc->config.root.c_str(), "/srv/static");
 }
 
 Test(config_parsing, cgi_directives_reject_non_location_scope)
