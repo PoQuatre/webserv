@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 21:35:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -154,16 +154,6 @@ bool parse_header_line(const std::string &line, Header &header)
     return true;
 }
 
-Header make_header(const std::string &name, const std::string &value)
-{
-    Header header;
-
-    header.name = name;
-    header.lower_name = lowercase(name);
-    header.value = value;
-    return header;
-}
-
 bool parse_headers(const std::string &block, std::vector<Header> &headers)
 {
     std::size_t start = 0;
@@ -219,12 +209,12 @@ bool reap_child(pid_t pid, int options)
     }
 }
 
-bool terminate_child(pid_t pid, int options)
+bool kill_child_nonblocking(pid_t pid)
 {
     if (pid <= 0)
         return true;
     kill(pid, SIGKILL);
-    return reap_child(pid, options);
+    return reap_child(pid, WNOHANG);
 }
 
 pid_t wait_child_status(pid_t pid, int *status, int options)
@@ -298,23 +288,15 @@ std::string make_response(const http::request &req, int code,
     return ss.str();
 }
 
-std::string make_nph_response(const std::string &first_line,
-    const std::vector<Header> &headers, const std::string &body,
-    const http::request &req)
-{
-    std::ostringstream ss;
-
-    ss << first_line << "\r\n";
-    append_forwarded_cgi_headers(ss, headers);
-    append_server_framing_and_body(ss, req, body);
-    return ss.str();
-}
-
 std::string make_bad_gateway(const http::request &req)
 {
     std::vector<Header> headers;
+    Header content_type;
 
-    headers.push_back(make_header("Content-Type", "text/html"));
+    content_type.name = "Content-Type";
+    content_type.lower_name = "content-type";
+    content_type.value = "text/html";
+    headers.push_back(content_type);
     return make_response(req, 502, "Bad Gateway", headers,
         "<html><body><h1>502 Bad Gateway</h1></body></html>\n");
 }
@@ -577,46 +559,6 @@ void child_exec_cgi(const http::request &req, const Config &cfg,
     _exit(127);
 }
 
-bool parse_nph_status_line(const std::string &line)
-{
-    std::size_t first_space = line.find(' ');
-    int code;
-    std::string reason;
-
-    if (first_space != 8)
-        return false;
-    if (line.compare(0, 8, "HTTP/1.0") != 0
-        && line.compare(0, 8, "HTTP/1.1") != 0)
-        return false;
-    return parse_status_value(line.substr(first_space + 1), code, reason);
-}
-
-std::string translate_nph(const std::string &output, const http::request &req)
-{
-    HeaderEnd header_end;
-    std::size_t line_end;
-    std::string first_line;
-    std::vector<Header> headers;
-
-    if (!find_header_end(output, header_end))
-        return make_bad_gateway(req);
-    line_end = output.find('\n');
-    if (line_end == std::string::npos || line_end > header_end.pos)
-        return make_bad_gateway(req);
-    first_line = output.substr(0, line_end);
-    if (!first_line.empty() && first_line[first_line.size() - 1] == '\r')
-        first_line.erase(first_line.size() - 1);
-    if (!parse_nph_status_line(first_line))
-        return make_bad_gateway(req);
-    if (line_end + 1 < header_end.pos
-        && !parse_headers(
-            output.substr(line_end + 1, header_end.pos - line_end - 1),
-            headers))
-        return make_bad_gateway(req);
-    return make_nph_response(first_line, headers,
-        output.substr(header_end.pos + header_end.len), req);
-}
-
 std::string translate_parsed(const std::string &output,
     const http::request &req, const HeaderEnd &header_end)
 {
@@ -655,8 +597,6 @@ std::string cgi::translate_output(
 {
     HeaderEnd header_end;
 
-    if (output.compare(0, 5, "HTTP/") == 0)
-        return translate_nph(output, req);
     if (!find_header_end(output, header_end))
         return make_bad_gateway(req);
     return translate_parsed(output, req, header_end);
@@ -676,12 +616,6 @@ cgi::Job::Job()
 {
 }
 
-cgi::ReadinessResult::ReadinessResult()
-    : action(cgi::readiness::CONTINUE)
-    , descriptor_fd(-1)
-{
-}
-
 cgi::CompletionResult::CompletionResult()
     : clientfd(-1)
     , request()
@@ -697,24 +631,16 @@ cgi::CleanupResult::CleanupResult()
 {
 }
 
-cgi::StartedRequest::StartedRequest()
-    : status(cgi::start::BAD_GATEWAY)
-    , stdin_fd(-1)
-    , stdout_fd(-1)
-{
-}
-
 cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
     const http::request &req, const Config &cfg, const std::string &script_path,
-    cgi::StartedRequest &request)
+    cgi::Process &process)
 {
-    cgi::Process process;
     cgi::Job job;
+    cgi::start::result status;
 
-    request = cgi::StartedRequest();
-    request.status = cgi::start_process(req, cfg, script_path, process);
-    if (request.status != cgi::start::STARTED)
-        return request.status;
+    status = cgi::start_process(req, cfg, script_path, process);
+    if (status != cgi::start::STARTED)
+        return status;
     job.clientfd = clientfd;
     job.pid = process.pid;
     job.stdin_fd = process.stdin_fd;
@@ -723,44 +649,41 @@ cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
     job.deadline_millis
         = monotonic_millis() + (static_cast<uint64_t>(cfg.cgi_timeout) * 1000);
     job.request = req;
-    request.stdin_fd = process.stdin_fd;
-    request.stdout_fd = process.stdout_fd;
     _jobs[job.stdout_fd] = job;
-    return request.status;
+    return status;
 }
 
-cgi::ReadinessResult cgi::Lifecycle::process_stdin(int32_t fd, uint32_t events)
+cgi::readiness::action cgi::Lifecycle::process_stdin(
+    int32_t fd, uint32_t events)
 {
-    cgi::ReadinessResult result;
-
     for (std::map<int32_t, cgi::Job>::iterator it = _jobs.begin();
         it != _jobs.end(); ++it) {
         if (it->second.stdin_fd != fd)
             continue;
-        result = cgi::Lifecycle::process_stdin(it->second, events);
-        if (result.action == cgi::readiness::CLOSE_STDIN)
+        cgi::readiness::action action
+            = cgi::Lifecycle::process_stdin(it->second, events);
+        if (action == cgi::readiness::CLOSE_STDIN)
             it->second.stdin_fd = -1;
-        return result;
+        return action;
     }
-    return result;
+    return cgi::readiness::CONTINUE;
 }
 
-cgi::ReadinessResult cgi::Lifecycle::process_stdout(int32_t fd, uint32_t events)
+cgi::readiness::action cgi::Lifecycle::process_stdout(
+    int32_t fd, uint32_t events)
 {
     std::map<int32_t, cgi::Job>::iterator it = _jobs.find(fd);
 
     if (it == _jobs.end())
-        return cgi::ReadinessResult();
+        return cgi::readiness::CONTINUE;
     return cgi::Lifecycle::process_stdout(it->second, events);
 }
 
-cgi::ReadinessResult cgi::Lifecycle::process_stdin(
+cgi::readiness::action cgi::Lifecycle::process_stdin(
     cgi::Job &job, uint32_t events)
 {
-    cgi::ReadinessResult result;
     const std::string &body = job.request.body;
 
-    result.descriptor_fd = job.stdin_fd;
     if (events & EPOLLERR)
         job.failed = true;
     if (job.body_written < body.size()) {
@@ -770,22 +693,20 @@ cgi::ReadinessResult cgi::Lifecycle::process_stdin(
         if (n > 0)
             job.body_written += static_cast<std::size_t>(n);
         else if (!(events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)))
-            return result;
+            return cgi::readiness::CONTINUE;
     }
     if (job.body_written < body.size() && !job.failed)
-        return result;
-    result.action = cgi::readiness::CLOSE_STDIN;
-    return result;
+        return cgi::readiness::CONTINUE;
+    return cgi::readiness::CLOSE_STDIN;
 }
 
-cgi::ReadinessResult cgi::Lifecycle::process_stdout(
+cgi::readiness::action cgi::Lifecycle::process_stdout(
     cgi::Job &job, uint32_t events)
 {
-    cgi::ReadinessResult result;
+    cgi::readiness::action action = cgi::readiness::CONTINUE;
     char buffer[4096];
     ssize_t bytes_read;
 
-    result.descriptor_fd = job.stdout_fd;
     bytes_read = read(job.stdout_fd, buffer, sizeof(buffer));
     if (bytes_read > 0) {
         if (job.max_output != 0
@@ -793,18 +714,18 @@ cgi::ReadinessResult cgi::Lifecycle::process_stdout(
                 > job.max_output) {
             job.failed = true;
             job.failure_status = http::status::BAD_GATEWAY;
-            result.action = cgi::readiness::COMPLETE;
+            action = cgi::readiness::COMPLETE;
         } else {
             job.output.append(buffer, static_cast<std::size_t>(bytes_read));
         }
     } else if (bytes_read == 0) {
-        result.action = cgi::readiness::COMPLETE;
+        action = cgi::readiness::COMPLETE;
     } else if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
         if (events & EPOLLERR)
             job.failed = true;
-        result.action = cgi::readiness::COMPLETE;
+        action = cgi::readiness::COMPLETE;
     }
-    return result;
+    return action;
 }
 
 cgi::CompletionResult cgi::Lifecycle::complete(cgi::Job job, bool child_ok)
@@ -932,7 +853,7 @@ void cgi::Lifecycle::reap_child_later(pid_t pid)
 
 void cgi::Lifecycle::terminate_child_nonblocking(pid_t pid)
 {
-    if (!terminate_child(pid, WNOHANG))
+    if (!kill_child_nonblocking(pid))
         reap_child_later(pid);
 }
 

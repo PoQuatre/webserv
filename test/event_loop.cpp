@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:39:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 21:46:51 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -33,6 +33,7 @@
 
 #include "EventLoop.hpp"
 #include "logger.hpp"
+#include "test_helpers.hpp"
 
 struct LoopThreadArgs {
     EventLoop *loop;
@@ -123,31 +124,23 @@ static std::string read_response(int fd)
     return read_response_with_timeout(fd, 2000000);
 }
 
-static std::string make_tmpdir()
-{
-    char tmpl[] = "/tmp/webserv-cgi-test-XXXXXX";
-    char *dir = mkdtemp(tmpl);
-
-    cr_assert_not_null(dir, "mkdtemp() failed: %s", strerror(errno));
-    return dir;
-}
-
 static std::string make_cgi_root()
 {
-    std::string root = make_tmpdir();
+    std::string root = test_tmpdir("webserv-cgi-test");
 
     cr_assert_eq(mkdir((root + "/cgi").c_str(), 0700), 0, "mkdir() failed: %s",
         strerror(errno));
     return root;
 }
 
-static void write_file(const std::string &path, const std::string &content)
+static bool process_exists(pid_t pid)
 {
-    std::ofstream out(path.c_str(), std::ios::binary);
-
-    cr_assert(out.is_open(), "failed to open %s", path.c_str());
-    out << content;
-    cr_assert(!out.fail(), "failed to write %s", path.c_str());
+    errno = 0;
+    if (kill(pid, 0) == 0)
+        return true;
+    cr_assert_eq(errno, ESRCH, "kill(%ld, 0) failed: %s",
+        static_cast<long>(pid), strerror(errno));
+    return false;
 }
 
 static pid_t wait_for_pid_file(const std::string &path)
@@ -162,16 +155,6 @@ static pid_t wait_for_pid_file(const std::string &path)
     }
     cr_assert_fail("timed out waiting for pid file %s", path.c_str());
     return -1;
-}
-
-static bool process_exists(pid_t pid)
-{
-    errno = 0;
-    if (kill(pid, 0) == 0)
-        return true;
-    cr_assert_eq(errno, ESRCH, "kill(%ld, 0) failed: %s",
-        static_cast<long>(pid), strerror(errno));
-    return false;
 }
 
 static bool wait_process_gone(pid_t pid)
@@ -360,12 +343,13 @@ Test(event_loop, cgi_get_executes_script_and_static_requests_still_work)
     logger::log_level() = logger::levels::NOTHING;
 
     CgiHarness harness;
-    write_file(harness.root + "/cgi/hello.sh",
+    test_write_file(harness.root + "/cgi/hello.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'method=%s query=%s\\n' \"$REQUEST_METHOD\" "
         "\"$QUERY_STRING\"\n");
-    write_file(harness.root + "/cgi/slow.sh", "sleep 1\nprintf 'slow\\n'\n");
-    write_file(harness.root + "/static.txt", "static body\n");
+    test_write_file(
+        harness.root + "/cgi/slow.sh", "sleep 1\nprintf 'slow\\n'\n");
+    test_write_file(harness.root + "/static.txt", "static body\n");
 
     std::string cgi_response = perform_request(harness,
         "GET /cgi/hello.sh?name=webserv HTTP/1.1\r\nHost: localhost\r\n\r\n");
@@ -390,7 +374,7 @@ Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
     logger::log_level() = logger::levels::NOTHING;
 
     CgiHarness harness;
-    write_file(harness.root + "/cgi/echo.sh",
+    test_write_file(harness.root + "/cgi/echo.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "body=$(dd bs=1 count=\"${CONTENT_LENGTH:-0}\" 2>/dev/null)\n"
         "extra=$(dd bs=1 count=1 2>/dev/null)\n"
@@ -439,7 +423,7 @@ Test(event_loop, cgi_executes_allowed_delete_method)
     logger::log_level() = logger::levels::NOTHING;
 
     CgiHarness harness;
-    write_file(harness.root + "/cgi/method.sh",
+    test_write_file(harness.root + "/cgi/method.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'method=%s\\n' \"$REQUEST_METHOD\"\n");
 
@@ -457,7 +441,7 @@ Test(event_loop, cgi_rejects_disallowed_method_without_running_script)
 
     CgiHarness harness;
     std::string marker = harness.root + "/ran-delete";
-    write_file(harness.root + "/cgi/method.sh",
+    test_write_file(harness.root + "/cgi/method.sh",
         "printf marker > '" + marker
             + "'\n"
               "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
@@ -477,7 +461,7 @@ Test(event_loop, cgi_head_executes_script_and_discards_response_body)
 
     CgiHarness harness;
     std::string marker = harness.root + "/ran-head";
-    write_file(harness.root + "/cgi/head.sh",
+    test_write_file(harness.root + "/cgi/head.sh",
         "printf marker > '" + marker
             + "'\n"
               "printf 'Content-Type: text/plain\r\n\r\n'\n"
@@ -499,7 +483,7 @@ Test(event_loop, cgi_script_path_errors_map_to_http_statuses)
     logger::log_level() = logger::levels::NOTHING;
 
     CgiHarness harness;
-    write_file(harness.root + "/cgi/unreadable.sh",
+    test_write_file(harness.root + "/cgi/unreadable.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\nnope\\n'\n");
     cr_assert_eq(chmod((harness.root + "/cgi/unreadable.sh").c_str(), 0000), 0,
         "chmod() failed: %s", strerror(errno));
@@ -524,9 +508,9 @@ Test(event_loop, cgi_invalid_interpreter_maps_to_bad_gateway)
     logger::log_level() = logger::levels::NOTHING;
 
     CgiHarness harness;
-    write_file(harness.root + "/cgi/hello.sh",
+    test_write_file(harness.root + "/cgi/hello.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\nhello\\n'\n");
-    write_file(harness.root + "/not-executable", "not an interpreter\n");
+    test_write_file(harness.root + "/not-executable", "not an interpreter\n");
     cr_assert_eq(chmod((harness.root + "/not-executable").c_str(), 0600), 0,
         "chmod() failed: %s", strerror(errno));
 
@@ -542,7 +526,7 @@ Test(event_loop, cgi_timeout_returns_gateway_timeout)
     logger::log_level() = logger::levels::NOTHING;
 
     CgiHarness harness;
-    write_file(harness.root + "/cgi/slow.sh",
+    test_write_file(harness.root + "/cgi/slow.sh",
         "sleep 5\n"
         "printf 'Content-Type: text/plain\\r\\n\\r\\nlate\\n'\n");
 
@@ -558,7 +542,7 @@ Test(event_loop, cgi_output_cap_returns_bad_gateway)
     logger::log_level() = logger::levels::NOTHING;
 
     CgiHarness harness;
-    write_file(harness.root + "/cgi/large.sh",
+    test_write_file(harness.root + "/cgi/large.sh",
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'this output is too large for the configured cap\\n'\n");
 
@@ -575,12 +559,12 @@ Test(event_loop, disconnect_while_cgi_runs_cleans_up_child_and_keeps_clients)
 
     CgiHarness harness;
     std::string pidfile = harness.root + "/cgi.pid";
-    write_file(harness.root + "/cgi/linger.sh",
+    test_write_file(harness.root + "/cgi/linger.sh",
         "printf '%s\\n' \"$$\" > '" + pidfile
             + "'\n"
               "printf 'Content-Type: text/plain\\r\\n\\r\\npartial output\\n'\n"
               "while :; do :; done\n");
-    write_file(harness.root + "/static.txt", "static still works\n");
+    test_write_file(harness.root + "/static.txt", "static still works\n");
 
     int cgi_fd = send_request(
         harness, "GET /cgi/linger.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
