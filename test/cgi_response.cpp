@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:32:43 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -106,21 +106,12 @@ static pid_t wait_for_pid_file(const std::string &path)
     return -1;
 }
 
-static int32_t descriptor_fd(
-    const cgi::StartedRequest &request, cgi::descriptor::type type)
+static void close_cleanup_descriptors(const cgi::CleanupResult &cleanup)
 {
-    for (std::size_t i = 0; i < request.descriptors.size(); ++i) {
-        if (request.descriptors[i].type == type)
-            return request.descriptors[i].fd;
-    }
-    cr_assert_fail("missing CGI descriptor");
-    return -1;
-}
-
-static void close_descriptors(const std::vector<int32_t> &fds)
-{
-    for (std::size_t i = 0; i < fds.size(); ++i)
-        close(fds[i]);
+    if (cleanup.stdout_fd != -1)
+        close(cleanup.stdout_fd);
+    if (cleanup.stdin_fd != -1)
+        close(cleanup.stdin_fd);
 }
 
 static void start_lifecycle_script(cgi::Lifecycle &lifecycle, int32_t clientfd,
@@ -138,8 +129,7 @@ static void start_lifecycle_script(cgi::Lifecycle &lifecycle, int32_t clientfd,
 static void close_lifecycle_stdin(
     cgi::Lifecycle &lifecycle, const cgi::StartedRequest &started)
 {
-    int32_t stdin_fd = descriptor_fd(started, cgi::descriptor::CGI_STDIN);
-    cgi::ReadinessResult result = lifecycle.process_stdin(stdin_fd, 0);
+    cgi::ReadinessResult result = lifecycle.process_stdin(started.stdin_fd, 0);
 
     cr_assert_eq(result.action, cgi::readiness::CLOSE_STDIN);
     close(result.descriptor_fd);
@@ -155,7 +145,7 @@ static cgi::CleanupResult finish_lifecycle_request(
             cgi::CleanupResult cleanup = lifecycle.cleanup_request(
                 stdout_fd, cgi::job_cleanup::COMPLETE);
 
-            close_descriptors(cleanup.descriptors);
+            close_cleanup_descriptors(cleanup);
             return cleanup;
         }
         usleep(1000);
@@ -227,6 +217,30 @@ Test(cgi_response, status_header_controls_status_line)
     cr_assert_eq(out.find("Status:"), std::string::npos);
 }
 
+Test(cgi_response, parsed_output_filters_unsafe_headers)
+{
+    std::string out = cgi::translate_output("Status: 201 Created\r\n"
+                                            "Content-Type: text/plain\r\n"
+                                            "Set-Cookie: session=abc\r\n"
+                                            "X-App-Header: kept\r\n"
+                                            "Content-Length: 999\r\n"
+                                            "Connection: close, X-Hop\r\n"
+                                            "X-Hop: dropped\r\n"
+                                            "Transfer-Encoding: chunked\r\n"
+                                            "\r\nbody\n",
+        make_req(http::methods::GET));
+
+    cr_assert_str_eq(out.c_str(),
+        "HTTP/1.1 201 Created\r\n"
+        "Content-Type: text/plain\r\n"
+        "Set-Cookie: session=abc\r\n"
+        "X-App-Header: kept\r\n"
+        "Content-Length: 5\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n"
+        "body\n");
+}
+
 Test(cgi_response, location_header_defaults_to_302_redirect)
 {
     std::string out = cgi::translate_output(
@@ -271,6 +285,7 @@ Test(cgi_response, header_like_output_without_separator_becomes_bad_gateway)
         "Content-Type text/plain\r\nhello", make_req(http::methods::GET));
 
     assert_bad_gateway(out);
+    assert_not_contains(out, "hello");
 }
 
 Test(cgi_response, malformed_output_becomes_bad_gateway)
@@ -279,6 +294,7 @@ Test(cgi_response, malformed_output_becomes_bad_gateway)
         "Content-Type text/plain\r\n\r\nhello", make_req(http::methods::GET));
 
     assert_bad_gateway(out);
+    assert_not_contains(out, "hello");
 }
 
 Test(cgi_response, head_discards_body_and_preserves_content_length)
@@ -300,23 +316,7 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     std::string script = root + "/env.sh";
     write_file(script,
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
-        "printf 'GATEWAY_INTERFACE=%s\\n' \"$GATEWAY_INTERFACE\"\n"
-        "printf 'REQUEST_METHOD=%s\\n' \"$REQUEST_METHOD\"\n"
-        "printf 'QUERY_STRING=%s\\n' \"$QUERY_STRING\"\n"
-        "printf 'SCRIPT_NAME=%s\\n' \"$SCRIPT_NAME\"\n"
-        "printf 'SCRIPT_FILENAME=%s\\n' \"$SCRIPT_FILENAME\"\n"
-        "printf 'REMOTE_ADDR=%s\\n' \"$REMOTE_ADDR\"\n"
-        "printf 'SERVER_NAME=%s\\n' \"$SERVER_NAME\"\n"
-        "printf 'SERVER_PORT=%s\\n' \"$SERVER_PORT\"\n"
-        "printf 'SERVER_PROTOCOL=%s\\n' \"$SERVER_PROTOCOL\"\n"
-        "printf 'SERVER_SOFTWARE=%s\\n' \"$SERVER_SOFTWARE\"\n"
-        "printf 'CONTENT_LENGTH=%s\\n' \"$CONTENT_LENGTH\"\n"
-        "printf 'CONTENT_TYPE=%s\\n' \"$CONTENT_TYPE\"\n"
-        "printf 'HTTP_ACCEPT=%s\\n' \"$HTTP_ACCEPT\"\n"
-        "printf 'HTTP_HOST=%s\\n' \"$HTTP_HOST\"\n"
-        "printf 'HTTP_X_CUSTOM_HEADER=%s\\n' \"$HTTP_X_CUSTOM_HEADER\"\n"
-        "printf 'PATH=%s\\n' \"$PATH\"\n"
-        "env\n");
+        "env | sort\n");
     cr_assert_eq(
         chmod(script.c_str(), 0700), 0, "chmod() failed: %s", strerror(errno));
 
@@ -526,35 +526,20 @@ Test(cgi_lifecycle, start_request_reports_descriptors_to_monitor)
     cfg.cgi_output_buffer_size = 4096;
     cgi::Lifecycle lifecycle;
     cgi::StartedRequest started;
-    bool reported_stdin = false;
-    bool reported_stdout = false;
-    int32_t stdin_fd;
-    int32_t stdout_fd;
 
     cr_assert_eq(lifecycle.start_request(42, req, cfg, script, started),
         cgi::start::STARTED);
-    cr_assert_eq(started.descriptors.size(), 2);
-    stdin_fd = descriptor_fd(started, cgi::descriptor::CGI_STDIN);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
-    for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
-        if (started.descriptors[i].type == cgi::descriptor::CGI_STDIN
-            && started.descriptors[i].fd == stdin_fd)
-            reported_stdin = true;
-        if (started.descriptors[i].type == cgi::descriptor::CGI_STDOUT
-            && started.descriptors[i].fd == stdout_fd)
-            reported_stdout = true;
-    }
-    cr_assert(reported_stdin);
-    cr_assert(reported_stdout);
+    cr_assert_neq(started.stdin_fd, -1);
+    cr_assert_neq(started.stdout_fd, -1);
 
-    cgi::ReadinessResult stdin_result = lifecycle.process_stdin(stdin_fd, 0);
+    cgi::ReadinessResult stdin_result
+        = lifecycle.process_stdin(started.stdin_fd, 0);
     cr_assert_eq(stdin_result.action, cgi::readiness::CLOSE_STDIN);
     close(stdin_result.descriptor_fd);
-    std::string output = read_all(stdout_fd);
-    cgi::CleanupResult cleanup
-        = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::COMPLETE);
-    close_descriptors(cleanup.descriptors);
-    cr_assert(cleanup.child_ok);
+    std::string output = read_all(started.stdout_fd);
+    cgi::CleanupResult cleanup = lifecycle.cleanup_request(
+        started.stdout_fd, cgi::job_cleanup::COMPLETE);
+    close_cleanup_descriptors(cleanup);
     assert_contains(output, "hello-lifecycle\n");
 }
 
@@ -577,7 +562,7 @@ Test(cgi_lifecycle, stdin_readiness_writes_body_and_reports_fd_to_close)
         "body=$(dd bs=1 count=18 2>/dev/null)\n"
         "printf '%s' \"$body\"\n",
         started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
 
     close_lifecycle_stdin(lifecycle, started);
     cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
@@ -602,7 +587,7 @@ Test(cgi_lifecycle, stdout_readiness_accumulates_output_and_reports_completion)
     cfg.cgi_output_buffer_size = 4096;
     start_lifecycle_script(lifecycle, 88, req, cfg,
         "printf 'Content-Type: text/plain\\r\\n\\r\\nhello'\n", started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
 
     close_lifecycle_stdin(lifecycle, started);
     cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
@@ -625,7 +610,7 @@ Test(cgi_lifecycle, stdout_readiness_enforces_output_limit)
     cfg.cgi_output_buffer_size = 4;
     start_lifecycle_script(
         lifecycle, 99, req, cfg, "printf 'too-large'\n", started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
 
     close_lifecycle_stdin(lifecycle, started);
     cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
@@ -652,7 +637,7 @@ Test(cgi_lifecycle, completion_identifies_waiting_client)
         "dd bs=1 count=13 >/dev/null 2>/dev/null\n"
         "printf 'Content-Type: text/plain\\r\\n\\r\\nhello'\n",
         started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
 
     close_lifecycle_stdin(lifecycle, started);
     cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
@@ -672,10 +657,10 @@ Test(cgi_lifecycle, wait_timeout_comes_from_cgi_deadlines)
 
     cr_assert_eq(lifecycle.wait_timeout(), -1);
     start_lifecycle_request(lifecycle, 12, 0, started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
     cr_assert_eq(lifecycle.wait_timeout(), 0);
     cleanup = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::ABORT);
-    close_descriptors(cleanup.descriptors);
+    close_cleanup_descriptors(cleanup);
 }
 
 Test(cgi_lifecycle, expire_jobs_marks_timed_out_jobs)
@@ -686,12 +671,12 @@ Test(cgi_lifecycle, expire_jobs_marks_timed_out_jobs)
     int32_t stdout_fd;
 
     start_lifecycle_request(lifecycle, 12, 0, started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
     std::vector<int32_t> expired = lifecycle.expire_jobs();
     cr_assert_eq(expired.size(), 1);
     cr_assert_eq(expired[0], stdout_fd);
     cleanup = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::COMPLETE);
-    close_descriptors(cleanup.descriptors);
+    close_cleanup_descriptors(cleanup);
     cr_assert(cleanup.completion.failed);
     cr_assert_eq(
         cleanup.completion.failure_status, http::status::GATEWAY_TIMEOUT);
@@ -710,23 +695,20 @@ Test(cgi_lifecycle, jobs_to_cancel_for_client_reports_only_matching_jobs)
     start_lifecycle_request(lifecycle, 42, DEFAULT_CGI_TIMEOUT, first);
     start_lifecycle_request(lifecycle, 99, DEFAULT_CGI_TIMEOUT, other);
     start_lifecycle_request(lifecycle, 42, DEFAULT_CGI_TIMEOUT, second);
-    first_stdout = descriptor_fd(first, cgi::descriptor::CGI_STDOUT);
-    other_stdout = descriptor_fd(other, cgi::descriptor::CGI_STDOUT);
-    second_stdout = descriptor_fd(second, cgi::descriptor::CGI_STDOUT);
+    first_stdout = first.stdout_fd;
+    other_stdout = other.stdout_fd;
+    second_stdout = second.stdout_fd;
     std::vector<int32_t> jobs_to_cancel = lifecycle.jobs_to_cancel_for(42);
 
     cr_assert_eq(jobs_to_cancel.size(), 2);
     cr_assert_eq(jobs_to_cancel[0], first_stdout);
     cr_assert_eq(jobs_to_cancel[1], second_stdout);
-    close_descriptors(
-        lifecycle.cleanup_request(first_stdout, cgi::job_cleanup::ABORT)
-            .descriptors);
-    close_descriptors(
-        lifecycle.cleanup_request(second_stdout, cgi::job_cleanup::ABORT)
-            .descriptors);
-    close_descriptors(
-        lifecycle.cleanup_request(other_stdout, cgi::job_cleanup::ABORT)
-            .descriptors);
+    close_cleanup_descriptors(
+        lifecycle.cleanup_request(first_stdout, cgi::job_cleanup::ABORT));
+    close_cleanup_descriptors(
+        lifecycle.cleanup_request(second_stdout, cgi::job_cleanup::ABORT));
+    close_cleanup_descriptors(
+        lifecycle.cleanup_request(other_stdout, cgi::job_cleanup::ABORT));
 }
 
 Test(cgi_lifecycle, abort_cleanup_terminates_and_reaps_child)
@@ -750,11 +732,11 @@ Test(cgi_lifecycle, abort_cleanup_terminates_and_reaps_child)
             + "'\n"
               "while :; do :; done\n",
         started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
     pid = wait_for_pid_file(pidfile);
 
     cleanup = lifecycle.cleanup_request(stdout_fd, cgi::job_cleanup::ABORT);
-    close_descriptors(cleanup.descriptors);
+    close_cleanup_descriptors(cleanup);
     for (int i = 0; i < 100; ++i) {
         lifecycle.reap_pending_children();
         if (process_is_gone(pid))
@@ -787,11 +769,10 @@ Test(cgi_lifecycle, complete_cleanup_reaps_exited_child)
             + "'\n"
               "printf 'Content-Type: text/plain\\r\\n\\r\\ndone'\n",
         started);
-    stdout_fd = descriptor_fd(started, cgi::descriptor::CGI_STDOUT);
+    stdout_fd = started.stdout_fd;
     pid = wait_for_pid_file(pidfile);
 
     close_lifecycle_stdin(lifecycle, started);
     cleanup = finish_lifecycle_request(lifecycle, stdout_fd);
-    cr_assert(cleanup.child_ok);
     cr_assert(process_is_gone(pid));
 }

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 16:16:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:39:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -40,27 +40,20 @@ static void write_file(const std::string &path, const std::string &content)
     cr_assert(!out.fail(), "failed to write %s", path.c_str());
 }
 
-static Config make_config(const std::string &root)
-{
-    Config cfg = { };
-
-    cfg.root = root;
-    cfg.allowed_methods[http::methods::GET] = true;
-    cfg.allowed_methods[http::methods::POST] = true;
-    cfg.allowed_methods[http::methods::HEAD] = true;
-    cfg.allowed_methods[http::methods::DELETE] = true;
-    return cfg;
-}
-
 static Server make_dispatch_server(const std::string &root)
 {
-    Config config = make_config(root);
+    Config config = { };
     Config cgi_config = config;
     Location cgi_location;
     std::vector<Location> locations;
 
+    config.root = root;
+    config.allowed_methods[http::methods::GET] = true;
+    config.allowed_methods[http::methods::POST] = true;
+    config.allowed_methods[http::methods::HEAD] = true;
+    config.allowed_methods[http::methods::DELETE] = true;
+    cgi_config = config;
     cgi_config.allowed_methods[http::methods::DELETE] = false;
-    cgi_config.cgi_enabled = true;
     cgi_config.cgi_pass = "/bin/sh";
     cgi_config.cgi_timeout = DEFAULT_CGI_TIMEOUT;
     cgi_config.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
@@ -128,7 +121,7 @@ Test(dispatcher, cgi_eligible_request_returns_cgi_outcome)
 
     cr_assert_eq(outcome.type, dispatcher::Outcome::CGI_REQUIRED);
     cr_assert_not_null(outcome.config);
-    cr_assert_eq(outcome.config->cgi_enabled, true);
+    cr_assert_str_eq(outcome.config->cgi_pass.c_str(), "/bin/sh");
     cr_assert_eq(outcome.filesystem_path, root + req.uri);
 }
 

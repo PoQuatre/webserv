@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:39:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,7 +27,6 @@
 #include "logger.hpp"
 
 #define MAX_EVENTS 16
-#define EPOLL_CLOSED (EPOLLERR | EPOLLHUP | EPOLLRDHUP)
 #define EPOLL_RDONLY (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
 #define EPOLL_WRONLY (EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLRDHUP)
 
@@ -76,7 +75,6 @@ EventLoop::EventSource::EventSource()
     : type(SOURCE_SIGNAL)
     , server(NULL)
     , connection(NULL)
-    , clientfd(-1)
 {
 }
 
@@ -84,7 +82,6 @@ EventLoop::EventSource::EventSource(const Server &server_context)
     : type(SOURCE_LISTENER)
     , server(&server_context)
     , connection(NULL)
-    , clientfd(-1)
 {
 }
 
@@ -92,16 +89,13 @@ EventLoop::EventSource::EventSource(Connection &connection_context)
     : type(SOURCE_CLIENT)
     , server(NULL)
     , connection(&connection_context)
-    , clientfd(connection_context.fd())
 {
 }
 
-EventLoop::EventSource::EventSource(
-    EventLoop::EventSource::Type cgi_type, int32_t owner_clientfd)
+EventLoop::EventSource::EventSource(EventLoop::EventSource::Type cgi_type)
     : type(cgi_type)
     , server(NULL)
     , connection(NULL)
-    , clientfd(owner_clientfd)
 {
 }
 
@@ -398,7 +392,6 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
 {
     cgi::StartedRequest started;
     cgi::start::result result;
-    int32_t stdout_fd = -1;
 
     result = _cgi_lifecycle.start_request(
         clientfd, conn.request(), cfg, script_path, started);
@@ -406,24 +399,15 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
         error_status = cgi_start_error(result);
         return false;
     }
-    for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
-        if (started.descriptors[i].type == cgi::descriptor::CGI_STDOUT)
-            stdout_fd = started.descriptors[i].fd;
+    if (!add_source(started.stdout_fd, EPOLL_RDONLY,
+            EventSource(EventSource::SOURCE_CGI_STDOUT))) {
+        cleanup_cgi_job(started.stdout_fd, cgi::job_cleanup::ABORT);
+        return false;
     }
-    for (std::size_t i = 0; i < started.descriptors.size(); ++i) {
-        const cgi::Descriptor &descriptor = started.descriptors[i];
-        EventSource::Type source_type = EventSource::SOURCE_CGI_STDOUT;
-        uint32_t events = EPOLL_RDONLY;
-
-        if (descriptor.type == cgi::descriptor::CGI_STDIN) {
-            source_type = EventSource::SOURCE_CGI_STDIN;
-            events = EPOLL_WRONLY;
-        }
-        if (!add_source(
-                descriptor.fd, events, EventSource(source_type, clientfd))) {
-            cleanup_cgi_job(stdout_fd, cgi::job_cleanup::ABORT);
-            return false;
-        }
+    if (!add_source(started.stdin_fd, EPOLL_WRONLY,
+            EventSource(EventSource::SOURCE_CGI_STDIN))) {
+        cleanup_cgi_job(started.stdout_fd, cgi::job_cleanup::ABORT);
+        return false;
     }
     conn.wait_for_cgi();
     update_source_events(clientfd, EPOLL_RDONLY);
@@ -472,7 +456,8 @@ cgi::CleanupResult EventLoop::cleanup_cgi_job(
     cgi::CleanupResult result
         = _cgi_lifecycle.cleanup_request(stdout_fd, action);
 
-    close_cgi_descriptors(result.descriptors);
+    close_cgi_fd(result.stdout_fd);
+    close_cgi_fd(result.stdin_fd);
     return result;
 }
 

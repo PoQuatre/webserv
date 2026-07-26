@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 05:21:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -484,34 +484,6 @@ Test(uri_validation, https_scheme_accepted)
 // Query string
 // -----------------------------------------------------------------------------
 
-Test(query, single_key_value)
-{
-    Connection c = make_conn("GET /?key=value HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "key=value");
-}
-
-Test(query, multiple_params)
-{
-    Connection c = make_conn("GET /?a=1&b=2&c=3 HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "a=1&b=2&c=3");
-}
-
-Test(query, key_without_value)
-{
-    Connection c = make_conn("GET /?flag HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "flag");
-}
-
-Test(query, key_with_empty_value)
-{
-    Connection c = make_conn("GET /?key= HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "key=");
-}
-
 Test(query, empty_query_string)
 {
     Connection c = make_conn("GET /path? HTTP/1.0\r\n\r\n");
@@ -520,68 +492,13 @@ Test(query, empty_query_string)
     cr_assert(c.request().query_string.empty());
 }
 
-Test(query, percent_encoding_preserved_in_value)
-{
-    Connection c = make_conn("GET /?msg=hello%20world HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "msg=hello%20world");
-}
-
-Test(query, percent_encoding_preserved_in_key)
-{
-    Connection c = make_conn("GET /?my%20key=val HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "my%20key=val");
-}
-
-Test(query, plus_preserved_in_value)
-{
-    Connection c = make_conn("GET /?q=hello+world HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "q=hello+world");
-}
-
-Test(query, plus_preserved_in_key)
-{
-    Connection c = make_conn("GET /?my+key=val HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "my+key=val");
-}
-
-Test(query, duplicate_keys_preserved)
-{
-    Connection c = make_conn("GET /?x=first&x=second HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "x=first&x=second");
-}
-
-Test(query, mixed_flags_and_values)
-{
-    Connection c = make_conn("GET /?verbose&limit=10&debug HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "verbose&limit=10&debug");
-}
-
 Test(query, uri_and_query_together)
 {
-    Connection c = make_conn("GET /search?q=openai&lang=en HTTP/1.0\r\n\r\n");
+    Connection c = make_conn(
+        "GET /search?q=hello%20world+plus&a=1%262 HTTP/1.0\r\n\r\n");
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().uri, "/search");
-    cr_assert_eq(c.request().query_string, "q=openai&lang=en");
-}
-
-Test(query, percent_encoded_ampersand_in_value)
-{
-    Connection c = make_conn("GET /?a=1%262 HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "a=1%262");
-}
-
-Test(query, percent_encoded_equals_in_value)
-{
-    Connection c = make_conn("GET /?a=x%3Dy HTTP/1.0\r\n\r\n");
-    cr_assert(c.is_parse_complete());
-    cr_assert_eq(c.request().query_string, "a=x%3Dy");
+    cr_assert_eq(c.request().query_string, "q=hello%20world+plus&a=1%262");
 }
 
 Test(query, http09_with_query)

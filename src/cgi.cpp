@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -65,18 +65,6 @@ std::string lowercase(const std::string &s)
     return out;
 }
 
-bool starts_with(const std::string &s, const char *prefix)
-{
-    std::size_t i = 0;
-
-    while (prefix[i]) {
-        if (i >= s.size() || s[i] != prefix[i])
-            return false;
-        ++i;
-    }
-    return true;
-}
-
 bool should_filter_cgi_response_header(const std::string &lower_name)
 {
     return lower_name == "status" || lower_name == "content-length"
@@ -85,16 +73,6 @@ bool should_filter_cgi_response_header(const std::string &lower_name)
         || lower_name == "proxy-authorization" || lower_name == "te"
         || lower_name == "trailer" || lower_name == "transfer-encoding"
         || lower_name == "upgrade";
-}
-
-bool contains_header_name(
-    const std::vector<std::string> &names, const std::string &name)
-{
-    for (std::size_t i = 0; i < names.size(); ++i) {
-        if (names[i] == name)
-            return true;
-    }
-    return false;
 }
 
 void add_connection_options(
@@ -130,7 +108,9 @@ bool should_filter_cgi_response_header(const std::string &lower_name,
     const std::vector<std::string> &connection_header_options)
 {
     return should_filter_cgi_response_header(lower_name)
-        || contains_header_name(connection_header_options, lower_name);
+        || std::find(connection_header_options.begin(),
+               connection_header_options.end(), lower_name)
+        != connection_header_options.end();
 }
 
 bool find_header_end(const std::string &output, HeaderEnd &end)
@@ -381,14 +361,6 @@ bool is_executable_file(const std::string &path)
     return S_ISREG(st.st_mode) && access(path.c_str(), X_OK) == 0;
 }
 
-std::string number_string(std::size_t value)
-{
-    std::ostringstream ss;
-
-    ss << value;
-    return ss.str();
-}
-
 std::string directory_name(const std::string &path)
 {
     std::size_t slash = path.rfind('/');
@@ -539,9 +511,10 @@ std::vector<std::string> make_cgi_environment(
     const http::request &req, const Config &cfg, const std::string &script_path)
 {
     std::vector<std::string> env;
-    std::string content_length = number_string(req.body.size());
+    std::ostringstream content_length;
     std::string content_type = header_value(req, "content-type");
 
+    content_length << req.body.size();
     add_env(env, "PATH", "/usr/bin:/bin");
     add_env(env, "GATEWAY_INTERFACE", "CGI/1.1");
     add_env(env, "REQUEST_METHOD", http::methods::strings[req.method]);
@@ -553,7 +526,7 @@ std::vector<std::string> make_cgi_environment(
     add_env(env, "SERVER_PORT", server_port(cfg));
     add_env(env, "SERVER_PROTOCOL", version_string(req));
     add_env(env, "SERVER_SOFTWARE", "webserv");
-    add_env(env, "CONTENT_LENGTH", content_length);
+    add_env(env, "CONTENT_LENGTH", content_length.str());
     if (!content_type.empty())
         add_env(env, "CONTENT_TYPE", content_type);
     for (std::map<std::string, std::string>::const_iterator it
@@ -682,24 +655,11 @@ std::string cgi::translate_output(
 {
     HeaderEnd header_end;
 
-    if (starts_with(output, "HTTP/"))
+    if (output.compare(0, 5, "HTTP/") == 0)
         return translate_nph(output, req);
     if (!find_header_end(output, header_end))
         return make_bad_gateway(req);
     return translate_parsed(output, req, header_end);
-}
-
-cgi::Descriptor::Descriptor()
-    : type(cgi::descriptor::CGI_STDIN)
-    , fd(-1)
-{
-}
-
-cgi::Descriptor::Descriptor(
-    cgi::descriptor::type descriptor_type, int32_t descriptor_fd)
-    : type(descriptor_type)
-    , fd(descriptor_fd)
-{
 }
 
 cgi::Job::Job()
@@ -731,13 +691,16 @@ cgi::CompletionResult::CompletionResult()
 }
 
 cgi::CleanupResult::CleanupResult()
-    : child_ok(true)
+    : stdin_fd(-1)
+    , stdout_fd(-1)
     , found(false)
 {
 }
 
 cgi::StartedRequest::StartedRequest()
     : status(cgi::start::BAD_GATEWAY)
+    , stdin_fd(-1)
+    , stdout_fd(-1)
 {
 }
 
@@ -760,10 +723,8 @@ cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
     job.deadline_millis
         = monotonic_millis() + (static_cast<uint64_t>(cfg.cgi_timeout) * 1000);
     job.request = req;
-    request.descriptors.push_back(
-        cgi::Descriptor(cgi::descriptor::CGI_STDOUT, process.stdout_fd));
-    request.descriptors.push_back(
-        cgi::Descriptor(cgi::descriptor::CGI_STDIN, process.stdin_fd));
+    request.stdin_fd = process.stdin_fd;
+    request.stdout_fd = process.stdout_fd;
     _jobs[job.stdout_fd] = job;
     return request.status;
 }
@@ -909,16 +870,6 @@ std::vector<int32_t> cgi::Lifecycle::jobs_to_cancel_for(int32_t clientfd) const
     return jobs_to_cancel;
 }
 
-std::vector<int32_t> cgi::Lifecycle::active_stdout_fds() const
-{
-    std::vector<int32_t> stdout_fds;
-
-    for (std::map<int32_t, cgi::Job>::const_iterator it = _jobs.begin();
-        it != _jobs.end(); ++it)
-        stdout_fds.push_back(it->first);
-    return stdout_fds;
-}
-
 cgi::CleanupResult cgi::Lifecycle::cleanup_request(
     int32_t stdout_fd, cgi::job_cleanup::action action)
 {
@@ -931,26 +882,30 @@ cgi::CleanupResult cgi::Lifecycle::cleanup_request(
     job = job_it->second;
     _jobs.erase(job_it);
     result.found = true;
-    result.child_ok = cleanup_child(job, action);
-    result.descriptors.push_back(stdout_fd);
-    if (job.stdin_fd != -1)
-        result.descriptors.push_back(job.stdin_fd);
+    result.stdout_fd = stdout_fd;
+    result.stdin_fd = job.stdin_fd;
     if (action == cgi::job_cleanup::COMPLETE)
-        result.completion = complete(job, result.child_ok);
+        result.completion = complete(job, cleanup_child(job, action));
+    else
+        cleanup_child(job, action);
     return result;
 }
 
 std::vector<int32_t> cgi::Lifecycle::abort_all_requests()
 {
-    std::vector<int32_t> stdout_fds = active_stdout_fds();
+    std::vector<int32_t> stdout_fds;
     std::vector<int32_t> descriptors;
 
+    for (std::map<int32_t, cgi::Job>::const_iterator it = _jobs.begin();
+        it != _jobs.end(); ++it)
+        stdout_fds.push_back(it->first);
     for (std::size_t i = 0; i < stdout_fds.size(); ++i) {
         cgi::CleanupResult cleanup
             = cleanup_request(stdout_fds[i], cgi::job_cleanup::ABORT);
 
-        descriptors.insert(descriptors.end(), cleanup.descriptors.begin(),
-            cleanup.descriptors.end());
+        descriptors.push_back(cleanup.stdout_fd);
+        if (cleanup.stdin_fd != -1)
+            descriptors.push_back(cleanup.stdin_fd);
     }
     return descriptors;
 }

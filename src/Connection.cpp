@@ -6,13 +6,13 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 07:34:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Connection.hpp"
 
-#include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -27,19 +27,13 @@ std::string peer_address(int32_t fd)
 {
     sockaddr_storage addr;
     socklen_t len = sizeof(addr);
-    char buffer[INET6_ADDRSTRLEN];
-    const void *src = NULL;
+    char buffer[NI_MAXHOST];
 
     if (getpeername(fd, reinterpret_cast<sockaddr *>(&addr), &len) != 0)
         return "";
-    if (addr.ss_family == AF_INET) {
-        src = &reinterpret_cast<sockaddr_in *>(&addr)->sin_addr;
-    } else if (addr.ss_family == AF_INET6) {
-        src = &reinterpret_cast<sockaddr_in6 *>(&addr)->sin6_addr;
-    } else {
-        return "";
-    }
-    if (inet_ntop(addr.ss_family, src, buffer, sizeof(buffer)) == NULL)
+    if (getnameinfo(reinterpret_cast<sockaddr *>(&addr), len, buffer,
+            sizeof(buffer), NULL, 0, NI_NUMERICHOST)
+        != 0)
         return "";
     return buffer;
 }

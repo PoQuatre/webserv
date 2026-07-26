@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 16:16:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,7 +34,6 @@ struct Outcome {
 };
 
 const Config &config_for(const http::request &req, const Server &server);
-std::string filesystem_path(const http::request &req, const Config &cfg);
 
 Outcome handle(const http::request &req, const Server &server);
 

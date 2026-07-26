@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/18 05:33:23 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,7 +30,6 @@ struct Config {
     std::map<uint32_t, std::string> error_pages;
     std::string root;
     std::size_t client_max_body_size;
-    bool cgi_enabled;
     std::string cgi_pass;
     uint32_t cgi_timeout;
     std::size_t cgi_output_buffer_size;
