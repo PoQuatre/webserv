@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/18 05:39:01 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -129,7 +129,6 @@ void set_location_value(const config_node &node, Config &location_conf)
         // TODO: handle error
         break;
     case keywords::CGI_PASS:
-        location_conf.cgi_enabled = true;
         location_conf.cgi_pass = *(node.vals.begin());
         break;
     case keywords::CGI_TIMEOUT:
@@ -146,7 +145,7 @@ void set_location_value(const config_node &node, Config &location_conf)
 
 void apply_cgi_defaults(Config &location_conf)
 {
-    if (!location_conf.cgi_enabled)
+    if (location_conf.cgi_pass.empty())
         return;
     if (location_conf.conf.cgi_timeout.empty())
         location_conf.cgi_timeout = DEFAULT_CGI_TIMEOUT;
@@ -305,7 +304,6 @@ void ConfigParser::create_one_server(const config_node &node,
     inital_config.root = "/";
     inital_config.autoindex = false;
     inital_config.client_max_body_size = 0;
-    inital_config.cgi_enabled = false;
     inital_config.cgi_pass.clear();
     inital_config.cgi_timeout = 0;
     inital_config.cgi_output_buffer_size = 0;

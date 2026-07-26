@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 17:47:06 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -179,12 +179,6 @@ const Config &dispatcher::config_for(
     return loc ? loc->config : server.default_config();
 }
 
-std::string dispatcher::filesystem_path(
-    const http::request &req, const Config &cfg)
-{
-    return cfg.root + req.uri;
-}
-
 dispatcher::Outcome dispatcher::handle(
     const http::request &req, const Server &server)
 {
@@ -198,8 +192,8 @@ dispatcher::Outcome dispatcher::handle(
         return outcome;
     }
 
-    outcome.filesystem_path = filesystem_path(req, cfg);
-    if (cfg.cgi_enabled) {
+    outcome.filesystem_path = cfg.root + req.uri;
+    if (!cfg.cgi_pass.empty()) {
         outcome.type = Outcome::CGI_REQUIRED;
         L_DEBUG("CGI {} {} -> {}", http::methods::strings[req.method], req.uri,
             outcome.filesystem_path);

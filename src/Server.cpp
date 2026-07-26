@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/18 05:31:08 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -211,7 +211,6 @@ std::ostream &operator<<(std::ostream &os, const Config &config)
     os << "], ";
     os << "autoindex: " << std::boolalpha << config.autoindex << ", ";
     os << "client max body size: " << config.client_max_body_size << ", ";
-    os << "cgi enabled: " << config.cgi_enabled << ", ";
     os << "cgi pass: " << config.cgi_pass << ", ";
     os << "cgi timeout: " << config.cgi_timeout << ", ";
     os << "cgi output buffer size: " << config.cgi_output_buffer_size << ", ";

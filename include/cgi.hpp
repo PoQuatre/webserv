@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,23 +39,6 @@ struct Process {
     pid_t pid;
     int32_t stdin_fd;
     int32_t stdout_fd;
-};
-
-namespace descriptor {
-
-enum type {
-    CGI_STDIN,
-    CGI_STDOUT,
-};
-
-}
-
-struct Descriptor {
-    Descriptor();
-    Descriptor(descriptor::type descriptor_type, int32_t descriptor_fd);
-
-    descriptor::type type;
-    int32_t fd;
 };
 
 struct Job {
@@ -114,8 +97,8 @@ struct CleanupResult {
     CleanupResult();
 
     CompletionResult completion;
-    std::vector<int32_t> descriptors;
-    bool child_ok;
+    int32_t stdin_fd;
+    int32_t stdout_fd;
     bool found;
 };
 
@@ -123,13 +106,12 @@ struct StartedRequest {
     StartedRequest();
 
     start::result status;
-    std::vector<Descriptor> descriptors;
+    int32_t stdin_fd;
+    int32_t stdout_fd;
 };
 
 class Lifecycle {
 public:
-    // Lifecycle owns active CGI jobs. The event loop only monitors the
-    // descriptors reported here and forwards readiness back to this component.
     start::result start_request(int32_t clientfd, const http::request &req,
         const Config &cfg, const std::string &script_path,
         StartedRequest &request);
@@ -148,7 +130,6 @@ private:
     static ReadinessResult process_stdout(Job &job, uint32_t events);
     static CompletionResult complete(Job job, bool child_ok);
     bool cleanup_child(const Job &job, job_cleanup::action action);
-    std::vector<int32_t> active_stdout_fds() const;
     void reap_child_later(pid_t pid);
     void terminate_child_nonblocking(pid_t pid);
 

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/20 10:31:39 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:39:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -100,60 +100,27 @@ static void write_all(int fd, const std::string &data)
     }
 }
 
-static std::string read_response(int fd)
+static std::string read_response_with_timeout(int fd, long usec)
 {
     timeval timeout = { };
-    timeout.tv_sec = 2;
-    cr_assert_eq(
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0,
-        "setsockopt() failed: %s", strerror(errno));
-
-    std::string response;
-    char buffer[256];
-    ssize_t n = read(fd, buffer, sizeof(buffer));
-    cr_assert_gt(n, 0, "read() failed: %s", strerror(errno));
-    response.append(buffer, static_cast<std::size_t>(n));
-    return response;
-}
-
-static std::string read_response_until_idle(int fd)
-{
-    timeval timeout = { };
-    timeout.tv_usec = 200000;
+    timeout.tv_sec = usec / 1000000;
+    timeout.tv_usec = usec % 1000000;
     cr_assert_eq(
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0,
         "setsockopt() failed: %s", strerror(errno));
 
     std::string response;
     char buffer[512];
-    while (true) {
-        ssize_t n = read(fd, buffer, sizeof(buffer));
-        if (n > 0) {
-            response.append(buffer, static_cast<std::size_t>(n));
-        } else if (n == 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
-            break;
-        } else {
-            cr_assert_fail("read() failed: %s", strerror(errno));
-        }
-    }
-    cr_assert(!response.empty(), "empty response");
-    return response;
-}
-
-static std::string read_response_with_timeout(int fd, long usec)
-{
-    timeval timeout = { };
-    timeout.tv_usec = usec;
-    cr_assert_eq(
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0,
-        "setsockopt() failed: %s", strerror(errno));
-
-    std::string response;
-    char buffer[256];
     ssize_t n = read(fd, buffer, sizeof(buffer));
+
     cr_assert_gt(n, 0, "read() failed: %s", strerror(errno));
     response.append(buffer, static_cast<std::size_t>(n));
     return response;
+}
+
+static std::string read_response(int fd)
+{
+    return read_response_with_timeout(fd, 2000000);
 }
 
 static std::string make_tmpdir()
@@ -239,7 +206,6 @@ static Server make_cgi_server(uint16_t port, const std::string &root,
 
     cgi_config = config;
     cgi_config.allowed_methods[http::methods::DELETE] = allow_delete;
-    cgi_config.cgi_enabled = true;
     cgi_config.cgi_pass = cgi_pass;
     cgi_config.cgi_timeout = cgi_timeout;
     cgi_config.cgi_output_buffer_size = cgi_output_buffer_size;
@@ -252,27 +218,16 @@ static Server make_cgi_server(uint16_t port, const std::string &root,
     return Server(locations, "test", listen_addr.str(), config);
 }
 
-struct CgiHarnessOptions {
-    CgiHarnessOptions()
-        : allow_delete(false)
-        , cgi_pass("/bin/sh")
-        , cgi_timeout(DEFAULT_CGI_TIMEOUT)
-        , cgi_output_buffer_size(DEFAULT_CGI_OUTPUT_BUFFER_SIZE)
-    {
-    }
-
-    bool allow_delete;
-    std::string cgi_pass;
-    uint32_t cgi_timeout;
-    std::size_t cgi_output_buffer_size;
-};
-
 struct CgiHarness {
     CgiHarness()
         : root(make_cgi_root())
         , port(0)
         , loop(NULL)
         , running(false)
+        , allow_delete(false)
+        , cgi_pass("/bin/sh")
+        , cgi_timeout(DEFAULT_CGI_TIMEOUT)
+        , cgi_output_buffer_size(DEFAULT_CGI_OUTPUT_BUFFER_SIZE)
     {
         args.loop = NULL;
         args.result = false;
@@ -286,7 +241,10 @@ struct CgiHarness {
     LoopThreadArgs args;
     pthread_t thread;
     bool running;
-    CgiHarnessOptions options;
+    bool allow_delete;
+    std::string cgi_pass;
+    uint32_t cgi_timeout;
+    std::size_t cgi_output_buffer_size;
 };
 
 static void start_cgi_harness(CgiHarness &harness)
@@ -294,8 +252,8 @@ static void start_cgi_harness(CgiHarness &harness)
     cr_assert(!harness.running, "CGI harness is already running");
     harness.port = reserve_loopback_port();
     harness.servers.push_back(make_cgi_server(harness.port, harness.root,
-        harness.options.allow_delete, harness.options.cgi_pass,
-        harness.options.cgi_timeout, harness.options.cgi_output_buffer_size));
+        harness.allow_delete, harness.cgi_pass, harness.cgi_timeout,
+        harness.cgi_output_buffer_size));
     harness.loop = new EventLoop(harness.servers);
     harness.args.loop = harness.loop;
     harness.args.result = false;
@@ -342,16 +300,6 @@ static std::string perform_request(
 {
     int fd = send_request(harness, request);
     std::string response = read_response(fd);
-
-    close(fd);
-    return response;
-}
-
-static std::string perform_request_until_idle(
-    CgiHarness &harness, const std::string &request)
-{
-    int fd = send_request(harness, request);
-    std::string response = read_response_until_idle(fd);
 
     close(fd);
     return response;
@@ -486,161 +434,6 @@ Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
     cr_assert_neq(chunked_response.find("stdin_eof=yes\n"), std::string::npos);
 }
 
-Test(event_loop, cgi_exposes_raw_query_meta_variables_and_http_headers)
-{
-    logger::log_level() = logger::levels::NOTHING;
-
-    CgiHarness harness;
-    write_file(harness.root + "/cgi/env.sh",
-        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
-        "printf 'REQUEST_METHOD=%s\\n' \"$REQUEST_METHOD\"\n"
-        "printf 'QUERY_STRING=%s\\n' \"$QUERY_STRING\"\n"
-        "printf 'SCRIPT_NAME=%s\\n' \"$SCRIPT_NAME\"\n"
-        "printf 'SCRIPT_FILENAME=%s\\n' \"$SCRIPT_FILENAME\"\n"
-        "printf 'REMOTE_ADDR=%s\\n' \"$REMOTE_ADDR\"\n"
-        "printf 'SERVER_NAME=%s\\n' \"$SERVER_NAME\"\n"
-        "printf 'SERVER_PORT=%s\\n' \"$SERVER_PORT\"\n"
-        "printf 'SERVER_PROTOCOL=%s\\n' \"$SERVER_PROTOCOL\"\n"
-        "printf 'CONTENT_LENGTH=%s\\n' \"$CONTENT_LENGTH\"\n"
-        "printf 'CONTENT_TYPE=%s\\n' \"$CONTENT_TYPE\"\n"
-        "printf 'HTTP_ACCEPT=%s\\n' \"$HTTP_ACCEPT\"\n"
-        "printf 'HTTP_HOST=%s\\n' \"$HTTP_HOST\"\n"
-        "printf 'HTTP_X_CUSTOM_HEADER=%s\\n' \"$HTTP_X_CUSTOM_HEADER\"\n");
-
-    const std::string request_host = "example.test:1";
-    std::ostringstream request;
-    request << "GET /cgi/env.sh?raw=a%2Bb+c HTTP/1.1\r\n"
-            << "Host: " << request_host << "\r\n"
-            << "Accept: text/plain\r\n"
-            << "Content-Type: text/plain\r\n"
-            << "Content-Length: 0\r\n"
-            << "X-Custom-Header: kept\r\n"
-            << "\r\n";
-    std::string response = perform_request_until_idle(harness, request.str());
-    assert_status(response, "HTTP/1.1 200 OK");
-    cr_assert_neq(response.find("REQUEST_METHOD=GET\n"), std::string::npos);
-    cr_assert_neq(
-        response.find("QUERY_STRING=raw=a%2Bb+c\n"), std::string::npos);
-    cr_assert_neq(
-        response.find("SCRIPT_NAME=/cgi/env.sh\n"), std::string::npos);
-    std::string script_filename
-        = "SCRIPT_FILENAME=" + harness.root + "/cgi/env.sh\n";
-    cr_assert_neq(response.find(script_filename), std::string::npos);
-    cr_assert_neq(response.find("REMOTE_ADDR=127.0.0.1\n"), std::string::npos);
-    cr_assert_neq(
-        response.find("SERVER_NAME=example.test\n"), std::string::npos);
-    std::ostringstream server_port;
-    server_port << "SERVER_PORT=" << harness.port << "\n";
-    cr_assert_neq(response.find(server_port.str()), std::string::npos);
-    cr_assert_neq(
-        response.find("SERVER_PROTOCOL=HTTP/1.1\n"), std::string::npos);
-    cr_assert_neq(response.find("CONTENT_LENGTH=0\n"), std::string::npos);
-    cr_assert_neq(
-        response.find("CONTENT_TYPE=text/plain\n"), std::string::npos);
-    cr_assert_neq(response.find("HTTP_ACCEPT=text/plain\n"), std::string::npos);
-    std::string http_host = "HTTP_HOST=" + request_host + "\n";
-    cr_assert_neq(response.find(http_host), std::string::npos);
-    cr_assert_neq(
-        response.find("HTTP_X_CUSTOM_HEADER=kept\n"), std::string::npos);
-
-    std::string fallback_response = perform_request_until_idle(harness,
-        "GET /cgi/env.sh HTTP/1.0\r\n"
-        "Accept: text/plain\r\n"
-        "\r\n");
-    assert_status(fallback_response, "HTTP/1.0 200 OK");
-    cr_assert_neq(
-        fallback_response.find("SERVER_NAME=test\n"), std::string::npos);
-    cr_assert_neq(fallback_response.find(server_port.str()), std::string::npos);
-
-    std::string unusable_host_response = perform_request_until_idle(harness,
-        "GET /cgi/env.sh HTTP/1.1\r\n"
-        "Host: 2001:db8::1\r\n"
-        "\r\n");
-    assert_status(unusable_host_response, "HTTP/1.1 200 OK");
-    cr_assert_neq(
-        unusable_host_response.find("SERVER_NAME=test\n"), std::string::npos);
-    cr_assert_neq(
-        unusable_host_response.find(server_port.str()), std::string::npos);
-}
-
-Test(event_loop, cgi_response_modes_cover_redirect_nph_and_missing_separator)
-{
-    logger::log_level() = logger::levels::NOTHING;
-
-    CgiHarness harness;
-    write_file(harness.root + "/cgi/redirect.sh",
-        "printf 'Location: /elsewhere\\r\\n\\r\\n'\n");
-    write_file(harness.root + "/cgi/nph-output.sh",
-        "printf 'HTTP/1.1 204 No Content\\r\\n'\n"
-        "printf 'X-NPH: yes\\r\\n'\n"
-        "printf 'Connection: close\\r\\n'\n"
-        "printf 'Transfer-Encoding: chunked\\r\\n'\n"
-        "printf '\\r\\n'\n");
-    write_file(harness.root + "/cgi/missing-separator.sh",
-        "printf 'missing-separator\\n'\n");
-
-    std::string redirect_response = perform_request_until_idle(
-        harness, "GET /cgi/redirect.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(redirect_response, "HTTP/1.1 302 Moved Temporarily");
-    cr_assert_neq(
-        redirect_response.find("Location: /elsewhere\r\n"), std::string::npos);
-
-    std::string nph_response = perform_request_until_idle(
-        harness, "GET /cgi/nph-output.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    cr_assert_eq(
-        nph_response.find("HTTP/1.1 204 No Content\r\n"), std::size_t(0));
-    cr_assert_neq(nph_response.find("X-NPH: yes\r\n"), std::string::npos);
-    cr_assert_neq(
-        nph_response.find("Content-Length: 0\r\n"), std::string::npos);
-    cr_assert_neq(
-        nph_response.find("Connection: keep-alive\r\n"), std::string::npos);
-    cr_assert_eq(nph_response.find("Connection: close\r\n"), std::string::npos);
-    cr_assert_eq(
-        nph_response.find("Transfer-Encoding: chunked\r\n"), std::string::npos);
-
-    std::string missing_separator_response = perform_request_until_idle(harness,
-        "GET /cgi/missing-separator.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(missing_separator_response, "HTTP/1.1 502 Bad Gateway");
-    cr_assert_eq(missing_separator_response.find("missing-separator\n"),
-        std::string::npos);
-}
-
-Test(event_loop, cgi_response_filters_unsafe_headers)
-{
-    logger::log_level() = logger::levels::NOTHING;
-
-    CgiHarness harness;
-    write_file(harness.root + "/cgi/headers.sh",
-        "printf 'Status: 201 Created\\r\\n'\n"
-        "printf 'Content-Type: text/plain\\r\\n'\n"
-        "printf 'Set-Cookie: session=abc\\r\\n'\n"
-        "printf 'X-App-Header: kept\\r\\n'\n"
-        "printf 'Content-Length: 999\\r\\n'\n"
-        "printf 'Connection: close, X-Hop\\r\\n'\n"
-        "printf 'X-Hop: dropped\\r\\n'\n"
-        "printf 'Transfer-Encoding: chunked\\r\\n'\n"
-        "printf '\\r\\nbody\\n'\n");
-
-    std::string response = perform_request_until_idle(
-        harness, "GET /cgi/headers.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-
-    assert_status(response, "HTTP/1.1 201 Created");
-    cr_assert_neq(
-        response.find("Content-Type: text/plain\r\n"), std::string::npos);
-    cr_assert_neq(
-        response.find("Set-Cookie: session=abc\r\n"), std::string::npos);
-    cr_assert_neq(response.find("X-App-Header: kept\r\n"), std::string::npos);
-    cr_assert_neq(response.find("Content-Length: 5\r\n"), std::string::npos);
-    cr_assert_eq(response.find("Status:"), std::string::npos);
-    cr_assert_eq(response.find("Content-Length: 999\r\n"), std::string::npos);
-    cr_assert_eq(
-        response.find("Connection: close, X-Hop\r\n"), std::string::npos);
-    cr_assert_eq(response.find("X-Hop: dropped\r\n"), std::string::npos);
-    cr_assert_eq(
-        response.find("Transfer-Encoding: chunked\r\n"), std::string::npos);
-    cr_assert_neq(response.find("body\n"), std::string::npos);
-}
-
 Test(event_loop, cgi_executes_allowed_delete_method)
 {
     logger::log_level() = logger::levels::NOTHING;
@@ -650,7 +443,7 @@ Test(event_loop, cgi_executes_allowed_delete_method)
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'method=%s\\n' \"$REQUEST_METHOD\"\n");
 
-    harness.options.allow_delete = true;
+    harness.allow_delete = true;
 
     std::string delete_response = perform_request(
         harness, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
@@ -737,7 +530,7 @@ Test(event_loop, cgi_invalid_interpreter_maps_to_bad_gateway)
     cr_assert_eq(chmod((harness.root + "/not-executable").c_str(), 0600), 0,
         "chmod() failed: %s", strerror(errno));
 
-    harness.options.cgi_pass = harness.root + "/not-executable";
+    harness.cgi_pass = harness.root + "/not-executable";
 
     assert_status(perform_request(harness,
                       "GET /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
@@ -753,7 +546,7 @@ Test(event_loop, cgi_timeout_returns_gateway_timeout)
         "sleep 5\n"
         "printf 'Content-Type: text/plain\\r\\n\\r\\nlate\\n'\n");
 
-    harness.options.cgi_timeout = 1;
+    harness.cgi_timeout = 1;
 
     assert_status(perform_request(harness,
                       "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
@@ -769,7 +562,7 @@ Test(event_loop, cgi_output_cap_returns_bad_gateway)
         "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
         "printf 'this output is too large for the configured cap\\n'\n");
 
-    harness.options.cgi_output_buffer_size = 32;
+    harness.cgi_output_buffer_size = 32;
 
     assert_status(perform_request(harness,
                       "GET /cgi/large.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/21 21:56:16 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/26 10:39:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -53,12 +53,11 @@ private:
         EventSource();
         explicit EventSource(const Server &server_context);
         explicit EventSource(Connection &connection_context);
-        EventSource(Type cgi_type, int32_t owner_clientfd);
+        explicit EventSource(Type cgi_type);
 
         Type type;
         const Server *server;
         Connection *connection;
-        int32_t clientfd;
     };
 
     bool add_source(int32_t fd, uint32_t events, const EventSource &source);
