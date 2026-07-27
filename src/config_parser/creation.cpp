@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:34:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -143,16 +143,6 @@ void set_location_value(const config_node &node, Config &location_conf)
     }
 }
 
-void apply_cgi_defaults(Config &location_conf)
-{
-    if (location_conf.cgi_pass.empty())
-        return;
-    if (location_conf.conf.cgi_timeout.empty())
-        location_conf.cgi_timeout = DEFAULT_CGI_TIMEOUT;
-    if (location_conf.conf.cgi_output_buffer_size.empty())
-        location_conf.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
-}
-
 void create_location(
     std::vector<config_node *>::const_iterator &node_it, Config &location_conf)
 {
@@ -177,20 +167,25 @@ void create_location(
 
         set_location_value(**it, location_conf);
 
-        if ((*it)->keyword == keywords::LIMIT_EXCEPT) {
-            std::memset(location_conf.allowed_methods, 0,
-                sizeof(bool) * http::methods::COUNT);
-            // node->values LIMIT_EXCEPT
-            for (std::vector<std::string>::iterator it2 = (*it)->vals.begin();
-                it2 != (*it)->vals.end(); it2++) {
-                for (std::size_t i = 0; i < http::methods::COUNT; i++)
-                    if (*it2 == http::methods::strings[i]) {
-                        location_conf.allowed_methods[i] = 1;
-                    }
-            }
+        if ((*it)->keyword != keywords::LIMIT_EXCEPT)
+            continue;
+        std::memset(location_conf.allowed_methods, 0,
+            sizeof(bool) * http::methods::COUNT);
+        // node->values LIMIT_EXCEPT
+        for (std::vector<std::string>::iterator it2 = (*it)->vals.begin();
+            it2 != (*it)->vals.end(); it2++) {
+            for (std::size_t i = 0; i < http::methods::COUNT; i++)
+                if (*it2 == http::methods::strings[i]) {
+                    location_conf.allowed_methods[i] = 1;
+                }
         }
     }
-    apply_cgi_defaults(location_conf);
+    if (location_conf.cgi_pass.empty())
+        return;
+    if (location_conf.conf.cgi_timeout.empty())
+        location_conf.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    if (location_conf.conf.cgi_output_buffer_size.empty())
+        location_conf.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
 }
 
 void create_all_location(const config_node &node, Config &inital_config,

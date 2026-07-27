@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 21:35:58 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -50,15 +50,6 @@ void drain_signal_pipe()
     while ((n = read(g_signal_pipe[0], buf, sizeof(buf))) > 0)
         for (ssize_t j = 0; j < n; ++j)
             L_DEBUG("Received signal {}, shutting down", (int)buf[j]);
-}
-
-http::status::type cgi_start_error(cgi::start::result result)
-{
-    if (result == cgi::start::NOT_FOUND)
-        return http::status::NOT_FOUND;
-    if (result == cgi::start::FORBIDDEN)
-        return http::status::FORBIDDEN;
-    return http::status::BAD_GATEWAY;
 }
 
 }
@@ -398,7 +389,12 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
     result = _cgi_lifecycle.start_request(
         clientfd, conn.request(), cfg, script_path, process);
     if (result != cgi::start::STARTED) {
-        error_status = cgi_start_error(result);
+        if (result == cgi::start::NOT_FOUND)
+            error_status = http::status::NOT_FOUND;
+        else if (result == cgi::start::FORBIDDEN)
+            error_status = http::status::FORBIDDEN;
+        else
+            error_status = http::status::BAD_GATEWAY;
         return false;
     }
     if (!add_source(process.stdout_fd, EPOLL_RDONLY,
