@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:47:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -451,13 +451,11 @@ void EventLoop::expire_cgi_jobs()
 
 void EventLoop::finish_cgi_job(int32_t fd)
 {
-    cgi::CleanupResult result;
-    cgi::CompletionResult completion;
+    cgi::CleanupResult result = cleanup_cgi_job(fd, cgi::job_cleanup::COMPLETE);
 
-    result = cleanup_cgi_job(fd, cgi::job_cleanup::COMPLETE);
     if (!result.found)
         return;
-    completion = result.completion;
+    const cgi::CompletionResult &completion = result.completion;
     std::map<int32_t, Connection>::iterator conn_it
         = _connections.find(completion.clientfd);
     if (conn_it == _connections.end())
