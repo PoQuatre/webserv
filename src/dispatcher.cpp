@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 01:34:43 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -91,9 +91,11 @@ std::string make_response(const http::request &req, http::status::type status,
     return ss.str();
 }
 
-std::string make_error_response_impl_impl(
+std::string make_error_response_impl(
     const http::request &req, http::status::type status, const Config &cfg)
 {
+    L_DEBUG("Responded with error code {}", http::status::codes[status]);
+
     int code = http::status::codes[status];
     std::map<uint32_t, std::string>::const_iterator cit
         = cfg.error_pages.find(static_cast<uint32_t>(code));
@@ -127,13 +129,21 @@ std::string create_index_directory(
     struct dirent *ep;
     dp = opendir(fs_path.c_str());
     if (dp != NULL) {
-        if (readdir(dp)) {}
+        if (!readdir(dp)) {
+            closedir(dp);
+            return make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
+        }
         while ((ep = readdir(dp)) != NULL) {
 
             struct stat st;
             std::string filename(ep->d_name);
 
-            if (stat((fs_path + filename).c_str(), &st) != 0) {}
+            if (stat((fs_path + filename).c_str(), &st)) {
+                closedir(dp);
+                return make_error_response_impl(
+                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
+            }
 
             std::tm *time_last_change = localtime(&st.st_mtim.tv_sec);
 
@@ -255,8 +265,8 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
 
 std::string dispatcher::error_response(http::status::type status)
 {
-    Config empty_cfg = {};
-    http::request empty_req = {};
+    Config empty_cfg = { };
+    http::request empty_req = { };
     return make_error_response_impl(empty_req, status, empty_cfg);
 }
 
