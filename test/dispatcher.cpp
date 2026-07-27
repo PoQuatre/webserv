@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,7 @@
 static Server make_dispatch_server(const std::string &root)
 {
     Config config = { };
-    Config cgi_config = config;
+    Config cgi_config = { };
     Location cgi_location;
     std::vector<Location> locations;
 

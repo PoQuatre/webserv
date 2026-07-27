@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -133,16 +133,6 @@ static std::string make_cgi_root()
     return root;
 }
 
-static bool process_exists(pid_t pid)
-{
-    errno = 0;
-    if (kill(pid, 0) == 0)
-        return true;
-    cr_assert_eq(errno, ESRCH, "kill(%ld, 0) failed: %s",
-        static_cast<long>(pid), strerror(errno));
-    return false;
-}
-
 static pid_t wait_for_pid_file(const std::string &path)
 {
     for (int attempts = 0; attempts < 1000; ++attempts) {
@@ -160,8 +150,12 @@ static pid_t wait_for_pid_file(const std::string &path)
 static bool wait_process_gone(pid_t pid)
 {
     for (int attempts = 0; attempts < 1000; ++attempts) {
-        if (!process_exists(pid))
+        errno = 0;
+        if (kill(pid, 0) == -1) {
+            cr_assert_eq(errno, ESRCH, "kill(%ld, 0) failed: %s",
+                static_cast<long>(pid), strerror(errno));
             return true;
+        }
         usleep(1000);
     }
     return false;
@@ -230,28 +224,6 @@ struct CgiHarness {
     std::size_t cgi_output_buffer_size;
 };
 
-static void start_cgi_harness(CgiHarness &harness)
-{
-    cr_assert(!harness.running, "CGI harness is already running");
-    harness.port = reserve_loopback_port();
-    harness.servers.push_back(make_cgi_server(harness.port, harness.root,
-        harness.allow_delete, harness.cgi_pass, harness.cgi_timeout,
-        harness.cgi_output_buffer_size));
-    harness.loop = new EventLoop(harness.servers);
-    harness.args.loop = harness.loop;
-    harness.args.result = false;
-    cr_assert_eq(
-        pthread_create(&harness.thread, NULL, &run_loop, &harness.args), 0,
-        "pthread_create() failed");
-    harness.running = true;
-}
-
-static void ensure_cgi_harness_started(CgiHarness &harness)
-{
-    if (!harness.running)
-        start_cgi_harness(harness);
-}
-
 static void stop_cgi_harness(CgiHarness &harness)
 {
     if (!harness.running)
@@ -271,7 +243,19 @@ CgiHarness::~CgiHarness() { stop_cgi_harness(*this); }
 
 static int send_request(CgiHarness &harness, const std::string &request)
 {
-    ensure_cgi_harness_started(harness);
+    if (!harness.running) {
+        harness.port = reserve_loopback_port();
+        harness.servers.push_back(make_cgi_server(harness.port, harness.root,
+            harness.allow_delete, harness.cgi_pass, harness.cgi_timeout,
+            harness.cgi_output_buffer_size));
+        harness.loop = new EventLoop(harness.servers);
+        harness.args.loop = harness.loop;
+        harness.args.result = false;
+        cr_assert_eq(
+            pthread_create(&harness.thread, NULL, &run_loop, &harness.args), 0,
+            "pthread_create() failed");
+        harness.running = true;
+    }
     int fd = connect_to_loopback(harness.port);
 
     write_all(fd, request);

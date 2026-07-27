@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 21:38:15 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -57,16 +57,6 @@ struct Job {
     bool failed;
 };
 
-namespace readiness {
-
-enum action {
-    CONTINUE,
-    CLOSE_STDIN,
-    COMPLETE,
-};
-
-}
-
 struct CompletionResult {
     CompletionResult();
 
@@ -99,8 +89,8 @@ class Lifecycle {
 public:
     start::result start_request(int32_t clientfd, const http::request &req,
         const Config &cfg, const std::string &script_path, Process &process);
-    readiness::action process_stdin(int32_t fd, uint32_t events);
-    readiness::action process_stdout(int32_t fd, uint32_t events);
+    bool process_stdin(int32_t fd, uint32_t events);
+    bool process_stdout(int32_t fd, uint32_t events);
     int32_t wait_timeout() const;
     std::vector<int32_t> expire_jobs();
     std::vector<int32_t> jobs_to_cancel_for(int32_t clientfd) const;
@@ -110,8 +100,8 @@ public:
     void reap_pending_children();
 
 private:
-    static readiness::action process_stdin(Job &job, uint32_t events);
-    static readiness::action process_stdout(Job &job, uint32_t events);
+    static bool process_stdin(Job &job, uint32_t events);
+    static bool process_stdout(Job &job, uint32_t events);
     static CompletionResult complete(Job job, bool child_ok);
     bool cleanup_child(const Job &job, job_cleanup::action action);
     void reap_child_later(pid_t pid);

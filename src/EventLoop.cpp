@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:58:34 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -414,13 +414,17 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
 
 void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
 {
-    if (_cgi_lifecycle.process_stdin(fd, events) == cgi::readiness::CLOSE_STDIN)
+    bool close_stdin = _cgi_lifecycle.process_stdin(fd, events);
+
+    if (close_stdin)
         close_cgi_fd(fd);
 }
 
 void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
 {
-    if (_cgi_lifecycle.process_stdout(fd, events) == cgi::readiness::COMPLETE)
+    bool complete = _cgi_lifecycle.process_stdout(fd, events);
+
+    if (complete)
         finish_cgi_job(fd);
 }
 

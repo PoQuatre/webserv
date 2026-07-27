@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -647,34 +647,30 @@ cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
     return status;
 }
 
-cgi::readiness::action cgi::Lifecycle::process_stdin(
-    int32_t fd, uint32_t events)
+bool cgi::Lifecycle::process_stdin(int32_t fd, uint32_t events)
 {
     for (std::map<int32_t, cgi::Job>::iterator it = _jobs.begin();
         it != _jobs.end(); ++it) {
         if (it->second.stdin_fd != fd)
             continue;
-        cgi::readiness::action action
-            = cgi::Lifecycle::process_stdin(it->second, events);
-        if (action == cgi::readiness::CLOSE_STDIN)
+        bool close_stdin = cgi::Lifecycle::process_stdin(it->second, events);
+        if (close_stdin)
             it->second.stdin_fd = -1;
-        return action;
+        return close_stdin;
     }
-    return cgi::readiness::CONTINUE;
+    return false;
 }
 
-cgi::readiness::action cgi::Lifecycle::process_stdout(
-    int32_t fd, uint32_t events)
+bool cgi::Lifecycle::process_stdout(int32_t fd, uint32_t events)
 {
     std::map<int32_t, cgi::Job>::iterator it = _jobs.find(fd);
 
     if (it == _jobs.end())
-        return cgi::readiness::CONTINUE;
+        return false;
     return cgi::Lifecycle::process_stdout(it->second, events);
 }
 
-cgi::readiness::action cgi::Lifecycle::process_stdin(
-    cgi::Job &job, uint32_t events)
+bool cgi::Lifecycle::process_stdin(cgi::Job &job, uint32_t events)
 {
     const std::string &body = job.request.body;
 
@@ -687,17 +683,16 @@ cgi::readiness::action cgi::Lifecycle::process_stdin(
         if (n > 0)
             job.body_written += static_cast<std::size_t>(n);
         else if (!(events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)))
-            return cgi::readiness::CONTINUE;
+            return false;
     }
     if (job.body_written < body.size() && !job.failed)
-        return cgi::readiness::CONTINUE;
-    return cgi::readiness::CLOSE_STDIN;
+        return false;
+    return true;
 }
 
-cgi::readiness::action cgi::Lifecycle::process_stdout(
-    cgi::Job &job, uint32_t events)
+bool cgi::Lifecycle::process_stdout(cgi::Job &job, uint32_t events)
 {
-    cgi::readiness::action action = cgi::readiness::CONTINUE;
+    bool complete = false;
     char buffer[4096];
     ssize_t bytes_read;
 
@@ -708,18 +703,18 @@ cgi::readiness::action cgi::Lifecycle::process_stdout(
                 > job.max_output) {
             job.failed = true;
             job.failure_status = http::status::BAD_GATEWAY;
-            action = cgi::readiness::COMPLETE;
+            complete = true;
         } else {
             job.output.append(buffer, static_cast<std::size_t>(bytes_read));
         }
     } else if (bytes_read == 0) {
-        action = cgi::readiness::COMPLETE;
+        complete = true;
     } else if (events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
         if (events & EPOLLERR)
             job.failed = true;
-        action = cgi::readiness::COMPLETE;
+        complete = true;
     }
-    return action;
+    return complete;
 }
 
 cgi::CompletionResult cgi::Lifecycle::complete(cgi::Job job, bool child_ok)
