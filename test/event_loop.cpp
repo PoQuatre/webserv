@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 21:46:51 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -278,16 +278,6 @@ static int send_request(CgiHarness &harness, const std::string &request)
     return fd;
 }
 
-static std::string perform_request(
-    CgiHarness &harness, const std::string &request)
-{
-    int fd = send_request(harness, request);
-    std::string response = read_response(fd);
-
-    close(fd);
-    return response;
-}
-
 static std::string perform_request_with_timeout(
     CgiHarness &harness, const std::string &request, long usec)
 {
@@ -298,10 +288,10 @@ static std::string perform_request_with_timeout(
     return response;
 }
 
-static void assert_status(const std::string &response, const char *status)
+static std::string perform_request(
+    CgiHarness &harness, const std::string &request)
 {
-    cr_assert_neq(response.find(status), std::string::npos,
-        "missing status '%s' in response:\n%s", status, response.c_str());
+    return perform_request_with_timeout(harness, request, 2000000);
 }
 
 Test(event_loop, listener_and_signal_sources_dispatch_readiness)
@@ -353,7 +343,7 @@ Test(event_loop, cgi_get_executes_script_and_static_requests_still_work)
 
     std::string cgi_response = perform_request(harness,
         "GET /cgi/hello.sh?name=webserv HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(cgi_response, "HTTP/1.1 200 OK");
+    test_assert_status(cgi_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         cgi_response.find("Content-Type: text/plain"), std::string::npos);
     cr_assert_neq(cgi_response.find("method=GET query=name=webserv\n"),
@@ -363,7 +353,7 @@ Test(event_loop, cgi_get_executes_script_and_static_requests_still_work)
         harness, "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
     std::string static_response = perform_request_with_timeout(
         harness, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n", 200000);
-    assert_status(static_response, "HTTP/1.1 200 OK");
+    test_assert_status(static_response, "HTTP/1.1 200 OK");
     cr_assert_neq(static_response.find("static body\n"), std::string::npos);
 
     close(slow_fd);
@@ -391,7 +381,7 @@ Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
         "Content-Length: 18\r\n"
         "\r\n"
         "alpha=one&beta=two");
-    assert_status(post_response, "HTTP/1.1 200 OK");
+    test_assert_status(post_response, "HTTP/1.1 200 OK");
     cr_assert_neq(post_response.find("method=POST\n"), std::string::npos);
     cr_assert_neq(post_response.find("content_length=18\n"), std::string::npos);
     cr_assert_neq(
@@ -409,7 +399,7 @@ Test(event_loop, cgi_receives_post_and_chunked_bodies_on_stdin)
         "Transfer-Encoding: chunked\r\n"
         "\r\n"
         "4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n");
-    assert_status(chunked_response, "HTTP/1.1 200 OK");
+    test_assert_status(chunked_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         chunked_response.find("content_length=9\n"), std::string::npos);
     cr_assert_neq(
@@ -431,7 +421,7 @@ Test(event_loop, cgi_executes_allowed_delete_method)
 
     std::string delete_response = perform_request(
         harness, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(delete_response, "HTTP/1.1 200 OK");
+    test_assert_status(delete_response, "HTTP/1.1 200 OK");
     cr_assert_neq(delete_response.find("method=DELETE\n"), std::string::npos);
 }
 
@@ -449,7 +439,7 @@ Test(event_loop, cgi_rejects_disallowed_method_without_running_script)
 
     std::string delete_response = perform_request(
         harness, "DELETE /cgi/method.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(delete_response, "HTTP/1.1 405 Method Not Allowed");
+    test_assert_status(delete_response, "HTTP/1.1 405 Method Not Allowed");
     cr_assert_eq(access(marker.c_str(), F_OK), -1,
         "disallowed CGI method executed script and created %s", marker.c_str());
     cr_assert_eq(errno, ENOENT, "access() failed: %s", strerror(errno));
@@ -469,7 +459,7 @@ Test(event_loop, cgi_head_executes_script_and_discards_response_body)
 
     std::string head_response = perform_request(
         harness, "HEAD /cgi/head.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert_status(head_response, "HTTP/1.1 200 OK");
+    test_assert_status(head_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         head_response.find("Content-Length: 12\r\n"), std::string::npos);
     cr_assert_eq(head_response.find("method=HEAD\n"), std::string::npos,
@@ -490,16 +480,17 @@ Test(event_loop, cgi_script_path_errors_map_to_http_statuses)
     cr_assert_eq(mkdir((harness.root + "/cgi/directory").c_str(), 0700), 0,
         "mkdir() failed: %s", strerror(errno));
 
-    assert_status(
+    test_assert_status(
         perform_request(
             harness, "GET /cgi/missing.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
         "HTTP/1.1 404 Not Found");
-    assert_status(
+    test_assert_status(
         perform_request(harness,
             "GET /cgi/unreadable.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
         "HTTP/1.1 403 Forbidden");
-    assert_status(perform_request(harness,
-                      "GET /cgi/directory HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+    test_assert_status(
+        perform_request(
+            harness, "GET /cgi/directory HTTP/1.1\r\nHost: localhost\r\n\r\n"),
         "HTTP/1.1 403 Forbidden");
 }
 
@@ -516,8 +507,9 @@ Test(event_loop, cgi_invalid_interpreter_maps_to_bad_gateway)
 
     harness.cgi_pass = harness.root + "/not-executable";
 
-    assert_status(perform_request(harness,
-                      "GET /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+    test_assert_status(
+        perform_request(
+            harness, "GET /cgi/hello.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
         "HTTP/1.1 502 Bad Gateway");
 }
 
@@ -532,8 +524,9 @@ Test(event_loop, cgi_timeout_returns_gateway_timeout)
 
     harness.cgi_timeout = 1;
 
-    assert_status(perform_request(harness,
-                      "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+    test_assert_status(
+        perform_request(
+            harness, "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
         "HTTP/1.1 504 Gateway Timeout");
 }
 
@@ -548,8 +541,9 @@ Test(event_loop, cgi_output_cap_returns_bad_gateway)
 
     harness.cgi_output_buffer_size = 32;
 
-    assert_status(perform_request(harness,
-                      "GET /cgi/large.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
+    test_assert_status(
+        perform_request(
+            harness, "GET /cgi/large.sh HTTP/1.1\r\nHost: localhost\r\n\r\n"),
         "HTTP/1.1 502 Bad Gateway");
 }
 
@@ -575,7 +569,7 @@ Test(event_loop, disconnect_while_cgi_runs_cleans_up_child_and_keeps_clients)
     write_all(static_fd, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n");
     std::string static_response = read_response(static_fd);
     close(static_fd);
-    assert_status(static_response, "HTTP/1.1 200 OK");
+    test_assert_status(static_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         static_response.find("static still works\n"), std::string::npos);
     bool cgi_gone = wait_process_gone(cgi_pid);

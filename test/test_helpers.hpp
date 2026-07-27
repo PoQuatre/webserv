@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/26 21:35:58 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 21:46:51 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,4 +39,10 @@ inline void test_write_file(const std::string &path, const std::string &content)
     cr_assert(out.is_open(), "failed to open %s", path.c_str());
     out << content;
     cr_assert(!out.fail(), "failed to write %s", path.c_str());
+}
+
+inline void test_assert_status(const std::string &response, const char *status)
+{
+    cr_assert_neq(response.find(status), std::string::npos,
+        "missing status '%s' in response:\n%s", status, response.c_str());
 }
