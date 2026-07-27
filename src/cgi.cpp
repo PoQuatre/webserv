@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:47:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -378,25 +378,19 @@ std::string port_from_authority(const std::string &authority)
     return "";
 }
 
-std::string first_config_value(const std::vector<std::string> &values)
-{
-    if (values.empty())
-        return "";
-    return values[0];
-}
-
 std::string server_name(const http::request &req, const Config &cfg)
 {
     std::string name = host_name(header_value(req, "host"));
 
     if (!name.empty())
         return name;
-    return first_config_value(cfg.conf.server_name);
+    return cfg.conf.server_name.empty() ? "" : cfg.conf.server_name[0];
 }
 
 std::string server_port(const Config &cfg)
 {
-    std::string port = port_from_authority(first_config_value(cfg.conf.listen));
+    std::string port = port_from_authority(
+        cfg.conf.listen.empty() ? "" : cfg.conf.listen[0]);
 
     if (!port.empty())
         return port;
@@ -759,15 +753,11 @@ cgi::CleanupResult cgi::Lifecycle::cleanup_request(
 
 std::vector<int32_t> cgi::Lifecycle::abort_all_requests()
 {
-    std::vector<int32_t> stdout_fds;
     std::vector<int32_t> descriptors;
 
-    for (std::map<int32_t, cgi::Job>::const_iterator it = _jobs.begin();
-        it != _jobs.end(); ++it)
-        stdout_fds.push_back(it->first);
-    for (std::size_t i = 0; i < stdout_fds.size(); ++i) {
+    while (!_jobs.empty()) {
         cgi::CleanupResult cleanup
-            = cleanup_request(stdout_fds[i], cgi::job_cleanup::ABORT);
+            = cleanup_request(_jobs.begin()->first, cgi::job_cleanup::ABORT);
 
         descriptors.push_back(cleanup.stdout_fd);
         if (cleanup.stdin_fd != -1)

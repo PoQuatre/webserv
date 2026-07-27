@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:47:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -72,6 +72,23 @@ static void assert_bad_gateway(const std::string &response)
     const char *status = "HTTP/1.1 502 Bad Gateway\r\n";
 
     cr_assert(strncmp(response.c_str(), status, strlen(status)) == 0);
+}
+
+static std::string run_successful_cgi(
+    const http::request &req, const Config &cfg, const std::string &script)
+{
+    cgi::Process process;
+    int status = 0;
+
+    cr_assert_eq(
+        cgi::start_process(req, cfg, script, process), cgi::start::STARTED);
+    close(process.stdin_fd);
+    std::string output = read_all(process.stdout_fd);
+    close(process.stdout_fd);
+    cr_assert_eq(waitpid(process.pid, &status, 0), process.pid,
+        "waitpid() failed: %s", strerror(errno));
+    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    return output;
 }
 
 Test(cgi_response, parsed_headers_become_http_response)
@@ -209,17 +226,8 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     cfg.cgi_pass = "/bin/sh";
     cfg.conf.server_name.push_back("example.test");
     cfg.conf.listen.push_back("127.0.0.1:8080");
-    cgi::Process process;
-    cr_assert_eq(
-        cgi::start_process(req, cfg, script, process), cgi::start::STARTED);
-    close(process.stdin_fd);
-    std::string output = read_all(process.stdout_fd);
-    close(process.stdout_fd);
-    int status = 0;
-    cr_assert_eq(waitpid(process.pid, &status, 0), process.pid,
-        "waitpid() failed: %s", strerror(errno));
+    std::string output = run_successful_cgi(req, cfg, script);
     unsetenv("WEBSERV_TEST_SHOULD_NOT_LEAK");
-    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 
     assert_contains(output, "GATEWAY_INTERFACE=CGI/1.1\n");
     assert_contains(output, "REQUEST_METHOD=GET\n");
@@ -260,17 +268,8 @@ Test(cgi_process,
     req.uri = "/cgi/not-executable.sh";
     Config cfg = { };
     cfg.cgi_pass = "/bin/sh";
-    cgi::Process process;
-    cr_assert_eq(
-        cgi::start_process(req, cfg, script, process), cgi::start::STARTED);
-    close(process.stdin_fd);
-    std::string output = read_all(process.stdout_fd);
-    close(process.stdout_fd);
-    int status = 0;
-    cr_assert_eq(waitpid(process.pid, &status, 0), process.pid,
-        "waitpid() failed: %s", strerror(errno));
+    std::string output = run_successful_cgi(req, cfg, script);
 
-    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
     assert_contains(output, "script-ran\n");
 }
 
@@ -289,17 +288,8 @@ Test(cgi_process, runs_script_from_script_directory)
     req.uri = "/cgi/read-neighbor.sh";
     Config cfg = { };
     cfg.cgi_pass = "/bin/sh";
-    cgi::Process process;
-    cr_assert_eq(
-        cgi::start_process(req, cfg, script, process), cgi::start::STARTED);
-    close(process.stdin_fd);
-    std::string output = read_all(process.stdout_fd);
-    close(process.stdout_fd);
-    int status = 0;
-    cr_assert_eq(waitpid(process.pid, &status, 0), process.pid,
-        "waitpid() failed: %s", strerror(errno));
+    std::string output = run_successful_cgi(req, cfg, script);
 
-    cr_assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
     assert_contains(output, "neighbor-data\n");
 }
 
