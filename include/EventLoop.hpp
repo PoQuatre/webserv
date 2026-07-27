@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 21:06:55 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -69,8 +69,6 @@ private:
         int32_t fd, uint32_t events, const EventSource &source, bool &running);
     void accept_client(int32_t sockfd, const Server &server);
     void process_client(int32_t fd, uint32_t events, Connection &conn);
-    void process_cgi_stdin(int32_t fd, uint32_t events);
-    void process_cgi_stdout(int32_t fd, uint32_t events);
     void expire_cgi_jobs();
     void close_cgi_fd(int32_t fd);
     cgi::CleanupResult cleanup_cgi_job(

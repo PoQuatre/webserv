@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -73,44 +73,6 @@ bool should_filter_cgi_response_header(const std::string &lower_name)
         || lower_name == "proxy-authorization" || lower_name == "te"
         || lower_name == "trailer" || lower_name == "transfer-encoding"
         || lower_name == "upgrade";
-}
-
-void add_connection_options(
-    std::vector<std::string> &options, const std::string &value)
-{
-    std::size_t start = 0;
-
-    while (start <= value.size()) {
-        std::size_t comma = value.find(',', start);
-        std::string option = trim(value.substr(start,
-            comma == std::string::npos ? std::string::npos : comma - start));
-
-        if (!option.empty())
-            options.push_back(lowercase(option));
-        if (comma == std::string::npos)
-            break;
-        start = comma + 1;
-    }
-}
-
-std::vector<std::string> connection_options(const std::vector<Header> &headers)
-{
-    std::vector<std::string> options;
-
-    for (std::size_t i = 0; i < headers.size(); ++i) {
-        if (headers[i].lower_name == "connection")
-            add_connection_options(options, headers[i].value);
-    }
-    return options;
-}
-
-bool should_filter_cgi_response_header(const std::string &lower_name,
-    const std::vector<std::string> &connection_header_options)
-{
-    return should_filter_cgi_response_header(lower_name)
-        || std::find(connection_header_options.begin(),
-               connection_header_options.end(), lower_name)
-        != connection_header_options.end();
 }
 
 bool find_header_end(const std::string &output, HeaderEnd &end)
@@ -255,12 +217,8 @@ std::string version_string(const http::request &req)
 void append_forwarded_cgi_headers(
     std::ostringstream &ss, const std::vector<Header> &headers)
 {
-    std::vector<std::string> connection_header_options
-        = connection_options(headers);
-
     for (std::size_t i = 0; i < headers.size(); ++i) {
-        if (should_filter_cgi_response_header(
-                headers[i].lower_name, connection_header_options))
+        if (should_filter_cgi_response_header(headers[i].lower_name))
             continue;
         ss << headers[i].name << ": " << headers[i].value << "\r\n";
     }
@@ -600,7 +558,6 @@ cgi::Job::Job()
     : clientfd(-1)
     , pid(-1)
     , stdin_fd(-1)
-    , stdout_fd(-1)
     , body_written(0)
     , max_output(0)
     , deadline_millis(0)
@@ -638,12 +595,11 @@ cgi::start::result cgi::Lifecycle::start_request(int32_t clientfd,
     job.clientfd = clientfd;
     job.pid = process.pid;
     job.stdin_fd = process.stdin_fd;
-    job.stdout_fd = process.stdout_fd;
     job.max_output = cfg.cgi_output_buffer_size;
     job.deadline_millis
         = monotonic_millis() + (static_cast<uint64_t>(cfg.cgi_timeout) * 1000);
     job.request = req;
-    _jobs[job.stdout_fd] = job;
+    _jobs[process.stdout_fd] = job;
     return status;
 }
 
@@ -667,7 +623,7 @@ bool cgi::Lifecycle::process_stdout(int32_t fd, uint32_t events)
 
     if (it == _jobs.end())
         return false;
-    return cgi::Lifecycle::process_stdout(it->second, events);
+    return cgi::Lifecycle::process_stdout(it->second, fd, events);
 }
 
 bool cgi::Lifecycle::process_stdin(cgi::Job &job, uint32_t events)
@@ -690,13 +646,13 @@ bool cgi::Lifecycle::process_stdin(cgi::Job &job, uint32_t events)
     return true;
 }
 
-bool cgi::Lifecycle::process_stdout(cgi::Job &job, uint32_t events)
+bool cgi::Lifecycle::process_stdout(cgi::Job &job, int32_t fd, uint32_t events)
 {
     bool complete = false;
     char buffer[4096];
     ssize_t bytes_read;
 
-    bytes_read = read(job.stdout_fd, buffer, sizeof(buffer));
+    bytes_read = read(fd, buffer, sizeof(buffer));
     if (bytes_read > 0) {
         if (job.max_output != 0
             && job.output.size() + static_cast<std::size_t>(bytes_read)

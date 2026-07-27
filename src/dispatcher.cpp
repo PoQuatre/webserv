@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -165,12 +165,6 @@ std::string handle_get(
 
 }
 
-dispatcher::Outcome::Outcome()
-    : type(RESPONSE_NOW)
-    , config(NULL)
-{
-}
-
 const Config &dispatcher::config_for(
     const http::request &req, const Server &server)
 {
@@ -179,37 +173,24 @@ const Config &dispatcher::config_for(
     return loc ? loc->config : server.default_config();
 }
 
-dispatcher::Outcome dispatcher::handle(
-    const http::request &req, const Server &server)
+std::string dispatcher::handle(const http::request &req, const Server &server)
 {
     const Config &cfg = config_for(req, server);
-    Outcome outcome;
+    std::string filesystem_path;
 
-    outcome.config = &cfg;
-    if (!cfg.allowed_methods[req.method]) {
-        outcome.response = make_error_response_impl(
+    if (!cfg.allowed_methods[req.method])
+        return make_error_response_impl(
             req, http::status::METHOD_NOT_ALLOWED, cfg);
-        return outcome;
-    }
 
-    outcome.filesystem_path = cfg.root + req.uri;
-    if (!cfg.cgi_pass.empty()) {
-        outcome.type = Outcome::CGI_REQUIRED;
-        L_DEBUG("CGI {} {} -> {}", http::methods::strings[req.method], req.uri,
-            outcome.filesystem_path);
-        return outcome;
-    }
+    filesystem_path = cfg.root + req.uri;
 
-    if (req.method != http::methods::GET) {
-        outcome.response
-            = make_error_response_impl(req, http::status::NOT_IMPLEMENTED, cfg);
-        return outcome;
-    }
+    if (req.method != http::methods::GET)
+        return make_error_response_impl(
+            req, http::status::NOT_IMPLEMENTED, cfg);
 
-    L_DEBUG("GET {} -> {}", req.uri, outcome.filesystem_path);
+    L_DEBUG("GET {} -> {}", req.uri, filesystem_path);
 
-    outcome.response = handle_get(req, outcome.filesystem_path, cfg);
-    return outcome;
+    return handle_get(req, filesystem_path, cfg);
 }
 
 std::string dispatcher::error_response(http::status::type status)

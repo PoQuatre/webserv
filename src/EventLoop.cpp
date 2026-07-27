@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:58:34 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -310,11 +310,13 @@ void EventLoop::dispatch_source(int32_t fd, uint32_t events,
         break;
 
     case EventSource::SOURCE_CGI_STDIN:
-        process_cgi_stdin(fd, events);
+        if (_cgi_lifecycle.process_stdin(fd, events))
+            close_cgi_fd(fd);
         break;
 
     case EventSource::SOURCE_CGI_STDOUT:
-        process_cgi_stdout(fd, events);
+        if (_cgi_lifecycle.process_stdout(fd, events))
+            finish_cgi_job(fd);
         break;
     }
 }
@@ -355,21 +357,28 @@ void EventLoop::close_client(int32_t clientfd, Connection &conn)
 void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
 {
     if (conn.is_parse_complete()) {
-        dispatcher::Outcome outcome
-            = dispatcher::handle(conn.request(), conn.server());
+        const Config &cfg
+            = dispatcher::config_for(conn.request(), conn.server());
+        std::string filesystem_path = cfg.root + conn.request().uri;
 
         if (conn.is_waiting_cgi())
             return;
-        if (outcome.type == dispatcher::Outcome::CGI_REQUIRED) {
+        if (!cfg.allowed_methods[conn.request().method]) {
+            conn.enqueue_response(dispatcher::error_response(
+                conn.request(), cfg, http::status::METHOD_NOT_ALLOWED));
+        } else if (!cfg.cgi_pass.empty()) {
             http::status::type error_status = http::status::BAD_GATEWAY;
 
-            if (start_cgi_request(fd, conn, *outcome.config,
-                    outcome.filesystem_path, error_status))
+            L_DEBUG("CGI {} {} -> {}",
+                http::methods::strings[conn.request().method],
+                conn.request().uri, filesystem_path);
+            if (start_cgi_request(fd, conn, cfg, filesystem_path, error_status))
                 return;
-            conn.enqueue_response(dispatcher::error_response(
-                conn.request(), *outcome.config, error_status));
+            conn.enqueue_response(
+                dispatcher::error_response(conn.request(), cfg, error_status));
         } else {
-            conn.enqueue_response(outcome.response);
+            conn.enqueue_response(
+                dispatcher::handle(conn.request(), conn.server()));
         }
         conn.on_writable();
         if (events & EPOLLIN)
@@ -410,22 +419,6 @@ bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
     conn.wait_for_cgi();
     update_source_events(clientfd, EPOLL_RDONLY);
     return true;
-}
-
-void EventLoop::process_cgi_stdin(int32_t fd, uint32_t events)
-{
-    bool close_stdin = _cgi_lifecycle.process_stdin(fd, events);
-
-    if (close_stdin)
-        close_cgi_fd(fd);
-}
-
-void EventLoop::process_cgi_stdout(int32_t fd, uint32_t events)
-{
-    bool complete = _cgi_lifecycle.process_stdout(fd, events);
-
-    if (complete)
-        finish_cgi_job(fd);
 }
 
 void EventLoop::close_cgi_fd(int32_t fd)

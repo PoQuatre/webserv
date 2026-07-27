@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,7 +47,6 @@ struct Job {
     int32_t clientfd;
     pid_t pid;
     int32_t stdin_fd;
-    int32_t stdout_fd;
     std::size_t body_written;
     std::size_t max_output;
     uint64_t deadline_millis;
@@ -101,7 +100,7 @@ public:
 
 private:
     static bool process_stdin(Job &job, uint32_t events);
-    static bool process_stdout(Job &job, uint32_t events);
+    static bool process_stdout(Job &job, int32_t fd, uint32_t events);
     static CompletionResult complete(Job job, bool child_ok);
     bool cleanup_child(const Job &job, job_cleanup::action action);
     void reap_child_later(pid_t pid);

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -65,11 +65,10 @@ Test(dispatcher, static_get_returns_response_outcome)
 
     test_write_file(root + "/static.txt", "static body\n");
 
-    dispatcher::Outcome outcome = dispatcher::handle(req, server);
+    std::string response = dispatcher::handle(req, server);
 
-    cr_assert_eq(outcome.type, dispatcher::Outcome::RESPONSE_NOW);
-    test_assert_status(outcome.response, "HTTP/1.1 200 OK");
-    cr_assert_neq(outcome.response.find("static body\n"), std::string::npos);
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_neq(response.find("static body\n"), std::string::npos);
 }
 
 Test(dispatcher, allowed_static_non_get_still_returns_not_implemented)
@@ -78,24 +77,21 @@ Test(dispatcher, allowed_static_non_get_still_returns_not_implemented)
     Server server = make_dispatch_server(root);
     http::request req = make_request(http::methods::POST, "/static.txt");
 
-    dispatcher::Outcome outcome = dispatcher::handle(req, server);
+    std::string response = dispatcher::handle(req, server);
 
-    cr_assert_eq(outcome.type, dispatcher::Outcome::RESPONSE_NOW);
-    test_assert_status(outcome.response, "HTTP/1.1 501 Not Implemented");
+    test_assert_status(response, "HTTP/1.1 501 Not Implemented");
 }
 
-Test(dispatcher, cgi_eligible_request_returns_cgi_outcome)
+Test(dispatcher, cgi_eligible_request_selects_cgi_config)
 {
     std::string root = test_tmpdir("webserv-dispatcher-test");
     Server server = make_dispatch_server(root);
     http::request req = make_request(http::methods::POST, "/cgi/app.sh");
 
-    dispatcher::Outcome outcome = dispatcher::handle(req, server);
+    const Config &cfg = dispatcher::config_for(req, server);
 
-    cr_assert_eq(outcome.type, dispatcher::Outcome::CGI_REQUIRED);
-    cr_assert_not_null(outcome.config);
-    cr_assert_str_eq(outcome.config->cgi_pass.c_str(), "/bin/sh");
-    cr_assert_eq(outcome.filesystem_path, root + req.uri);
+    cr_assert_str_eq(cfg.cgi_pass.c_str(), "/bin/sh");
+    cr_assert_eq(cfg.root + req.uri, root + req.uri);
 }
 
 Test(dispatcher, disallowed_cgi_method_returns_response_outcome)
@@ -104,8 +100,7 @@ Test(dispatcher, disallowed_cgi_method_returns_response_outcome)
     Server server = make_dispatch_server(root);
     http::request req = make_request(http::methods::DELETE, "/cgi/app.sh");
 
-    dispatcher::Outcome outcome = dispatcher::handle(req, server);
+    std::string response = dispatcher::handle(req, server);
 
-    cr_assert_eq(outcome.type, dispatcher::Outcome::RESPONSE_NOW);
-    test_assert_status(outcome.response, "HTTP/1.1 405 Method Not Allowed");
+    test_assert_status(response, "HTTP/1.1 405 Method Not Allowed");
 }
