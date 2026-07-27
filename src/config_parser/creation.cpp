@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/27 18:34:40 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -180,12 +180,6 @@ void create_location(
                 }
         }
     }
-    if (location_conf.cgi_pass.empty())
-        return;
-    if (location_conf.conf.cgi_timeout.empty())
-        location_conf.cgi_timeout = DEFAULT_CGI_TIMEOUT;
-    if (location_conf.conf.cgi_output_buffer_size.empty())
-        location_conf.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
 }
 
 void create_all_location(const config_node &node, Config &inital_config,
@@ -240,14 +234,11 @@ void initalize_server_config(
     if (server_conf.find(keywords::AUTOINDEX) != server_conf.end()) {
         inital_config.autoindex
             = *server_conf.find(keywords::AUTOINDEX)->second.begin() == "on";
-    } else {
-        inital_config.autoindex = false;
     }
 
     if (server_conf.find(keywords::CLIENT_MAX_BODY_SIZE) != server_conf.end()) {
         std::vector<std::string> vals
             = server_conf.find(keywords::CLIENT_MAX_BODY_SIZE)->second;
-        inital_config.client_max_body_size = 0;
         for (std::vector<std::string>::iterator it = vals.begin();
             it != vals.end(); it++) {
             if (convert_string_to_size(*it) > 0) {
@@ -258,8 +249,6 @@ void initalize_server_config(
                 break;
             }
         }
-    } else {
-        inital_config.client_max_body_size = 0;
     }
 
     for (std::map<keywords::type, std::vector<std::string> >::iterator it
@@ -294,14 +283,11 @@ void ConfigParser::create_one_server(const config_node &node,
     std::vector<Location> location_vector,
     std::map<keywords::type, std::vector<std::string> > &server_conf)
 {
-    Config inital_config;
+    Config inital_config = { };
 
     inital_config.root = "/";
-    inital_config.autoindex = false;
-    inital_config.client_max_body_size = 0;
-    inital_config.cgi_pass.clear();
-    inital_config.cgi_timeout = 0;
-    inital_config.cgi_output_buffer_size = 0;
+    inital_config.cgi_timeout = DEFAULT_CGI_TIMEOUT;
+    inital_config.cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE;
     std::memset(
         inital_config.allowed_methods, 1, sizeof(bool) * http::methods::COUNT);
 

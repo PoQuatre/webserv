@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:30:53 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -131,6 +131,7 @@ Test(cgi_response, parsed_output_filters_unsafe_headers)
         "Content-Type: text/plain\r\n"
         "Set-Cookie: session=abc\r\n"
         "X-App-Header: kept\r\n"
+        "X-Hop: dropped\r\n"
         "Content-Length: 5\r\n"
         "Connection: keep-alive\r\n"
         "\r\n"

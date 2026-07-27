@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 18:54:50 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -101,7 +101,7 @@ static void write_all(int fd, const std::string &data)
     }
 }
 
-static std::string read_response_with_timeout(int fd, long usec)
+static std::string read_response(int fd, long usec = 2000000)
 {
     timeval timeout = { };
     timeout.tv_sec = usec / 1000000;
@@ -117,11 +117,6 @@ static std::string read_response_with_timeout(int fd, long usec)
     cr_assert_gt(n, 0, "read() failed: %s", strerror(errno));
     response.append(buffer, static_cast<std::size_t>(n));
     return response;
-}
-
-static std::string read_response(int fd)
-{
-    return read_response_with_timeout(fd, 2000000);
 }
 
 static std::string make_cgi_root()
@@ -262,20 +257,14 @@ static int send_request(CgiHarness &harness, const std::string &request)
     return fd;
 }
 
-static std::string perform_request_with_timeout(
-    CgiHarness &harness, const std::string &request, long usec)
+static std::string perform_request(
+    CgiHarness &harness, const std::string &request, long usec = 2000000)
 {
     int fd = send_request(harness, request);
-    std::string response = read_response_with_timeout(fd, usec);
+    std::string response = read_response(fd, usec);
 
     close(fd);
     return response;
-}
-
-static std::string perform_request(
-    CgiHarness &harness, const std::string &request)
-{
-    return perform_request_with_timeout(harness, request, 2000000);
 }
 
 Test(event_loop, listener_and_signal_sources_dispatch_readiness)
@@ -335,7 +324,7 @@ Test(event_loop, cgi_get_executes_script_and_static_requests_still_work)
 
     int slow_fd = send_request(
         harness, "GET /cgi/slow.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    std::string static_response = perform_request_with_timeout(
+    std::string static_response = perform_request(
         harness, "GET /static.txt HTTP/1.1\r\nHost: localhost\r\n\r\n", 200000);
     test_assert_status(static_response, "HTTP/1.1 200 OK");
     cr_assert_neq(static_response.find("static body\n"), std::string::npos);
