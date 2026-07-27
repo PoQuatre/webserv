@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 01:28:17 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,12 +16,6 @@
 
 #include "Server.hpp"
 #include "http.hpp"
-#include "logger.hpp"
-
-// FIXME: remove that
-#define make_error_response_impl(req, st, cfg)                                 \
-    (L_DEBUG("Responded with error code {}", http::status::codes[st]),         \
-        make_error_response_impl_impl(req, st, cfg))
 
 namespace dispatcher {
 
