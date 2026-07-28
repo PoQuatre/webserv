@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/28 04:02:48 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 04:33:06 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <csignal>
 #include <cstdlib>
 #include <map>
