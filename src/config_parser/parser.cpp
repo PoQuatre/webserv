@@ -6,11 +6,9 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 10:20:45 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 19:50:53 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/28 21:48:02 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
-
-#include <regex.h>
 
 #include <cctype>
 #include <cstddef>
@@ -43,7 +41,7 @@ ConfigParser::ConfigParser(const std::string &path)
 
 ConfigParser::~ConfigParser() { free_tree(_root); }
 
-bool ConfigParser::start()
+bool ConfigParser::start(std::vector<Server> &servers)
 {
     if (!tokenize()) {
         return false;
@@ -73,7 +71,7 @@ bool ConfigParser::start()
         debug_tree(_root, 0);
 #endif
 
-    if (!create_all_servers()) {
+    if (!create_all_servers(servers)) {
         return false;
     }
     return _valid;
@@ -84,8 +82,5 @@ bool ConfigParser::parse_config(
 {
     Location location = { };
     ConfigParser parser(path);
-    if (!parser.start())
-        return false;
-    parser.get_all_servers(servers);
-    return true;
+    return parser.start(servers);
 }

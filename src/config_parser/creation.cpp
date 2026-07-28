@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 22:01:22 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -185,6 +185,7 @@ void create_location(
 void create_all_location(const config_node &node, Config &inital_config,
     std::vector<Location> &location_vector)
 {
+    int code;
     // Iter on server children node
     for (std::vector<config_node *>::const_iterator cit = node.children.begin();
         cit != node.children.end(); cit++) {
@@ -194,8 +195,21 @@ void create_all_location(const config_node &node, Config &inital_config,
             Config location_conf = inital_config;
             Location location_struct;
 
+            location_struct.free_regex = false;
             location_struct.type = (*cit)->location_type;
-            location_struct.regexp = (*cit)->location_regexp;
+            if (!(*cit)->location_regexp.empty()) {
+                code = regcomp(&location_struct.regexp,
+                    (*cit)->location_regexp.c_str(), (*cit)->cflags);
+                if (code != 0) {
+                    char buf[255];
+                    std::memset(buf, 0, 255);
+                    regerror(code, &location_struct.regexp, buf, 254);
+                    L_ERROR("Invalid regex: {}", buf);
+                } else {
+                    location_struct.free_regex = true;
+                }
+            }
+
             if ((*cit)->vals.empty()) {
                 location_struct.path = "/";
             } else {
@@ -206,6 +220,7 @@ void create_all_location(const config_node &node, Config &inital_config,
 
             location_struct.config = location_conf;
             location_vector.push_back(location_struct);
+            location_struct.free_regex = false;
         }
     }
 }
@@ -271,17 +286,11 @@ void initalize_server_config(
 
 }
 
-std::vector<Server> ConfigParser::get_all_servers(std::vector<Server> &servers)
-{
-    for (std::vector<Server>::iterator it = _servers.begin();
-        it != _servers.end(); it++)
-        servers.push_back(*it);
-    return _servers;
-}
-
-void ConfigParser::create_one_server(const config_node &node,
+namespace {
+void create_one_server(const config_node &node,
     std::vector<Location> location_vector,
-    std::map<keywords::type, std::vector<std::string> > &server_conf)
+    std::map<keywords::type, std::vector<std::string> > &server_conf,
+    std::vector<Server> &servers)
 {
     Config inital_config = { };
 
@@ -310,11 +319,13 @@ void ConfigParser::create_one_server(const config_node &node,
             ? *server_conf.find(keywords::LISTEN)->second.begin()
             : DEFAULT_LISTEN,
         inital_config);
-
-    _servers.push_back(n_server);
+    servers.push_back(n_server);
+    n_server.set_regex_false();
 }
 
-bool ConfigParser::create_all_servers()
+}
+
+bool ConfigParser::create_all_servers(std::vector<Server> &servers)
 {
     std::map<keywords::type, std::vector<std::string> > global_conf;
     std::map<keywords::type, std::vector<std::string> > http_conf;
@@ -349,17 +360,17 @@ bool ConfigParser::create_all_servers()
         case keywords::SERVER:
             server_conf = http_conf;
             push_configuration(*node, server_conf);
-            create_one_server(*node, location_vector, server_conf);
+            create_one_server(*node, location_vector, server_conf, servers);
             break;
         default:
             break;
         }
     }
 
-    if (_servers.empty()) {
+    if (servers.empty()) {
         L_ERROR(" no server configuration");
         return false;
     }
-    L_TRACE("{} server(s) created", _servers.size());
+    L_TRACE("{} server(s) created", servers.size());
     return true;
 }

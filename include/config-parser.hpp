@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 19:50:49 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/28 22:00:46 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -33,8 +33,8 @@ public:
     ~ConfigParser();
     static bool parse_config(
         const std::string &path, std::vector<Server> &servers);
-    bool start();
-    bool create_all_servers();
+    bool start(std::vector<Server> &servers);
+    bool create_all_servers(std::vector<Server> &servers);
     std::vector<Server> get_all_servers(std::vector<Server> &servers);
 
 private:
@@ -56,15 +56,11 @@ private:
         std::size_t len, std::size_t &line_i);
     bool tokenize();
     void delete_tree(config_node *root);
-    void create_one_server(const config_node &node,
-        std::vector<Location> location_vector,
-        std::map<keywords::type, std::vector<std::string> > &server_conf);
     bool check_controversal_directive(std::vector<config_node *> &node,
         const keywords::type &key, uint32_t line);
 
     const std::string _path;
     std::vector<config_token> _tokens;
-    std::vector<Server> _servers;
     config_node *_root;
     config_token *_act_token;
     uint32_t _err_count;

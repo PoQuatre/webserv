@@ -6,13 +6,14 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 21:54:38 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "Server.hpp"
 
 #include <arpa/inet.h>
+#include <regex.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -123,7 +124,14 @@ Server::Server(const Server &other)
 {
 }
 
-Server::~Server() { }
+Server::~Server()
+{
+    for (std::vector<Location>::iterator it = _locations.begin();
+        it < _locations.end(); it++) {
+        if (it->free_regex)
+            regfree(&it->regexp);
+    }
+}
 
 int32_t Server::get_sockfd() const { return _sockfd; }
 
@@ -178,6 +186,14 @@ void Server::shutdown_socket()
     if (_sockfd != -1) {
         close(_sockfd);
         _sockfd = -1;
+    }
+}
+
+void Server::set_regex_false()
+{
+    for (std::vector<Location>::iterator it = _locations.begin();
+        it < _locations.end(); it++) {
+        it->free_regex = false;
     }
 }
 
@@ -256,7 +272,7 @@ regex_phase:
 
     for (; cit != cite; ++cit) {
         regmatch_t pmatch[1];
-        if (!regexec(&cit->regexp, uri.c_str(), 1, pmatch, REG_STARTEND))
+        if (regexec(&cit->regexp, uri.c_str(), 1, pmatch, REG_STARTEND))
             return cit.base();
     }
 

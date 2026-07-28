@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 21:52:06 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -45,6 +45,7 @@ struct Location {
     Config config;
     location::type type;
     regex_t regexp;
+    bool free_regex;
 };
 
 std::ostream &operator<<(
@@ -60,6 +61,7 @@ public:
 
     bool init_socket();
     void shutdown_socket();
+    void set_regex_false();
     int32_t get_sockfd() const;
 
     const Location *find_location(const std::string &uri) const;
@@ -69,7 +71,7 @@ public:
 private:
     Server();
 
-    const std::vector<Location> _locations;
+    std::vector<Location> _locations;
     const std::string _server_name;
     const Config _default_config;
     struct sockaddr_in _sockaddr;
