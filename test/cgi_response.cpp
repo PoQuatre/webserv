@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/28 04:07:11 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 04:20:14 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -128,6 +128,16 @@ Test(cgi_response, status_header_controls_status_line)
 
     cr_assert(strncmp(out.c_str(), "HTTP/1.1 201 Created\r\n", 22) == 0);
     cr_assert_eq(out.find("Status:"), std::string::npos);
+}
+
+Test(cgi_response, unsafe_status_reason_becomes_bad_gateway)
+{
+    std::string out = cgi::translate_output(
+        "Status: 201 Created\177\r\nContent-Type: text/plain\r\n\r\nmade",
+        make_req(http::methods::GET));
+
+    assert_bad_gateway(out);
+    assert_not_contains(out, "made");
 }
 
 Test(cgi_response, parsed_output_filters_unsafe_headers)
