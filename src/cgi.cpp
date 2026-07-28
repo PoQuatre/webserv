@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:47:40 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 04:02:48 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -100,6 +100,17 @@ bool is_token_char(char c)
     return std::isalnum(uc) || extra.find(c) != std::string::npos;
 }
 
+bool has_unsafe_header_value_char(const std::string &value)
+{
+    for (std::size_t i = 0; i < value.size(); ++i) {
+        unsigned char c = static_cast<unsigned char>(value[i]);
+
+        if ((c < 32 && c != '\t') || c == 127)
+            return true;
+    }
+    return false;
+}
+
 bool parse_header_line(const std::string &line, Header &header)
 {
     std::size_t colon = line.find(':');
@@ -113,7 +124,7 @@ bool parse_header_line(const std::string &line, Header &header)
     }
     header.lower_name = lowercase(header.name);
     header.value = trim(line.substr(colon + 1));
-    return true;
+    return !has_unsafe_header_value_char(header.value);
 }
 
 bool parse_headers(const std::string &block, std::vector<Header> &headers)
@@ -214,11 +225,40 @@ std::string version_string(const http::request &req)
     return "HTTP/1.1";
 }
 
+void collect_connection_tokens(
+    const std::vector<Header> &headers, std::vector<std::string> &tokens)
+{
+    for (std::size_t i = 0; i < headers.size(); ++i) {
+        std::size_t start = 0;
+
+        if (headers[i].lower_name != "connection")
+            continue;
+        while (start <= headers[i].value.size()) {
+            std::size_t comma = headers[i].value.find(',', start);
+            std::size_t len = comma == std::string::npos ? std::string::npos
+                                                         : comma - start;
+            std::string token = trim(headers[i].value.substr(start, len));
+
+            if (!token.empty())
+                tokens.push_back(lowercase(token));
+            if (comma == std::string::npos)
+                break;
+            start = comma + 1;
+        }
+    }
+}
+
 void append_forwarded_cgi_headers(
     std::ostringstream &ss, const std::vector<Header> &headers)
 {
+    std::vector<std::string> connection_tokens;
+
+    collect_connection_tokens(headers, connection_tokens);
     for (std::size_t i = 0; i < headers.size(); ++i) {
-        if (should_filter_cgi_response_header(headers[i].lower_name))
+        if (should_filter_cgi_response_header(headers[i].lower_name)
+            || std::find(connection_tokens.begin(), connection_tokens.end(),
+                   headers[i].lower_name)
+                != connection_tokens.end())
             continue;
         ss << headers[i].name << ": " << headers[i].value << "\r\n";
     }

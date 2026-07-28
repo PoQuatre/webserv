@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:47:40 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/28 04:07:11 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -148,11 +148,20 @@ Test(cgi_response, parsed_output_filters_unsafe_headers)
         "Content-Type: text/plain\r\n"
         "Set-Cookie: session=abc\r\n"
         "X-App-Header: kept\r\n"
-        "X-Hop: dropped\r\n"
         "Content-Length: 5\r\n"
         "Connection: keep-alive\r\n"
         "\r\n"
         "body\n");
+}
+
+Test(cgi_response, unsafe_header_value_becomes_bad_gateway)
+{
+    std::string out = cgi::translate_output(
+        "Content-Type: text/plain\r\nX-Bad: good\rbad\r\n\r\nhello",
+        make_req(http::methods::GET));
+
+    assert_bad_gateway(out);
+    assert_not_contains(out, "hello");
 }
 
 Test(cgi_response, location_header_defaults_to_302_redirect)
