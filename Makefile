@@ -90,6 +90,7 @@ TEST_INCS =	$(INCS) \
 LIB_SRCS =	Connection.cpp \
 			EventLoop.cpp \
 			HttpParser.cpp \
+			PosixRegex.cpp \
 			Server.cpp \
 			cgi.cpp \
 			cli.cpp \
@@ -117,6 +118,7 @@ TEST_SRCS =	cgi_response.cpp \
 HDRS =	include/Connection.hpp \
 		include/EventLoop.hpp \
 		include/HttpParser.hpp \
+		include/PosixRegex.hpp \
 		include/Server.hpp \
 		include/cgi.hpp \
 		include/cli.hpp \

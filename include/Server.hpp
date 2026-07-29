@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/29 20:08:20 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -44,7 +44,7 @@ struct Location {
     std::string path;
     Config config;
     location::type type;
-    regex_t regexp;
+    PosixRegex regexp;
 };
 
 std::ostream &operator<<(

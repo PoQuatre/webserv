@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 19:01:36 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 19:55:54 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/07/29 20:13:20 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,7 +47,7 @@ const int keywords_scope_rules[] = {
 #undef X_SPECIAL
 #undef X
 };
-//clang-format on
+// clang-format on
 
 /*  _____ ____  _____ _____   _   _ _____ ___ _     ____   */
 /* |_   _|  _ \| ____| ____| | | | |_   _|_ _| |   / ___|  */
@@ -83,7 +83,6 @@ bool bool_check(const std::string &val)
 {
     return (val == "on" || val == "off");
 }
-
 
 bool time_check(const std::string &val)
 {
@@ -129,7 +128,6 @@ bool int_check(const std::string &val)
     }
     return true;
 }
-
 
 bool node_already_present(std::vector<config_node *> &node,
     const keywords::type &key, bool delete_node = false)
@@ -256,9 +254,6 @@ void ConfigParser::delete_tree(config_node *root)
     for (std::vector<config_node *>::iterator it = root->children.begin();
         it != root->children.end(); it++)
         delete_tree(*it);
-    if (root->location_type == location::CASE_INSENSITIVE
-        || root->location_type == location::CASE_SENSITIVE)
-        regfree(&root->location_regexp);
     root->children.clear();
     delete root;
 }
@@ -363,23 +358,21 @@ bool ConfigParser::create_location_node()
     }
 
     // Create regexp
-    int code;
-    switch (node->location_type) {
-    case location::CASE_INSENSITIVE:
-        code = regcomp(&node->location_regexp, _act_token->value.c_str(),
-            REG_EXTENDED | REG_ICASE);
-        break;
-    case location::CASE_SENSITIVE:
-        code = regcomp(
-            &node->location_regexp, _act_token->value.c_str(), REG_EXTENDED);
-        break;
-    default:
-        code = 0;
-        break;
-    }
-    if (code != 0) {
-        L_ERROR("location node invalid regexp (line {}) {}", node->line,
-            strerror(errno));
+    try {
+        switch (node->location_type) {
+        case location::CASE_INSENSITIVE:
+            node->location_regexp
+                = PosixRegex(_act_token->value, REG_EXTENDED | REG_ICASE);
+            break;
+        case location::CASE_SENSITIVE:
+            node->location_regexp = PosixRegex(_act_token->value, REG_EXTENDED);
+            break;
+        default:
+            break;
+        }
+    } catch (const std::exception &e) {
+        L_ERROR(
+            "location node invalid regexp (line {}) {}", node->line, e.what());
         delete node;
         return false;
     }
