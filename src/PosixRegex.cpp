@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/29 19:41:13 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/29 20:20:30 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/29 20:49:52 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -96,6 +96,13 @@ bool PosixRegex::matches(const std::string &str, int flags) const
 {
     if (!_compiled)
         return false;
+
     regmatch_t pmatch[1];
+
+    if (flags & REG_STARTEND) {
+        pmatch[0].rm_so = 0;
+        pmatch[0].rm_eo = static_cast<regoff_t>(str.size());
+    }
+
     return regexec(&_regex, str.c_str(), 1, pmatch, flags) == 0;
 }
