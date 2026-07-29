@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/28 04:20:14 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/30 01:35:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -258,6 +258,7 @@ Test(cgi_process, receives_cgi_meta_variables_in_clean_environment)
     assert_contains(output, "SERVER_PORT=8080\n");
     assert_contains(output, "SERVER_PROTOCOL=HTTP/1.1\n");
     assert_contains(output, "SERVER_SOFTWARE=webserv\n");
+    assert_contains(output, "REDIRECT_STATUS=200\n");
     assert_contains(output, "CONTENT_LENGTH=0\n");
     assert_contains(output, "CONTENT_TYPE=text/plain; charset=utf-8\n");
     assert_contains(output, "HTTP_ACCEPT=text/plain\n");

@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/18 06:06:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/28 04:33:06 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/30 01:35:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -486,6 +486,7 @@ std::vector<std::string> make_cgi_environment(
     content_length << req.body.size();
     add_env(env, "PATH", "/usr/bin:/bin");
     add_env(env, "GATEWAY_INTERFACE", "CGI/1.1");
+    add_env(env, "REDIRECT_STATUS", "200");
     add_env(env, "REQUEST_METHOD", http::methods::strings[req.method]);
     add_env(env, "QUERY_STRING", req.query_string);
     add_env(env, "SCRIPT_FILENAME", script_path);
