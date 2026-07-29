@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/29 20:17:14 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -255,8 +255,7 @@ regex_phase:
         return longest_match;
 
     for (; cit != cite; ++cit) {
-        regmatch_t pmatch[1];
-        if (!regexec(&cit->regexp, uri.c_str(), 1, pmatch, REG_STARTEND))
+        if (cit->regexp.matches(uri))
             return cit.base();
     }
 

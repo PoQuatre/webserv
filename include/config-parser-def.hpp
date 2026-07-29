@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/18 05:37:48 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/29 20:07:56 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,8 @@
 
 #include <string>
 #include <vector>
+
+#include "PosixRegex.hpp"
 
 #ifndef UNUSED
 #define UNUSED __attribute__((unused))
@@ -224,7 +226,7 @@ struct config_node {
     node_type type;
     keywords::type keyword;
     location::type location_type;
-    regex_t location_regexp;
+    PosixRegex location_regexp;
     std::string key;
     std::vector<std::string> vals;
     std::vector<config_node *> children;

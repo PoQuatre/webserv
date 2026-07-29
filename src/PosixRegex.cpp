@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/29 19:41:13 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/29 20:07:00 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/07/29 20:20:30 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -32,12 +32,18 @@ std::string error_message(int code, const regex_t *regex)
 
 }
 
+PosixRegex::PosixRegex()
+    : _flags(0)
+    , _compiled(false)
+{
+}
+
 PosixRegex::PosixRegex(const PosixRegex &other)
     : _pattern(other._pattern)
     , _flags(other._flags)
     , _compiled(false)
 {
-    int code = regcomp(&_regex, _pattern.c_str(), _flags);
+    int code = regcomp(&_regex, _pattern.c_str(), _flags | REG_NOSUB);
     if (code != 0)
         throw std::runtime_error(error_message(code, &_regex));
 
@@ -86,9 +92,10 @@ PosixRegex &PosixRegex::operator=(const PosixRegex &other)
     return *this;
 }
 
-bool PosixRegex::matches(const std::string &str) const
+bool PosixRegex::matches(const std::string &str, int flags) const
 {
     if (!_compiled)
         return false;
-    return regexec(&_regex, str.c_str(), 0, 0, 0) == 0;
+    regmatch_t pmatch[1];
+    return regexec(&_regex, str.c_str(), 1, pmatch, flags) == 0;
 }
