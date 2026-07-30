@@ -6,7 +6,7 @@
 /*   By: uanglade <uanglade@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/15 18:01:28 by uanglade          #+#    #+#             */
-/*   Updated: 2026/05/18 02:25:53 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/07/30 02:10:33 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -88,7 +88,6 @@ ParsedArgs parse_arguments(uint32_t ac, char **av)
 {
     ParsedArgs args = { { false, false, false }, false, "" };
 
-    L_DEBUG("Parsing cli arguments");
     if (ac < 2) {
         std::cerr << "Usage ./webserv <configuration>\n";
         args.should_quit = true;
