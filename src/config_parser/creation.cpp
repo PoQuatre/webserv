@@ -6,11 +6,13 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/07 18:20:07 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/11 05:32:42 by uanglade         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include <regex.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -100,6 +102,26 @@ std::size_t convert_time_to_seconds(const std::string &val)
     return 0;
 }
 
+std::string handle_relative_path(const std::string &path)
+{
+    char buf[4096];
+    ssize_t code;
+
+    if (path.c_str()[0] == '/')
+        return path;
+    code = readlink("/proc/self/exe", buf, 4096);
+    if (code <= 0 || code >= 4095)
+        return path;
+    buf[code] = 0;
+    char *p = std::strrchr(buf, '/');
+    if (!p)
+        return path;
+    *p = 0;
+    if (path.c_str()[0] == '.' && path.length() == 1)
+        return buf;
+    return std::string(buf) + "/" + path;
+}
+
 void push_configuration(const config_node &node,
     std::map<keywords::type, std::vector<std::string> > &conf)
 {
@@ -107,6 +129,15 @@ void push_configuration(const config_node &node,
         cit != node.children.end(); cit++) {
 
         if ((*cit)->type == LEAF) {
+            if ((*cit)->keyword == keywords::ROOT
+                || (*cit)->keyword == keywords::CGI_PASS
+                || (*cit)->keyword == keywords::CLIENT_BODY_TEMP_PATH) {
+                for (std::vector<std::string>::iterator cit2
+                    = (*cit)->vals.begin();
+                    cit2 != (*cit)->vals.end(); cit2++) {
+                    *cit2 = handle_relative_path(*cit2);
+                }
+            }
             conf.insert(std::pair<keywords::type, std::vector<std::string> >(
                 (*cit)->keyword, (*cit)->vals));
         }
@@ -118,7 +149,7 @@ void set_location_value(const config_node &node, Config &location_conf)
     char *p;
     switch (node.keyword) {
     case keywords::ROOT:
-        location_conf.root = *(node.vals.begin());
+        location_conf.root = handle_relative_path(*(node.vals.begin()));
         break;
     case keywords::UPLOAD_PATH:
         location_conf.upload_path = *(node.vals.begin());
@@ -132,7 +163,7 @@ void set_location_value(const config_node &node, Config &location_conf)
         // TODO: handle error
         break;
     case keywords::CGI_PASS:
-        location_conf.cgi_pass = *(node.vals.begin());
+        location_conf.cgi_pass = handle_relative_path(*(node.vals.begin()));
         break;
     case keywords::CGI_TIMEOUT:
         location_conf.cgi_timeout = convert_time_to_seconds(*node.vals.begin());
@@ -275,7 +306,6 @@ void initalize_server_config(
         }
     }
 }
-
 }
 
 std::vector<Server> ConfigParser::get_all_servers(std::vector<Server> &servers)
