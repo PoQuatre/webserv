@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/07 10:05:23 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/11 03:09:56 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,8 @@
 
 #include <cerrno>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -57,6 +59,29 @@ static void test_mkdir(const std::string &path)
 {
     cr_assert_eq(
         mkdir(path.c_str(), 0700), 0, "mkdir() failed: %s", strerror(errno));
+}
+
+static Server make_upload_server(const std::string &root,
+    const std::string &upload_path, std::size_t client_max_body_size = 0)
+{
+    Config config = { };
+    std::vector<Location> locations;
+
+    config.root = root;
+    config.upload_path = upload_path;
+    config.client_max_body_size = client_max_body_size;
+    config.allowed_methods[http::methods::GET] = true;
+    config.allowed_methods[http::methods::POST] = true;
+    return Server(locations, "test", "127.0.0.1:0", config);
+}
+
+static std::string test_read_file(const std::string &path)
+{
+    std::ifstream in(path.c_str(), std::ios::binary);
+
+    cr_assert(in.is_open(), "failed to open %s", path.c_str());
+    return std::string(
+        std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
 static http::request make_request(
@@ -208,4 +233,83 @@ Test(dispatcher, path_below_file_returns_not_found)
     std::string response = dispatcher::handle(req, server);
 
     test_assert_status(response, "HTTP/1.1 404 Not Found");
+}
+
+Test(dispatcher, raw_upload_writes_uri_basename_to_upload_path)
+{
+    std::string root = test_tmpdir("webserv-upload-test");
+    std::string upload = root + "/uploads";
+    cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
+    Server server = make_upload_server(root, upload);
+    http::request req = make_request(http::methods::POST, "/api/photo.bin");
+
+    req.body = std::string("raw\0body", 8);
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 201 Created");
+    cr_assert_eq(test_read_file(upload + "/photo.bin"), req.body);
+}
+
+Test(dispatcher, multipart_upload_writes_file_parts_and_ignores_fields)
+{
+    std::string root = test_tmpdir("webserv-upload-test");
+    std::string upload = root + "/uploads";
+    cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
+    Server server = make_upload_server(root, upload);
+    http::request req = make_request(http::methods::POST, "/upload");
+
+    req.headers["content-type"] = "multipart/form-data; boundary=abc123";
+    req.body = "--abc123\r\n"
+               "Content-Disposition: form-data; name=\"title\"\r\n"
+               "\r\n"
+               "ignored\r\n"
+               "--abc123\r\n"
+               "Content-Disposition: form-data; name=\"file\"; "
+               "filename=\"hello.txt\"\r\n"
+               "Content-Type: text/plain\r\n"
+               "\r\n"
+               "hello upload\r\n"
+               "--abc123--\r\n";
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 201 Created");
+    cr_assert_eq(test_read_file(upload + "/hello.txt"), "hello upload");
+}
+
+Test(dispatcher, multipart_upload_rejects_unsafe_filename)
+{
+    std::string root = test_tmpdir("webserv-upload-test");
+    std::string upload = root + "/uploads";
+    cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
+    Server server = make_upload_server(root, upload);
+    http::request req = make_request(http::methods::POST, "/upload");
+
+    req.headers["content-type"] = "multipart/form-data; boundary=abc123";
+    req.body = "--abc123\r\n"
+               "Content-Disposition: form-data; name=\"file\"; "
+               "filename=\"../bad.txt\"\r\n"
+               "\r\n"
+               "bad\r\n"
+               "--abc123--\r\n";
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 400 Bad Request");
+}
+
+Test(dispatcher, upload_rejects_body_larger_than_configured_limit)
+{
+    std::string root = test_tmpdir("webserv-upload-test");
+    std::string upload = root + "/uploads";
+    cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
+    Server server = make_upload_server(root, upload, 3);
+    http::request req = make_request(http::methods::POST, "/file.txt");
+
+    req.body = "toolong";
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 413 Payload Too Large");
 }
