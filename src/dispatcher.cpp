@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cctype>
 #include <cstring>
 #include <ctime>
 #include <fstream>
@@ -73,6 +74,47 @@ bool read_file(const std::string &path, std::string &out)
     return !f.fail();
 }
 
+std::string escape_html(const std::string &value)
+{
+    std::string escaped;
+
+    for (std::string::const_iterator it = value.begin(); it != value.end();
+         ++it) {
+        if (*it == '&')
+            escaped += "&amp;";
+        else if (*it == '<')
+            escaped += "&lt;";
+        else if (*it == '>')
+            escaped += "&gt;";
+        else if (*it == '"')
+            escaped += "&quot;";
+        else if (*it == '\'')
+            escaped += "&#39;";
+        else
+            escaped += *it;
+    }
+    return escaped;
+}
+
+std::string encode_uri_component(const std::string &value)
+{
+    const char hex[] = "0123456789ABCDEF";
+    std::string encoded;
+
+    for (std::string::const_iterator it = value.begin(); it != value.end();
+         ++it) {
+        unsigned char c = static_cast<unsigned char>(*it);
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded += c;
+        } else {
+            encoded += '%';
+            encoded += hex[c >> 4];
+            encoded += hex[c & 0x0f];
+        }
+    }
+    return encoded;
+}
+
 std::string make_response(const http::request &req, http::status::type status,
     const std::string &body, const std::string &content_type)
 {
@@ -94,8 +136,6 @@ std::string make_response(const http::request &req, http::status::type status,
 std::string make_error_response_impl(
     const http::request &req, http::status::type status, const Config &cfg)
 {
-    L_DEBUG("Responded with error code {}", http::status::codes[status]);
-
     int code = http::status::codes[status];
     std::map<uint32_t, std::string>::const_iterator cit
         = cfg.error_pages.find(static_cast<uint32_t>(code));
@@ -117,59 +157,60 @@ std::string make_error_response_impl(
     return make_response(req, status, body.str(), "text/html");
 }
 
-std::string create_index_directory(
+std::string make_directory_index_response(
     const http::request &req, const std::string &fs_path, const Config &cfg)
 {
     std::ostringstream ss;
-    ss << "<html><head><title>Index of " << req.uri << "</title></head>";
-    ss << "<body><h1>Index of " << req.uri << "</h1><hr>";
+    std::string escaped_uri = escape_html(req.uri);
+
+    ss << "<html><head><title>Index of " << escaped_uri << "</title></head>";
+    ss << "<body><h1>Index of " << escaped_uri << "</h1><hr>";
     ss << "<pre>";
 
-    DIR *dp;
-    struct dirent *ep;
-    dp = opendir(fs_path.c_str());
-    if (dp != NULL) {
-        if (!readdir(dp)) {
-            closedir(dp);
+    DIR *dir = opendir(fs_path.c_str());
+    if (dir == NULL) {
+        if (errno == EACCES)
+            return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        return make_error_response_impl(
+            req, http::status::INTERNAL_SERVER_ERROR, cfg);
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (std::strcmp(entry->d_name, ".") == 0)
+            continue;
+
+        struct stat st;
+        std::string filename(entry->d_name);
+        if (stat((fs_path + filename).c_str(), &st)) {
+            closedir(dir);
             return make_error_response_impl(
                 req, http::status::INTERNAL_SERVER_ERROR, cfg);
         }
-        while ((ep = readdir(dp)) != NULL) {
 
-            struct stat st;
-            std::string filename(ep->d_name);
-
-            if (stat((fs_path + filename).c_str(), &st)) {
-                closedir(dp);
-                return make_error_response_impl(
-                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
-            }
-
-            std::tm *time_last_change = localtime(&st.st_mtim.tv_sec);
-
-            ss << "<a href=\"" << filename << "\">" << filename.substr(0, 39)
-               << "</a>";
-
-            if (std::strcmp(ep->d_name, "../") != 0) {
-                char date[256];
-                if (std::strftime(date, 256, "%d-%b-%Y %R", time_last_change)
-                    == 0) {
-                    return make_error_response_impl(
-                        req, http::status::INTERNAL_SERVER_ERROR, cfg);
-                }
-                ss << std::setw(static_cast<int>(40 - filename.size())) << " ";
-                ss << date;
-                ss << std::setw(20) << " ";
-                if (ep->d_type == DT_REG) {
-                    ss << st.st_size;
-                } else {
-                    ss << "-";
-                }
-            }
-            ss << "\n";
+        std::tm *time_last_change = localtime(&st.st_mtime);
+        if (time_last_change == NULL) {
+            closedir(dir);
+            return make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
         }
-        closedir(dp);
+
+        ss << "<a href=\"" << encode_uri_component(filename) << "\">"
+           << escape_html(filename).substr(0, 39) << "</a>";
+
+        char date[256];
+        std::strftime(date, sizeof(date), "%d-%b-%Y %H:%M", time_last_change);
+        if (filename.size() < 40)
+            ss << std::setw(static_cast<int>(40 - filename.size())) << " ";
+        ss << date;
+        ss << std::setw(20) << " ";
+        if (S_ISREG(st.st_mode)) {
+            ss << st.st_size;
+        } else {
+            ss << "-";
+        }
+        ss << "\n";
     }
+    closedir(dir);
 
     ss << "</pre>";
     ss << "<hr></body>";
@@ -185,36 +226,58 @@ std::string handle_get(
 
     if (stat(fs_path.c_str(), &st) != 0) {
 
-        if (errno == ENOENT)
+        if (errno == ENOENT || errno == ENOTDIR)
             return make_error_response_impl(req, http::status::NOT_FOUND, cfg);
         if (errno == EACCES)
             return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        if (errno == ENAMETOOLONG)
+            return make_error_response_impl(req, http::status::BAD_REQUEST, cfg);
+        return make_error_response_impl(
+            req, http::status::INTERNAL_SERVER_ERROR, cfg);
     }
 
-    std::string uri_path = req.uri;
     if (S_ISDIR(st.st_mode)) {
-        if (uri_path.empty() || uri_path[uri_path.size() - 1] != '/') {
+        if (req.uri.empty() || req.uri[req.uri.size() - 1] != '/') {
             std::ostringstream ss;
             ss << http::versions::strings[req.version]
                << " 301 Moved Permanently\r\n"
-               << "Location: " << uri_path << "/\r\n"
+               << "Location: " << req.uri << "/\r\n"
                << "Content-Length: 0\r\n"
                << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
                << "\r\n\r\n";
             return ss.str();
         }
 
-        std::string index_path = fs_path + "index.html";
-        struct stat ist;
-        if (stat(index_path.c_str(), &ist) == 0 && S_ISREG(ist.st_mode)) {
+        std::vector<std::string> indexes = cfg.conf.index;
+        if (indexes.empty())
+            indexes.push_back("index.html");
+        for (std::vector<std::string>::const_iterator it = indexes.begin();
+             it != indexes.end(); ++it) {
+            std::string index_path = fs_path + *it;
+            struct stat index_stat;
+            if (stat(index_path.c_str(), &index_stat) != 0) {
+                if (errno == ENOENT || errno == ENOTDIR)
+                    continue;
+                if (errno == EACCES)
+                    return make_error_response_impl(
+                        req, http::status::FORBIDDEN, cfg);
+                return make_error_response_impl(
+                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
+            }
+            if (!S_ISREG(index_stat.st_mode))
+                continue;
             std::string content;
-            if (read_file(index_path, content))
-                return make_response(
-                    req, http::status::OK, content, "text/html");
+            if (access(index_path.c_str(), R_OK) != 0)
+                return make_error_response_impl(
+                    req, http::status::FORBIDDEN, cfg);
+            if (!read_file(index_path, content))
+                return make_error_response_impl(
+                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
+            return make_response(req, http::status::OK, content, "text/html");
         }
 
         if (cfg.autoindex)
-            return create_index_directory(req, fs_path, cfg);
+            return make_directory_index_response(req, fs_path, cfg);
         return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
     }
 
