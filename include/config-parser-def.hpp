@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/22 22:37:13 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/29 20:07:56 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/07 18:20:07 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -76,6 +76,7 @@ namespace keywords {
     X(SERVER_NAME, server_name, 4, "https://nginx.org/en/docs/http/server_names.html", 0, 1, 0, string_check, std::string)                                                                            \
     X(LISTEN, listen, 2,"https://nginx.org/en/docs/http/ngx_http_core_module.html#listen", 0, 1, 0, string_check, std::string)                                                                        \
     X(ROOT, root, 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html#root", 1, 1, 1, string_check, std::string)                                                                             \
+    X(UPLOAD_PATH, upload_path, 1, "Static upload directory path", 1, 1, 1, string_check, std::string)                                                                                                  \
     X(INDEX, index, 3, "https://docs.nginx.com/nginx/admin-guide/web-server/serving-static-content/", 1, 1, 1, string_check, std::string)                                                             \
     X(CHUNKED_TRANSFER_ENCODING, chunked_transfer_encoding, 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html#chunked_transfer_encoding", 1, 1, 1, size_check, std::size_t)                \
     X(CLIENT_BODY_BUFFER_SIZE, client_body_buffer_size, 1, "https://nginx.org/en/docs/http/ngx_http_core_module.html#client_body_buffer_size", 1, 1, 1, size_check, std::size_t)                      \

@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/07 18:20:07 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -120,6 +120,9 @@ void set_location_value(const config_node &node, Config &location_conf)
     case keywords::ROOT:
         location_conf.root = *(node.vals.begin());
         break;
+    case keywords::UPLOAD_PATH:
+        location_conf.upload_path = *(node.vals.begin());
+        break;
     case keywords::AUTOINDEX:
         location_conf.autoindex = (*node.vals.begin()) == "on";
         break;
@@ -216,6 +219,10 @@ void initalize_server_config(
 {
     if (server_conf.find(keywords::ROOT) != server_conf.end())
         inital_config.root = *server_conf.find(keywords::ROOT)->second.begin();
+
+    if (server_conf.find(keywords::UPLOAD_PATH) != server_conf.end())
+        inital_config.upload_path
+            = *server_conf.find(keywords::UPLOAD_PATH)->second.begin();
 
     // Configure error_pages on server config
     if (server_conf.find(keywords::ERROR_PAGE) != server_conf.end()) {
