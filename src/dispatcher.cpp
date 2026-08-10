@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/28 01:34:43 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/10 20:06:51 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,8 +16,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <cerrno>
 #include <cctype>
+#include <cerrno>
 #include <cstring>
 #include <ctime>
 #include <fstream>
@@ -79,7 +79,7 @@ std::string escape_html(const std::string &value)
     std::string escaped;
 
     for (std::string::const_iterator it = value.begin(); it != value.end();
-         ++it) {
+        ++it) {
         if (*it == '&')
             escaped += "&amp;";
         else if (*it == '<')
@@ -102,10 +102,10 @@ std::string encode_uri_component(const std::string &value)
     std::string encoded;
 
     for (std::string::const_iterator it = value.begin(); it != value.end();
-         ++it) {
+        ++it) {
         unsigned char c = static_cast<unsigned char>(*it);
         if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            encoded += c;
+            encoded += static_cast<char>(c);
         } else {
             encoded += '%';
             encoded += hex[c >> 4];
@@ -198,7 +198,8 @@ std::string make_directory_index_response(
            << escape_html(filename).substr(0, 39) << "</a>";
 
         char date[256];
-        std::strftime(date, sizeof(date), "%d-%b-%Y %H:%M", time_last_change);
+        (void)std::strftime(
+            date, sizeof(date), "%d-%b-%Y %H:%M", time_last_change);
         if (filename.size() < 40)
             ss << std::setw(static_cast<int>(40 - filename.size())) << " ";
         ss << date;
@@ -231,7 +232,8 @@ std::string handle_get(
         if (errno == EACCES)
             return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
         if (errno == ENAMETOOLONG)
-            return make_error_response_impl(req, http::status::BAD_REQUEST, cfg);
+            return make_error_response_impl(
+                req, http::status::BAD_REQUEST, cfg);
         return make_error_response_impl(
             req, http::status::INTERNAL_SERVER_ERROR, cfg);
     }
@@ -252,7 +254,7 @@ std::string handle_get(
         if (indexes.empty())
             indexes.push_back("index.html");
         for (std::vector<std::string>::const_iterator it = indexes.begin();
-             it != indexes.end(); ++it) {
+            it != indexes.end(); ++it) {
             std::string index_path = fs_path + *it;
             struct stat index_stat;
             if (stat(index_path.c_str(), &index_stat) != 0) {
