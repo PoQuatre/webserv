@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/10 20:06:51 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/10 20:10:08 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -220,6 +220,60 @@ std::string make_directory_index_response(
     return make_response(req, http::status::OK, ss.str(), "text/html");
 }
 
+std::string make_directory_redirect_response(const http::request &req)
+{
+    std::ostringstream ss;
+
+    ss << http::versions::strings[req.version] << " 301 Moved Permanently\r\n"
+       << "Location: " << req.uri << "/\r\n"
+       << "Content-Length: 0\r\n"
+       << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
+       << "\r\n\r\n";
+    return ss.str();
+}
+
+bool try_directory_index(const http::request &req, const std::string &fs_path,
+    const Config &cfg, std::string &response)
+{
+    std::vector<std::string> indexes = cfg.conf.index;
+
+    if (indexes.empty())
+        indexes.push_back("index.html");
+    for (std::vector<std::string>::const_iterator it = indexes.begin();
+        it != indexes.end(); ++it) {
+        std::string index_path = fs_path + *it;
+        struct stat index_stat;
+        if (stat(index_path.c_str(), &index_stat) != 0) {
+            if (errno == ENOENT || errno == ENOTDIR)
+                continue;
+            if (errno == EACCES)
+                response = make_error_response_impl(
+                    req, http::status::FORBIDDEN, cfg);
+            else
+                response = make_error_response_impl(
+                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
+            return true;
+        }
+        if (!S_ISREG(index_stat.st_mode))
+            continue;
+
+        std::string content;
+        if (access(index_path.c_str(), R_OK) != 0) {
+            response
+                = make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+            return true;
+        }
+        if (!read_file(index_path, content)) {
+            response = make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
+            return true;
+        }
+        response = make_response(req, http::status::OK, content, "text/html");
+        return true;
+    }
+    return false;
+}
+
 std::string handle_get(
     const http::request &req, const std::string &fs_path, const Config &cfg)
 {
@@ -239,44 +293,12 @@ std::string handle_get(
     }
 
     if (S_ISDIR(st.st_mode)) {
-        if (req.uri.empty() || req.uri[req.uri.size() - 1] != '/') {
-            std::ostringstream ss;
-            ss << http::versions::strings[req.version]
-               << " 301 Moved Permanently\r\n"
-               << "Location: " << req.uri << "/\r\n"
-               << "Content-Length: 0\r\n"
-               << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
-               << "\r\n\r\n";
-            return ss.str();
-        }
+        std::string response;
 
-        std::vector<std::string> indexes = cfg.conf.index;
-        if (indexes.empty())
-            indexes.push_back("index.html");
-        for (std::vector<std::string>::const_iterator it = indexes.begin();
-            it != indexes.end(); ++it) {
-            std::string index_path = fs_path + *it;
-            struct stat index_stat;
-            if (stat(index_path.c_str(), &index_stat) != 0) {
-                if (errno == ENOENT || errno == ENOTDIR)
-                    continue;
-                if (errno == EACCES)
-                    return make_error_response_impl(
-                        req, http::status::FORBIDDEN, cfg);
-                return make_error_response_impl(
-                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
-            }
-            if (!S_ISREG(index_stat.st_mode))
-                continue;
-            std::string content;
-            if (access(index_path.c_str(), R_OK) != 0)
-                return make_error_response_impl(
-                    req, http::status::FORBIDDEN, cfg);
-            if (!read_file(index_path, content))
-                return make_error_response_impl(
-                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
-            return make_response(req, http::status::OK, content, "text/html");
-        }
+        if (req.uri.empty() || req.uri[req.uri.size() - 1] != '/')
+            return make_directory_redirect_response(req);
+        if (try_directory_index(req, fs_path, cfg, response))
+            return response;
 
         if (cfg.autoindex)
             return make_directory_index_response(req, fs_path, cfg);
