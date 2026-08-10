@@ -12,9 +12,9 @@
 
 #include "dispatcher.hpp"
 
-#include <sys/stat.h>
-
 #include <criterion/criterion.h>
+
+#include <sys/stat.h>
 
 #include <cerrno>
 #include <cstring>
@@ -23,9 +23,8 @@
 
 #include "test_helpers.hpp"
 
-static Server make_dispatch_server(
-    const std::string &root, bool autoindex = false,
-    const std::string &index = "")
+static Server make_dispatch_server(const std::string &root,
+    bool autoindex = false, const std::string &index = "")
 {
     Config config = { };
     Config cgi_config = { };
@@ -56,8 +55,8 @@ static Server make_dispatch_server(
 
 static void test_mkdir(const std::string &path)
 {
-    cr_assert_eq(mkdir(path.c_str(), 0700), 0, "mkdir() failed: %s",
-        strerror(errno));
+    cr_assert_eq(
+        mkdir(path.c_str(), 0700), 0, "mkdir() failed: %s", strerror(errno));
 }
 
 static http::request make_request(
@@ -176,13 +175,13 @@ Test(dispatcher, unreadable_autoindex_directory_returns_forbidden)
     http::request req = make_request(http::methods::GET, "/dir/");
 
     test_mkdir(root + "/dir");
-    cr_assert_eq(chmod((root + "/dir").c_str(), 0100), 0,
-        "chmod() failed: %s", strerror(errno));
+    cr_assert_eq(chmod((root + "/dir").c_str(), 0100), 0, "chmod() failed: %s",
+        strerror(errno));
 
     std::string response = dispatcher::handle(req, server);
 
-    cr_assert_eq(chmod((root + "/dir").c_str(), 0700), 0,
-        "chmod() failed: %s", strerror(errno));
+    cr_assert_eq(chmod((root + "/dir").c_str(), 0700), 0, "chmod() failed: %s",
+        strerror(errno));
     test_assert_status(response, "HTTP/1.1 403 Forbidden");
 }
 
