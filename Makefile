@@ -96,6 +96,7 @@ LIB_SRCS =	Connection.cpp \
 			cli.cpp \
 			dispatcher.cpp \
 			http.cpp \
+			upload.cpp \
 			config_parser/creation.cpp \
 			config_parser/parser.cpp \
 			config_parser/tokens.cpp \
@@ -127,6 +128,7 @@ HDRS =	include/Connection.hpp \
 		include/dispatcher.hpp \
 		include/http.hpp \
 		include/logger.hpp \
+		include/upload.hpp \
 		include/webserv.hpp \
 		test/test_helpers.hpp
 ##end: HDRS
