@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/11 03:09:56 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/11 03:12:30 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -216,7 +216,7 @@ bool content_type_is_multipart(const http::request &req, std::string &boundary)
 }
 
 bool find_header_end(const std::string &body, std::size_t start,
-    std::size_t &pos, std::size_t &len)
+    std::size_t &header_pos, std::size_t &header_len)
 {
     std::size_t crlf = body.find("\r\n\r\n", start);
     std::size_t lf = body.find("\n\n", start);
@@ -224,11 +224,11 @@ bool find_header_end(const std::string &body, std::size_t start,
     if (crlf == std::string::npos && lf == std::string::npos)
         return false;
     if (lf == std::string::npos || (crlf != std::string::npos && crlf < lf)) {
-        pos = crlf;
-        len = 4;
+        header_pos = crlf;
+        header_len = 4;
     } else {
-        pos = lf;
-        len = 2;
+        header_pos = lf;
+        header_len = 2;
     }
     return true;
 }
