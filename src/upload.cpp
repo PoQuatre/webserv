@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/11 03:22:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/11 03:22:47 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/11 03:37:02 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -75,15 +75,6 @@ bool safe_upload_name(const std::string &name)
         && name.find('\0') == std::string::npos;
 }
 
-std::string uri_basename(const std::string &uri)
-{
-    std::size_t slash = uri.rfind('/');
-
-    if (slash == std::string::npos)
-        return uri;
-    return uri.substr(slash + 1);
-}
-
 std::string unquote_value(const std::string &value)
 {
     std::string out;
@@ -124,24 +115,6 @@ bool content_type_is_multipart(const http::request &req, std::string &boundary)
             break;
         }
         start = end;
-    }
-    return true;
-}
-
-bool find_header_end(const std::string &body, std::size_t start,
-    std::size_t &header_pos, std::size_t &header_len)
-{
-    std::size_t crlf = body.find("\r\n\r\n", start);
-    std::size_t lf = body.find("\n\n", start);
-
-    if (crlf == std::string::npos && lf == std::string::npos)
-        return false;
-    if (lf == std::string::npos || (crlf != std::string::npos && crlf < lf)) {
-        header_pos = crlf;
-        header_len = 4;
-    } else {
-        header_pos = lf;
-        header_len = 2;
     }
     return true;
 }
@@ -193,27 +166,9 @@ bool content_disposition_filename(
     return false;
 }
 
-bool find_next_boundary(const std::string &body, const std::string &delimiter,
-    std::size_t start, std::size_t &pos, std::size_t &sep_len)
-{
-    std::size_t crlf = body.find("\r\n" + delimiter, start);
-    std::size_t lf = body.find("\n" + delimiter, start);
-
-    if (crlf == std::string::npos && lf == std::string::npos)
-        return false;
-    if (lf == std::string::npos || (crlf != std::string::npos && crlf < lf)) {
-        pos = crlf;
-        sep_len = 2;
-    } else {
-        pos = lf;
-        sep_len = 1;
-    }
-    return true;
-}
-
 bool save_raw_upload(const http::request &req, const Config &cfg)
 {
-    std::string filename = uri_basename(req.uri);
+    std::string filename = req.uri.substr(req.uri.rfind('/') + 1);
 
     return safe_upload_name(filename)
         && write_file(join_path(cfg.upload_path, filename), req.body);
@@ -224,13 +179,10 @@ bool save_multipart_upload(
 {
     const std::string delimiter = "--" + boundary;
     std::size_t pos = 0;
-    std::size_t saved = 0;
 
     while (true) {
         std::size_t header_pos;
-        std::size_t header_len;
         std::size_t next;
-        std::size_t sep_len;
         std::string headers;
         std::string filename;
 
@@ -238,30 +190,30 @@ bool save_multipart_upload(
             return false;
         pos += delimiter.size();
         if (req.body.compare(pos, 2, "--") == 0)
-            return saved > 0;
+            return false;
         if (req.body.compare(pos, 2, "\r\n") == 0)
             pos += 2;
         else if (req.body.compare(pos, 1, "\n") == 0)
             pos += 1;
         else
             return false;
-        if (!find_header_end(req.body, pos, header_pos, header_len))
+        header_pos = req.body.find("\r\n\r\n", pos);
+        if (header_pos == std::string::npos)
             return false;
-        if (!find_next_boundary(
-                req.body, delimiter, header_pos + header_len, next, sep_len))
+        next = req.body.find("\r\n" + delimiter, header_pos + 4);
+        if (next == std::string::npos)
             return false;
         headers = req.body.substr(pos, header_pos - pos);
-        pos = next + sep_len;
+        pos = next + 2;
         if (!content_disposition_filename(
                 multipart_header(headers, "content-disposition"), filename))
             continue;
         if (!safe_upload_name(filename))
             return false;
         if (!write_file(join_path(cfg.upload_path, filename),
-                req.body.substr(
-                    header_pos + header_len, next - header_pos - header_len)))
+                req.body.substr(header_pos + 4, next - header_pos - 4)))
             return false;
-        ++saved;
+        return true;
     }
 }
 
