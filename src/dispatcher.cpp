@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/11 03:24:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,12 +16,16 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <cerrno>
 #include <cstring>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 
 #include "logger.hpp"
+#include "upload.hpp"
 
 namespace {
 
@@ -71,6 +75,47 @@ bool read_file(const std::string &path, std::string &out)
     return !f.fail();
 }
 
+std::string escape_html(const std::string &value)
+{
+    std::string escaped;
+
+    for (std::string::const_iterator it = value.begin(); it != value.end();
+        ++it) {
+        if (*it == '&')
+            escaped += "&amp;";
+        else if (*it == '<')
+            escaped += "&lt;";
+        else if (*it == '>')
+            escaped += "&gt;";
+        else if (*it == '"')
+            escaped += "&quot;";
+        else if (*it == '\'')
+            escaped += "&#39;";
+        else
+            escaped += *it;
+    }
+    return escaped;
+}
+
+std::string encode_uri_component(const std::string &value)
+{
+    const char hex[] = "0123456789ABCDEF";
+    std::string encoded;
+
+    for (std::string::const_iterator it = value.begin(); it != value.end();
+        ++it) {
+        unsigned char c = static_cast<unsigned char>(*it);
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded += static_cast<char>(c);
+        } else {
+            encoded += '%';
+            encoded += hex[c >> 4];
+            encoded += hex[c & 0x0f];
+        }
+    }
+    return encoded;
+}
+
 std::string make_response(const http::request &req, http::status::type status,
     const std::string &body, const std::string &content_type)
 {
@@ -113,38 +158,151 @@ std::string make_error_response_impl(
     return make_response(req, status, body.str(), "text/html");
 }
 
+std::string make_directory_index_response(
+    const http::request &req, const std::string &fs_path, const Config &cfg)
+{
+    std::ostringstream ss;
+    std::string escaped_uri = escape_html(req.uri);
+
+    ss << "<html><head><title>Index of " << escaped_uri << "</title></head>";
+    ss << "<body><h1>Index of " << escaped_uri << "</h1><hr>";
+    ss << "<pre>";
+
+    DIR *dir = opendir(fs_path.c_str());
+    if (dir == NULL) {
+        if (errno == EACCES)
+            return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        return make_error_response_impl(
+            req, http::status::INTERNAL_SERVER_ERROR, cfg);
+    }
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (std::strcmp(entry->d_name, ".") == 0)
+            continue;
+
+        struct stat st;
+        std::string filename(entry->d_name);
+        if (stat((fs_path + filename).c_str(), &st)) {
+            closedir(dir);
+            return make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
+        }
+
+        std::tm *time_last_change = localtime(&st.st_mtime);
+        if (time_last_change == NULL) {
+            closedir(dir);
+            return make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
+        }
+
+        ss << "<a href=\"" << encode_uri_component(filename) << "\">"
+           << escape_html(filename).substr(0, 39) << "</a>";
+
+        char date[256];
+        (void)std::strftime(
+            date, sizeof(date), "%d-%b-%Y %H:%M", time_last_change);
+        if (filename.size() < 40)
+            ss << std::setw(static_cast<int>(40 - filename.size())) << " ";
+        ss << date;
+        ss << std::setw(20) << " ";
+        if (S_ISREG(st.st_mode)) {
+            ss << st.st_size;
+        } else {
+            ss << "-";
+        }
+        ss << "\n";
+    }
+    closedir(dir);
+
+    ss << "</pre>";
+    ss << "<hr></body>";
+    ss << "</html>";
+
+    return make_response(req, http::status::OK, ss.str(), "text/html");
+}
+
+std::string make_directory_redirect_response(const http::request &req)
+{
+    std::ostringstream ss;
+
+    ss << http::versions::strings[req.version] << " 301 Moved Permanently\r\n"
+       << "Location: " << req.uri << "/\r\n"
+       << "Content-Length: 0\r\n"
+       << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
+       << "\r\n\r\n";
+    return ss.str();
+}
+
+bool try_directory_index(const http::request &req, const std::string &fs_path,
+    const Config &cfg, std::string &response)
+{
+    std::vector<std::string> indexes = cfg.conf.index;
+
+    if (indexes.empty())
+        indexes.push_back("index.html");
+    for (std::vector<std::string>::const_iterator it = indexes.begin();
+        it != indexes.end(); ++it) {
+        std::string index_path = fs_path + *it;
+        struct stat index_stat;
+        if (stat(index_path.c_str(), &index_stat) != 0) {
+            if (errno == ENOENT || errno == ENOTDIR)
+                continue;
+            if (errno == EACCES)
+                response = make_error_response_impl(
+                    req, http::status::FORBIDDEN, cfg);
+            else
+                response = make_error_response_impl(
+                    req, http::status::INTERNAL_SERVER_ERROR, cfg);
+            return true;
+        }
+        if (!S_ISREG(index_stat.st_mode))
+            continue;
+
+        std::string content;
+        if (access(index_path.c_str(), R_OK) != 0) {
+            response
+                = make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+            return true;
+        }
+        if (!read_file(index_path, content)) {
+            response = make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
+            return true;
+        }
+        response = make_response(req, http::status::OK, content, "text/html");
+        return true;
+    }
+    return false;
+}
+
 std::string handle_get(
     const http::request &req, const std::string &fs_path, const Config &cfg)
 {
     struct stat st;
+
     if (stat(fs_path.c_str(), &st) != 0) {
+
+        if (errno == ENOENT || errno == ENOTDIR)
+            return make_error_response_impl(req, http::status::NOT_FOUND, cfg);
         if (errno == EACCES)
             return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
-        return make_error_response_impl(req, http::status::NOT_FOUND, cfg);
+        if (errno == ENAMETOOLONG)
+            return make_error_response_impl(
+                req, http::status::BAD_REQUEST, cfg);
+        return make_error_response_impl(
+            req, http::status::INTERNAL_SERVER_ERROR, cfg);
     }
 
-    std::string uri_path = req.uri;
     if (S_ISDIR(st.st_mode)) {
-        if (uri_path.empty() || uri_path[uri_path.size() - 1] != '/') {
-            std::ostringstream ss;
-            ss << http::versions::strings[req.version]
-               << " 301 Moved Permanently\r\n"
-               << "Location: " << uri_path << "/\r\n"
-               << "Content-Length: 0\r\n"
-               << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
-               << "\r\n\r\n";
-            return ss.str();
-        }
+        std::string response;
 
-        std::string index_path = fs_path + "index.html";
-        struct stat ist;
-        if (stat(index_path.c_str(), &ist) == 0 && S_ISREG(ist.st_mode)) {
-            std::string content;
-            if (read_file(index_path, content))
-                return make_response(
-                    req, http::status::OK, content, "text/html");
-        }
+        if (req.uri.empty() || req.uri[req.uri.size() - 1] != '/')
+            return make_directory_redirect_response(req);
+        if (try_directory_index(req, fs_path, cfg, response))
+            return response;
 
+        if (cfg.autoindex)
+            return make_directory_index_response(req, fs_path, cfg);
         return make_error_response_impl(req, http::status::FORBIDDEN, cfg);
     }
 
@@ -183,6 +341,14 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
             req, http::status::METHOD_NOT_ALLOWED, cfg);
 
     filesystem_path = cfg.root + req.uri;
+
+    if (req.method == http::methods::POST && !cfg.upload_path.empty()) {
+        http::status::type status = upload::save(req, cfg);
+
+        if (status != http::status::CREATED)
+            return make_error_response_impl(req, status, cfg);
+        return make_response(req, status, "Created\n", "text/plain");
+    }
 
     if (req.method != http::methods::GET)
         return make_error_response_impl(

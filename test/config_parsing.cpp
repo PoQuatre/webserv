@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/26 21:07:58 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/07 18:20:07 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -280,4 +280,19 @@ Test(config_parsing, cgi_directives_reject_non_location_scope)
     std::string path = "test/data/conf-cgi-invalid-scope.conf";
 
     cr_assert_eq(ConfigParser::parse_config(path, servers), false);
+}
+
+Test(config_parsing, upload_path_is_inherited_and_overridable)
+{
+    std::vector<Server> servers;
+    std::string path = "test/data/conf-upload-path.conf";
+
+    cr_assert_eq(ConfigParser::parse_config(path, servers), true);
+    cr_assert_eq(servers.size(), 1);
+    cr_assert_str_eq(
+        servers[0].default_config().upload_path.c_str(), "/tmp/server-upload");
+
+    const Location *loc = servers[0].find_location("/upload/file.txt");
+    cr_assert_not_null(loc);
+    cr_assert_str_eq(loc->config.upload_path.c_str(), "/tmp/location-upload");
 }
