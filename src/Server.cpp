@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:48:53 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/07 18:20:07 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:20:04 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -75,11 +75,49 @@ Server::Server(const std::vector<Location> &locations,
     const Config &default_config)
     : _locations(sort_locations(locations))
     , _server_name(server_name)
+    , _server_name_aliases(std::vector<std::string>(1, server_name))
+    , _listen_addr(listen_addr)
     , _default_config(default_config)
     , _sockaddr()
     , _sockaddr6()
     , _sockfd(-1)
     , _is_ipv6(false)
+{
+    configure_listen(listen_addr);
+}
+
+Server::Server(const std::vector<Location> &locations,
+    const std::vector<std::string> &server_names,
+    const std::string &listen_addr, const Config &default_config)
+    : _locations(sort_locations(locations))
+    , _server_name(server_names.empty() ? std::string() : *server_names.begin())
+    , _server_name_aliases(server_names)
+    , _listen_addr(listen_addr)
+    , _default_config(default_config)
+    , _sockaddr()
+    , _sockaddr6()
+    , _sockfd(-1)
+    , _is_ipv6(false)
+{
+    configure_listen(listen_addr);
+}
+
+Server::Server(const Server &other)
+    : _locations(other._locations)
+    , _server_name(other._server_name)
+    , _server_name_aliases(other._server_name_aliases)
+    , _listen_addr(other._listen_addr)
+    , _default_config(other._default_config)
+    , _sockaddr(other._sockaddr)
+    , _sockaddr6(other._sockaddr6)
+    , _sockfd(-1)
+    , _is_ipv6(other._is_ipv6)
+{
+}
+
+Server::~Server() { }
+
+void Server::configure_listen(const std::string &listen_addr)
 {
     std::string addr;
     uint32_t port;
@@ -112,24 +150,11 @@ Server::Server(const std::vector<Location> &locations,
         _locations, _server_name, _is_ipv6, addr, port);
 }
 
-Server::Server(const Server &other)
-    : _locations(other._locations)
-    , _server_name(other._server_name)
-    , _default_config(other._default_config)
-    , _sockaddr(other._sockaddr)
-    , _sockaddr6(other._sockaddr6)
-    , _sockfd(-1)
-    , _is_ipv6(other._is_ipv6)
-{
-}
-
-Server::~Server() { }
-
 int32_t Server::get_sockfd() const { return _sockfd; }
 
 bool Server::init_socket()
 {
-    L_DEBUG("Initializing server, name : {}", _server_name);
+    L_DEBUG("Initializing server, name : {}", server_name());
 
     int32_t domain = _is_ipv6 ? AF_INET6 : AF_INET;
     _sockfd = socket(domain, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
