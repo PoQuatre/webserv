@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:47:40 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:41:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,6 +21,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <set>
 
 #include "cgi.hpp"
 #include "dispatcher.hpp"
@@ -159,7 +160,12 @@ bool EventLoop::create_epoll()
 
 bool EventLoop::register_servers()
 {
+    std::set<std::string> listeners;
+
     for (std::size_t i = 0; i < _servers.size(); i++) {
+        if (!listeners.insert(_servers[i].listen_addr()).second)
+            continue;
+
         if (!_servers[i].init_socket())
             return false;
 
