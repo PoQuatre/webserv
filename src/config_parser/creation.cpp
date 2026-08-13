@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/13 04:25:26 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 19:42:31 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -101,28 +101,24 @@ std::size_t convert_time_to_seconds(const std::string &val)
     }
     return 0;
 }
+}
 
-std::string handle_relative_path(const std::string &path)
+std::string ConfigParser::handle_relative_path(const std::string &path)
 {
     char buf[4096];
-    ssize_t code;
 
     if (path.c_str()[0] == '/')
         return path;
-    code = readlink("/proc/self/exe", buf, 4096);
-    if (code <= 0 || code >= 4095)
-        return path;
-    buf[code] = 0;
+    realpath(_path.c_str(), buf);
     char *p = std::strrchr(buf, '/');
     if (!p)
         return path;
-    *p = 0;
-    if (path.c_str()[0] == '.' && path.length() == 1)
-        return buf;
-    return std::string(buf) + "/" + path;
+    *(p + 1) = 0;
+    std::strncat(p + 1, path.c_str(), path.length());
+    return std::string(buf);
 }
 
-void push_configuration(const config_node &node,
+void ConfigParser::push_configuration(const config_node &node,
     std::map<keywords::type, std::vector<std::string> > &conf)
 {
     for (std::vector<config_node *>::const_iterator cit = node.children.begin();
@@ -151,7 +147,8 @@ void push_configuration(const config_node &node,
     }
 }
 
-void set_location_value(const config_node &node, Config &location_conf)
+void ConfigParser::set_location_value(
+    const config_node &node, Config &location_conf)
 {
     char *p;
     switch (node.keyword) {
@@ -184,7 +181,7 @@ void set_location_value(const config_node &node, Config &location_conf)
     }
 }
 
-void create_location(
+void ConfigParser::create_location(
     std::vector<config_node *>::const_iterator &node_it, Config &location_conf)
 {
     char *p;
@@ -223,8 +220,8 @@ void create_location(
     }
 }
 
-void create_all_location(const config_node &node, Config &inital_config,
-    std::vector<Location> &location_vector)
+void ConfigParser::create_all_location(const config_node &node,
+    Config &inital_config, std::vector<Location> &location_vector)
 {
     // Iter on server children node
     for (std::vector<config_node *>::const_iterator cit = node.children.begin();
@@ -251,6 +248,7 @@ void create_all_location(const config_node &node, Config &inital_config,
     }
 }
 
+namespace {
 void initalize_server_config(
     std::map<keywords::type, std::vector<std::string> > &server_conf,
     Config &inital_config)
