@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 07:17:09 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 06:59:22 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:48:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -46,12 +46,16 @@ public:
 
     const http::request &request() const { return _parser.request(); }
     const Server &server() const { return *_server; }
+    const Server &default_server() const { return *_default_server; }
     int32_t fd() const { return _fd; }
+
+    void set_server(const Server &server) { _server = &server; }
 
     void reset();
 
 private:
     int32_t _fd;
+    const Server *_default_server;
     const Server *_server;
     std::string _send_buf;
     SendState _send_state;

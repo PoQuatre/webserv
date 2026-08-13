@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:48:41 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -42,6 +42,7 @@ std::string peer_address(int32_t fd)
 
 Connection::Connection()
     : _fd(-1)
+    , _default_server(NULL)
     , _server(NULL)
     , _send_state(IDLE)
 {
@@ -49,6 +50,7 @@ Connection::Connection()
 
 Connection::Connection(int32_t fd, const Server &server)
     : _fd(fd)
+    , _default_server(&server)
     , _server(&server)
     , _send_state(IDLE)
 {
@@ -82,6 +84,7 @@ void Connection::reset()
 {
     _send_buf.clear();
     _send_state = IDLE;
+    _server = _default_server;
     _parser.reset();
 }
 

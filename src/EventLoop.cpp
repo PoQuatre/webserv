@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 04:41:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:57:23 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -51,6 +52,33 @@ void drain_signal_pipe()
     while ((n = read(g_signal_pipe[0], buf, sizeof(buf))) > 0)
         for (ssize_t j = 0; j < n; ++j)
             L_DEBUG("Received signal {}, shutting down", (int)buf[j]);
+}
+
+std::string lower_ascii(std::string value)
+{
+    for (std::size_t i = 0; i < value.size(); ++i)
+        value[i] = static_cast<char>(
+            std::tolower(static_cast<unsigned char>(value[i])));
+    return value;
+}
+
+std::string host_name(const http::request &req)
+{
+    std::map<std::string, std::string>::const_iterator it
+        = req.headers.find("host");
+
+    if (it == req.headers.end() || it->second.empty())
+        return "";
+    std::string host = it->second;
+    if (host[0] == '[')
+        return "";
+    std::size_t colon = host.find(':');
+    if (colon == std::string::npos)
+        return lower_ascii(host);
+    if (colon == 0 || host.find(':', colon + 1) != std::string::npos
+        || colon + 1 == host.size())
+        return "";
+    return lower_ascii(host.substr(0, colon));
 }
 
 }
@@ -363,6 +391,7 @@ void EventLoop::close_client(int32_t clientfd, Connection &conn)
 void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
 {
     if (conn.is_parse_complete()) {
+        conn.set_server(*select_server(conn.default_server(), conn.request()));
         const Config &cfg
             = dispatcher::config_for(conn.request(), conn.server());
         std::string filesystem_path = cfg.root + conn.request().uri;
@@ -392,6 +421,25 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
     } else if (events & EPOLLOUT) {
         update_source_events(fd, EPOLL_RDONLY);
     }
+}
+
+const Server *EventLoop::select_server(
+    const Server &default_server, const http::request &req) const
+{
+    std::string host = host_name(req);
+
+    if (host.empty())
+        return &default_server;
+    for (std::size_t i = 0; i < _servers.size(); ++i) {
+        if (_servers[i].listen_addr() != default_server.listen_addr())
+            continue;
+        const std::vector<std::string> &names
+            = _servers[i].server_name_aliases();
+        for (std::size_t j = 0; j < names.size(); ++j)
+            if (lower_ascii(names[j]) == host)
+                return &_servers[i];
+    }
+    return &default_server;
 }
 
 bool EventLoop::start_cgi_request(int32_t clientfd, Connection &conn,
