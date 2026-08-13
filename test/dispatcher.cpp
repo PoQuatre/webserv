@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/11 03:09:56 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -26,7 +26,8 @@
 #include "test_helpers.hpp"
 
 static Server make_dispatch_server(const std::string &root,
-    bool autoindex = false, const std::string &index = "")
+    bool autoindex = false, const std::string &index = "",
+    std::size_t client_max_body_size = 0)
 {
     Config config = { };
     Config cgi_config = { };
@@ -39,6 +40,7 @@ static Server make_dispatch_server(const std::string &root,
     config.allowed_methods[http::methods::HEAD] = true;
     config.allowed_methods[http::methods::DELETE] = true;
     config.autoindex = autoindex;
+    config.client_max_body_size = client_max_body_size;
     if (!index.empty())
         config.conf.index.push_back(index);
     cgi_config = config;
@@ -306,6 +308,19 @@ Test(dispatcher, upload_rejects_body_larger_than_configured_limit)
     cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
     Server server = make_upload_server(root, upload, 3);
     http::request req = make_request(http::methods::POST, "/file.txt");
+
+    req.body = "toolong";
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 413 Payload Too Large");
+}
+
+Test(dispatcher, non_upload_request_uses_configured_body_limit)
+{
+    std::string root = test_tmpdir("webserv-dispatcher-test");
+    Server server = make_dispatch_server(root, false, "", 3);
+    http::request req = make_request(http::methods::POST, "/static.txt");
 
     req.body = "toolong";
 

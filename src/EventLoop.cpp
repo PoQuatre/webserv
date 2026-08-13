@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:54:52 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -401,6 +401,9 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
         if (!cfg.allowed_methods[conn.request().method]) {
             conn.enqueue_response(dispatcher::error_response(
                 conn.request(), cfg, http::status::METHOD_NOT_ALLOWED));
+        } else if (dispatcher::request_body_too_large(conn.request(), cfg)) {
+            conn.enqueue_response(dispatcher::error_response(
+                conn.request(), cfg, http::status::PAYLOAD_TOO_LARGE));
         } else if (!cfg.cgi_pass.empty()) {
             http::status::type error_status = http::status::BAD_GATEWAY;
 

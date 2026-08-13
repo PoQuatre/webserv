@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/21 20:54:18 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 07:34:38 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,8 +17,6 @@
 #include <cstring>
 
 #include "logger.hpp"
-
-#define MAX_BUF_SIZE 8388608 // 8mb
 
 HttpParser::HttpParser()
     : _state(READING_REQUEST_LINE)
@@ -32,11 +30,6 @@ HttpParser::HttpParser()
 
 bool HttpParser::feed(const char *data, std::size_t len)
 {
-    if (_buf.size() >= MAX_BUF_SIZE) {
-        L_WARN("Request exceeded max size");
-        set_err(http::status::BAD_REQUEST);
-        return false;
-    }
     _buf.append(data, len);
     return run();
 }
