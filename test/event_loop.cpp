@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 05:18:47 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 05:27:37 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -398,6 +398,30 @@ Test(event_loop, shared_listener_routes_static_requests_by_host)
     cr_assert_neq(response.find("second server\n"), std::string::npos);
     cr_assert_eq(response.find("first server\n"), std::string::npos);
 
+    clientfd = connect_to_loopback(port);
+    write_all(clientfd,
+        "GET /index.html HTTP/1.1\r\n"
+        "Host: unmatched\r\n"
+        "Connection: keep-alive\r\n"
+        "\r\n");
+    response = read_response(clientfd);
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_neq(
+        response.find("Connection: keep-alive\r\n"), std::string::npos);
+    cr_assert_neq(response.find("first server\n"), std::string::npos);
+    cr_assert_eq(response.find("second server\n"), std::string::npos);
+
+    write_all(clientfd,
+        "GET /index.html HTTP/1.1\r\n"
+        "Host: alias.test\r\n"
+        "Connection: close\r\n"
+        "\r\n");
+    response = read_response(clientfd);
+    close(clientfd);
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_neq(response.find("second server\n"), std::string::npos);
+    cr_assert_eq(response.find("first server\n"), std::string::npos);
+
     const char *fallback_requests[] = {
         "GET /index.html HTTP/1.1\r\nHost: unmatched\r\n\r\n",
         "GET /index.html HTTP/1.1\r\nHost: \r\n\r\n",
@@ -442,9 +466,8 @@ Test(event_loop, shared_listener_uses_selected_server_for_cgi)
         "printf 'this output exceeds the selected server cap\\n'\n");
 
     std::vector<Server> servers;
-    servers.push_back(make_cgi_server(
-        port, first_root, false, "/bin/sh", 5, DEFAULT_CGI_OUTPUT_BUFFER_SIZE,
-        "first.test"));
+    servers.push_back(make_cgi_server(port, first_root, false, "/bin/sh", 5,
+        DEFAULT_CGI_OUTPUT_BUFFER_SIZE, "first.test"));
     servers.push_back(make_cgi_server(
         port, second_root, true, "/bin/sh", 1, 64, "second.test"));
 
