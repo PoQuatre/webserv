@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/06/18 19:50:49 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/08/13 19:42:36 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -42,6 +42,14 @@ private:
     void skip_line();
     bool see_next_token();
     bool consume_next_token();
+    std::string handle_relative_path(const std::string &path);
+    void push_configuration(const config_node &node,
+        std::map<keywords::type, std::vector<std::string> > &conf);
+    void set_location_value(const config_node &node, Config &location_conf);
+    void create_location(std::vector<config_node *>::const_iterator &node_it,
+        Config &location_conf);
+    void create_all_location(const config_node &node, Config &inital_config,
+        std::vector<Location> &location_vector);
     void skip_scope(
         const std::string &scope_name, uint32_t line, bool print_err = true);
     bool create_location_node();
