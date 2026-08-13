@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:49:49 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -71,6 +71,8 @@ private:
     void process_client(int32_t fd, uint32_t events, Connection &conn);
     void expire_cgi_jobs();
     void close_cgi_fd(int32_t fd);
+    const Server *select_server(
+        const Server &default_server, const http::request &req) const;
     cgi::CleanupResult cleanup_cgi_job(
         int32_t stdout_fd, cgi::job_cleanup::action action);
     void dispatch_pending(int32_t fd, uint32_t events, Connection &conn);
