@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:54:52 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/14 02:55:17 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -413,6 +413,13 @@ bool dispatcher::open_static_file_response(const http::request &req,
     return true;
 }
 
+bool dispatcher::request_body_too_large(
+    const http::request &req, const Config &cfg)
+{
+    return cfg.client_max_body_size != 0
+        && req.body.size() > cfg.client_max_body_size;
+}
+
 std::string dispatcher::handle(const http::request &req, const Server &server)
 {
     const Config &cfg = config_for(req, server);
@@ -421,6 +428,9 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
     if (!cfg.allowed_methods[req.method])
         return make_error_response_impl(
             req, http::status::METHOD_NOT_ALLOWED, cfg);
+    if (request_body_too_large(req, cfg))
+        return make_error_response_impl(
+            req, http::status::PAYLOAD_TOO_LARGE, cfg);
 
     filesystem_path = cfg.root + req.uri;
 

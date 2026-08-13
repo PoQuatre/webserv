@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 09:56:28 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/26 10:19:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:57:11 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,6 +18,7 @@
 #include <string>
 
 #include "Connection.hpp"
+#include "HttpParser.hpp"
 #include "http.hpp"
 #include "logger.hpp"
 
@@ -89,6 +90,20 @@ Test(request_line, delete_http10)
     cr_assert(c.is_parse_complete());
     cr_assert_eq(c.request().method, http::methods::DELETE);
     cr_assert_eq(c.request().version, http::versions::HTTP10);
+}
+
+Test(body, parser_accepts_body_past_old_hardcoded_limit)
+{
+    HttpParser parser;
+    std::string body(8388609, 'x');
+    std::string raw = "POST /upload HTTP/1.1\r\nContent-Length: ";
+
+    raw += "8388609\r\n\r\n";
+    raw += body;
+
+    cr_assert(parser.feed(raw.c_str(), raw.size()));
+    cr_assert(parser.is_complete());
+    cr_assert_eq(parser.request().body.size(), body.size());
 }
 
 Test(request_line, put_method)

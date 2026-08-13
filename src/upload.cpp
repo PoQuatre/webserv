@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/11 03:22:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/11 03:37:02 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -226,9 +226,6 @@ http::status::type upload::save(const http::request &req, const Config &cfg)
 
     if (!upload_path_ready(cfg.upload_path))
         return http::status::FORBIDDEN;
-    if (cfg.client_max_body_size != 0
-        && req.body.size() > cfg.client_max_body_size)
-        return http::status::PAYLOAD_TOO_LARGE;
     if (content_type_is_multipart(req, boundary))
         ok = !boundary.empty() && save_multipart_upload(req, cfg, boundary);
     else
