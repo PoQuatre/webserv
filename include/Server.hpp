@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/07 18:20:07 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:20:04 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -56,6 +56,9 @@ public:
     Server(const std::vector<Location> &locations,
         const std::string &server_name, const std::string &listen_addr,
         const Config &default_config);
+    Server(const std::vector<Location> &locations,
+        const std::vector<std::string> &server_names,
+        const std::string &listen_addr, const Config &default_config);
     Server(const Server &other);
     ~Server();
 
@@ -66,12 +69,20 @@ public:
     const Location *find_location(const std::string &uri) const;
     const Config &default_config() const { return _default_config; }
     const std::string &server_name() const { return _server_name; }
+    const std::vector<std::string> &server_name_aliases() const
+    {
+        return _server_name_aliases;
+    }
+    const std::string &listen_addr() const { return _listen_addr; }
 
 private:
     Server();
+    void configure_listen(const std::string &listen_addr);
 
     const std::vector<Location> _locations;
     const std::string _server_name;
+    const std::vector<std::string> _server_name_aliases;
+    const std::string _listen_addr;
     const Config _default_config;
     struct sockaddr_in _sockaddr;
     struct sockaddr_in6 _sockaddr6;

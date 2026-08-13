@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/11 05:32:42 by uanglade         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:25:26 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -138,8 +138,15 @@ void push_configuration(const config_node &node,
                     *cit2 = handle_relative_path(*cit2);
                 }
             }
-            conf.insert(std::pair<keywords::type, std::vector<std::string> >(
-                (*cit)->keyword, (*cit)->vals));
+            if ((*cit)->keyword == keywords::SERVER_NAME
+                && conf.find((*cit)->keyword) != conf.end()) {
+                conf[(*cit)->keyword].insert(conf[(*cit)->keyword].end(),
+                    (*cit)->vals.begin(), (*cit)->vals.end());
+            } else {
+                conf.insert(
+                    std::pair<keywords::type, std::vector<std::string> >(
+                        (*cit)->keyword, (*cit)->vals));
+            }
         }
     }
 }
@@ -339,13 +346,18 @@ void ConfigParser::create_one_server(const config_node &node,
     if (server_conf.find(keywords::LISTEN) == server_conf.end())
         L_WARN("No listen address, using '{}' as the default ", DEFAULT_LISTEN);
 
-    Server n_server = Server(location_vector,
-        server_conf.find(keywords::SERVER_NAME) != server_conf.end()
-            ? *server_conf.find(keywords::SERVER_NAME)->second.begin()
-            : DEFAULT_SERVER_NAME,
-        server_conf.find(keywords::LISTEN) != server_conf.end()
-            ? *server_conf.find(keywords::LISTEN)->second.begin()
-            : DEFAULT_LISTEN,
+    std::map<keywords::type, std::vector<std::string> >::const_iterator names
+        = server_conf.find(keywords::SERVER_NAME);
+    std::map<keywords::type, std::vector<std::string> >::const_iterator listen
+        = server_conf.find(keywords::LISTEN);
+    std::vector<std::string> server_names;
+    if (names == server_conf.end())
+        server_names.push_back(DEFAULT_SERVER_NAME);
+    else
+        server_names = names->second;
+
+    Server n_server = Server(location_vector, server_names,
+        listen != server_conf.end() ? *listen->second.begin() : DEFAULT_LISTEN,
         inital_config);
 
     _servers.push_back(n_server);

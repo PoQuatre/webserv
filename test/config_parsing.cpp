@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/07 18:20:07 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:00:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -249,6 +249,45 @@ Test(config_parsing, good_simple)
     path = "test/data/conf-3.conf";
     cr_assert_eq(ConfigParser::parse_config(path, servers), false);
     servers.clear();
+}
+
+Test(config_parsing, exposes_server_listen_and_name_aliases)
+{
+    std::vector<Server> servers;
+    std::string path = "test/data/conf-server-aliases.conf";
+
+    cr_assert_eq(ConfigParser::parse_config(path, servers), true);
+    cr_assert_eq(servers.size(), 2);
+
+    const Server *named_server = NULL;
+    const Server *default_server = NULL;
+    for (std::vector<Server>::const_iterator it = servers.begin();
+        it != servers.end(); ++it) {
+        if (it->server_name() == "primary.test")
+            named_server = it.base();
+        if (it->server_name().empty())
+            default_server = it.base();
+    }
+
+    cr_assert_not_null(named_server);
+    cr_assert_str_eq(named_server->listen_addr().c_str(), "127.0.0.1:9090");
+    cr_assert_eq(named_server->server_name_aliases().size(), 4);
+    cr_assert_str_eq(
+        named_server->server_name_aliases()[0].c_str(), "primary.test");
+    cr_assert_str_eq(
+        named_server->server_name_aliases()[1].c_str(), "www.test");
+    cr_assert_str_eq(
+        named_server->server_name_aliases()[2].c_str(), "api.test");
+    cr_assert_str_eq(
+        named_server->server_name_aliases()[3].c_str(), "repeat.test");
+
+    cr_assert_not_null(default_server);
+    cr_assert_str_eq(default_server->listen_addr().c_str(), DEFAULT_LISTEN);
+    cr_assert_str_eq(
+        default_server->server_name().c_str(), DEFAULT_SERVER_NAME);
+    cr_assert_eq(default_server->server_name_aliases().size(), 1);
+    cr_assert_str_eq(
+        default_server->server_name_aliases()[0].c_str(), DEFAULT_SERVER_NAME);
 }
 
 Test(config_parsing, cgi_location_directives)
