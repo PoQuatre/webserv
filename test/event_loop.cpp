@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/27 19:28:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 04:43:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -292,6 +292,54 @@ Test(event_loop, listener_and_signal_sources_dispatch_readiness)
 
     std::string response = read_response(clientfd);
     cr_assert_neq(response.find("404 Not Found"), std::string::npos);
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+    close(clientfd);
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, duplicate_listen_values_share_first_listener)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    uint16_t port = reserve_loopback_port();
+    std::ostringstream listen_addr;
+    listen_addr << "127.0.0.1:" << port;
+
+    std::string first_root = test_tmpdir("webserv-first-listener");
+    std::string second_root = test_tmpdir("webserv-second-listener");
+    test_write_file(first_root + "/index.html", "first server\n");
+    test_write_file(second_root + "/index.html", "second server\n");
+
+    Config first_config = { };
+    first_config.root = first_root;
+    first_config.allowed_methods[http::methods::GET] = true;
+    Config second_config = { };
+    second_config.root = second_root;
+    second_config.allowed_methods[http::methods::GET] = true;
+
+    std::vector<Server> servers;
+    servers.push_back(Server(
+        std::vector<Location>(), "first", listen_addr.str(), first_config));
+    servers.push_back(Server(
+        std::vector<Location>(), "second", listen_addr.str(), second_config));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int clientfd = connect_to_loopback(port);
+    write_all(clientfd, "GET /index.html HTTP/1.1\r\nHost: unmatched\r\n\r\n");
+
+    std::string response = read_response(clientfd);
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_neq(response.find("first server\n"), std::string::npos);
+    cr_assert_eq(response.find("second server\n"), std::string::npos);
 
     cr_assert_eq(
         kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
