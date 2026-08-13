@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 04:55:31 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 05:18:47 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -159,7 +159,8 @@ static bool wait_process_gone(pid_t pid)
 static Server make_cgi_server(uint16_t port, const std::string &root,
     bool allow_delete = false, const std::string &cgi_pass = "/bin/sh",
     uint32_t cgi_timeout = DEFAULT_CGI_TIMEOUT,
-    std::size_t cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE)
+    std::size_t cgi_output_buffer_size = DEFAULT_CGI_OUTPUT_BUFFER_SIZE,
+    const std::string &server_name = "test")
 {
     std::ostringstream listen_addr;
     Config config = { };
@@ -169,7 +170,10 @@ static Server make_cgi_server(uint16_t port, const std::string &root,
 
     listen_addr << "127.0.0.1:" << port;
     config.conf.listen.push_back(listen_addr.str());
-    config.conf.server_name.push_back("test");
+    config.conf.server_name.push_back(server_name);
+    config.error_pages[404] = "/404.html";
+    config.error_pages[502] = "/502.html";
+    config.error_pages[504] = "/504.html";
     config.root = root;
     config.allowed_methods[http::methods::GET] = true;
     config.allowed_methods[http::methods::POST] = true;
@@ -187,7 +191,7 @@ static Server make_cgi_server(uint16_t port, const std::string &root,
     cgi_location.type = location::CLASSIC;
     locations.push_back(cgi_location);
 
-    return Server(locations, "test", listen_addr.str(), config);
+    return Server(locations, server_name, listen_addr.str(), config);
 }
 
 struct CgiHarness {
@@ -410,6 +414,68 @@ Test(event_loop, shared_listener_routes_static_requests_by_host)
         test_assert_status(response, "HTTP/1.1 200 OK");
         cr_assert_neq(response.find("first server\n"), std::string::npos);
         cr_assert_eq(response.find("second server\n"), std::string::npos);
+    }
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+
+    cr_assert(args.result);
+}
+
+Test(event_loop, shared_listener_uses_selected_server_for_cgi)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    uint16_t port = reserve_loopback_port();
+    std::string first_root = make_cgi_root();
+    std::string second_root = make_cgi_root();
+    test_write_file(second_root + "/404.html", "second 404\n");
+    test_write_file(second_root + "/502.html", "second 502\n");
+    test_write_file(second_root + "/504.html", "second 504\n");
+    test_write_file(second_root + "/cgi/delete.sh",
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'delete selected\\n'\n");
+    test_write_file(second_root + "/cgi/slow.sh", "sleep 5\n");
+    test_write_file(second_root + "/cgi/large.sh",
+        "printf 'Content-Type: text/plain\\r\\n\\r\\n'\n"
+        "printf 'this output exceeds the selected server cap\\n'\n");
+
+    std::vector<Server> servers;
+    servers.push_back(make_cgi_server(
+        port, first_root, false, "/bin/sh", 5, DEFAULT_CGI_OUTPUT_BUFFER_SIZE,
+        "first.test"));
+    servers.push_back(make_cgi_server(
+        port, second_root, true, "/bin/sh", 1, 64, "second.test"));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    struct RequestCase {
+        const char *request;
+        const char *status;
+        const char *body;
+    } cases[] = {
+        { "DELETE /cgi/delete.sh HTTP/1.1\r\nHost: second.test\r\n\r\n",
+            "HTTP/1.1 200 OK", "delete selected\n" },
+        { "GET /cgi/missing.sh HTTP/1.1\r\nHost: second.test\r\n\r\n",
+            "HTTP/1.1 404 Not Found", "second 404\n" },
+        { "GET /cgi/slow.sh HTTP/1.1\r\nHost: second.test\r\n\r\n",
+            "HTTP/1.1 504 Gateway Timeout", "second 504\n" },
+        { "GET /cgi/large.sh HTTP/1.1\r\nHost: second.test\r\n\r\n",
+            "HTTP/1.1 502 Bad Gateway", "second 502\n" },
+    };
+    for (std::size_t i = 0; i < sizeof(cases) / sizeof(*cases); ++i) {
+        int clientfd = connect_to_loopback(port);
+        write_all(clientfd, cases[i].request);
+        std::string response = read_response(clientfd);
+        close(clientfd);
+
+        test_assert_status(response, cases[i].status);
+        cr_assert_neq(response.find(cases[i].body), std::string::npos);
     }
 
     cr_assert_eq(
