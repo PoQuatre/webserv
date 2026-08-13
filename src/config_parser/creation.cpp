@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/13 19:42:31 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/08/13 19:46:59 by nlaporte         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -109,7 +109,9 @@ std::string ConfigParser::handle_relative_path(const std::string &path)
 
     if (path.c_str()[0] == '/')
         return path;
-    realpath(_path.c_str(), buf);
+    char *p2 = realpath(_path.c_str(), buf);
+    if (!p2)
+        return path;
     char *p = std::strrchr(buf, '/');
     if (!p)
         return path;
