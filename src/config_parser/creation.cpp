@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/14 05:03:39 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -151,7 +151,7 @@ void ConfigParser::set_location_value(
         location_conf.root = handle_relative_path(*(node.vals.begin()));
         break;
     case keywords::UPLOAD_PATH:
-        location_conf.upload_path = *(node.vals.begin());
+        location_conf.upload_path = handle_relative_path(*(node.vals.begin()));
         break;
     case keywords::AUTOINDEX:
         location_conf.autoindex = (*node.vals.begin()) == "on";
