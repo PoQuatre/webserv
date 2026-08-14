@@ -6,13 +6,14 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/11 03:24:10 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:54:52 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "dispatcher.hpp"
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -131,6 +132,24 @@ std::string make_response(const http::request &req, http::status::type status,
     ss << "Connection: " << (req.keep_alive ? "keep-alive" : "close") << "\r\n";
     ss << "\r\n";
     ss << body;
+    return ss.str();
+}
+
+std::string make_response_headers(const http::request &req,
+    http::status::type status, off_t content_length,
+    const std::string &content_type)
+{
+    if (req.version == http::versions::HTTP09)
+        return "";
+
+    std::ostringstream ss;
+    ss << http::versions::strings[req.version] << " "
+       << http::status::codes[status] << " " << http::status::reasons[status]
+       << "\r\n";
+    ss << "Content-Type: " << content_type << "\r\n";
+    ss << "Content-Length: " << content_length << "\r\n";
+    ss << "Connection: " << (req.keep_alive ? "keep-alive" : "close") << "\r\n";
+    ss << "\r\n";
     return ss.str();
 }
 
@@ -329,6 +348,69 @@ const Config &dispatcher::config_for(
     const Location *loc = server.find_location(req.uri);
 
     return loc ? loc->config : server.default_config();
+}
+
+bool dispatcher::open_static_file_response(const http::request &req,
+    const Config &cfg, std::string &headers, int32_t &filefd)
+{
+    std::string fs_path = cfg.root + req.uri;
+    struct stat st;
+
+    filefd = -1;
+    headers.clear();
+    if (req.method != http::methods::GET)
+        return false;
+    if (stat(fs_path.c_str(), &st) != 0) {
+        if (errno == ENOENT || errno == ENOTDIR)
+            headers
+                = make_error_response_impl(req, http::status::NOT_FOUND, cfg);
+        else if (errno == EACCES)
+            headers
+                = make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        else if (errno == ENAMETOOLONG)
+            headers
+                = make_error_response_impl(req, http::status::BAD_REQUEST, cfg);
+        else
+            headers = make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
+        return true;
+    }
+    if (S_ISDIR(st.st_mode))
+        return false;
+    if (!S_ISREG(st.st_mode)) {
+        headers = make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        return true;
+    }
+    filefd = open(fs_path.c_str(), O_RDONLY);
+    if (filefd == -1) {
+        if (errno == EACCES)
+            headers
+                = make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        else if (errno == ENOENT || errno == ENOTDIR)
+            headers
+                = make_error_response_impl(req, http::status::NOT_FOUND, cfg);
+        else
+            headers = make_error_response_impl(
+                req, http::status::INTERNAL_SERVER_ERROR, cfg);
+        return true;
+    }
+    fcntl(filefd, F_SETFD, FD_CLOEXEC);
+    if (fstat(filefd, &st) != 0) {
+        close(filefd);
+        filefd = -1;
+        headers = make_error_response_impl(
+            req, http::status::INTERNAL_SERVER_ERROR, cfg);
+        return true;
+    }
+    if (!S_ISREG(st.st_mode)) {
+        close(filefd);
+        filefd = -1;
+        headers = make_error_response_impl(req, http::status::FORBIDDEN, cfg);
+        return true;
+    }
+    headers = make_response_headers(
+        req, http::status::OK, st.st_size, content_type_for(fs_path));
+    return true;
 }
 
 std::string dispatcher::handle(const http::request &req, const Server &server)

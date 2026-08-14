@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 05:27:37 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:54:52 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -112,10 +112,70 @@ static std::string read_response(int fd, long usec = 2000000)
 
     std::string response;
     char buffer[512];
-    ssize_t n = read(fd, buffer, sizeof(buffer));
+    ssize_t n;
 
+    while ((n = read(fd, buffer, sizeof(buffer))) > 0) {
+        response.append(buffer, static_cast<std::size_t>(n));
+
+        std::size_t header_end = response.find("\r\n\r\n");
+        if (header_end == std::string::npos)
+            continue;
+
+        std::size_t length_pos = response.find("Content-Length: ");
+        if (length_pos == std::string::npos || length_pos > header_end)
+            break;
+        length_pos += std::strlen("Content-Length: ");
+        std::size_t length_end = response.find("\r\n", length_pos);
+        cr_assert_neq(length_end, std::string::npos);
+
+        std::size_t length = static_cast<std::size_t>(std::strtoul(
+            response.substr(length_pos, length_end - length_pos).c_str(), NULL,
+            10));
+        if (response.size() >= header_end + 4 + length)
+            break;
+    }
     cr_assert_gt(n, 0, "read() failed: %s", strerror(errno));
-    response.append(buffer, static_cast<std::size_t>(n));
+    return response;
+}
+
+static std::string read_response_until_close(int fd, long usec = 2000000)
+{
+    timeval timeout = { };
+    timeout.tv_sec = usec / 1000000;
+    timeout.tv_usec = usec % 1000000;
+    cr_assert_eq(
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0,
+        "setsockopt() failed: %s", strerror(errno));
+
+    std::string response;
+    char buffer[4096];
+    ssize_t n;
+
+    while ((n = read(fd, buffer, sizeof(buffer))) > 0)
+        response.append(buffer, static_cast<std::size_t>(n));
+    cr_assert_eq(n, 0, "read() failed: %s", strerror(errno));
+    return response;
+}
+
+static std::string read_response_headers(int fd, long usec = 2000000)
+{
+    timeval timeout = { };
+    timeout.tv_sec = usec / 1000000;
+    timeout.tv_usec = usec % 1000000;
+    cr_assert_eq(
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)), 0,
+        "setsockopt() failed: %s", strerror(errno));
+
+    std::string response;
+    char buffer[512];
+    ssize_t n;
+
+    while ((n = read(fd, buffer, sizeof(buffer))) > 0) {
+        response.append(buffer, static_cast<std::size_t>(n));
+        if (response.find("\r\n\r\n") != std::string::npos)
+            break;
+    }
+    cr_assert_gt(n, 0, "read() failed: %s", strerror(errno));
     return response;
 }
 
@@ -447,6 +507,53 @@ Test(event_loop, shared_listener_routes_static_requests_by_host)
     cr_assert(args.result);
 }
 
+Test(event_loop, static_get_sends_large_file_body_until_close)
+{
+    logger::log_level() = logger::levels::NOTHING;
+
+    uint16_t port = reserve_loopback_port();
+    std::ostringstream listen_addr;
+    listen_addr << "127.0.0.1:" << port;
+
+    std::string root = test_tmpdir("webserv-static-large");
+    std::string body(128 * 1024, 'x');
+    body.replace(4090, 14, "chunk-boundary");
+    test_write_file(root + "/large.txt", body);
+
+    Config config = { };
+    config.root = root;
+    config.allowed_methods[http::methods::GET] = true;
+    std::vector<Server> servers;
+    servers.push_back(
+        Server(std::vector<Location>(), "test", listen_addr.str(), config));
+
+    EventLoop loop(servers);
+    LoopThreadArgs args = { &loop, false };
+    pthread_t thread;
+    cr_assert_eq(pthread_create(&thread, NULL, &run_loop, &args), 0,
+        "pthread_create() failed");
+
+    int clientfd = connect_to_loopback(port);
+    write_all(clientfd,
+        "GET /large.txt HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Connection: close\r\n"
+        "\r\n");
+
+    std::string response = read_response_until_close(clientfd);
+    close(clientfd);
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_neq(
+        response.find("Content-Length: 131072\r\n"), std::string::npos);
+    cr_assert_neq(response.find("\r\n\r\n" + body), std::string::npos);
+
+    cr_assert_eq(
+        kill(getpid(), SIGTERM), 0, "kill() failed: %s", strerror(errno));
+    cr_assert_eq(pthread_join(thread, NULL), 0, "pthread_join() failed");
+
+    cr_assert(args.result);
+}
+
 Test(event_loop, shared_listener_uses_selected_server_for_cgi)
 {
     logger::log_level() = logger::levels::NOTHING;
@@ -637,8 +744,10 @@ Test(event_loop, cgi_head_executes_script_and_discards_response_body)
               "printf 'Content-Type: text/plain\r\n\r\n'\n"
               "printf 'method=%s\n' \"$REQUEST_METHOD\"\n");
 
-    std::string head_response = perform_request(
+    int head_fd = send_request(
         harness, "HEAD /cgi/head.sh HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    std::string head_response = read_response_headers(head_fd);
+    close(head_fd);
     test_assert_status(head_response, "HTTP/1.1 200 OK");
     cr_assert_neq(
         head_response.find("Content-Length: 12\r\n"), std::string::npos);

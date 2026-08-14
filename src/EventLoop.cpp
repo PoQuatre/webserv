@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 04:57:23 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:54:52 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -412,8 +412,18 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
             conn.enqueue_response(
                 dispatcher::error_response(conn.request(), cfg, error_status));
         } else {
-            conn.enqueue_response(
-                dispatcher::handle(conn.request(), conn.server()));
+            std::string response;
+            int32_t filefd = -1;
+
+            if (dispatcher::open_static_file_response(
+                    conn.request(), cfg, response, filefd)) {
+                conn.enqueue_response(response);
+                if (filefd != -1)
+                    conn.enqueue_file(filefd);
+            } else {
+                conn.enqueue_response(
+                    dispatcher::handle(conn.request(), conn.server()));
+            }
         }
         conn.on_writable();
         if (events & EPOLLIN)

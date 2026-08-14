@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 04:48:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:56:03 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -17,9 +17,13 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <cstring>
+
 #include "logger.hpp"
 
 #define RECV_CHUNK 4096
+#define FILE_CHUNK 16384
 
 namespace {
 
@@ -44,6 +48,7 @@ Connection::Connection()
     : _fd(-1)
     , _default_server(NULL)
     , _server(NULL)
+    , _file_fd(-1)
     , _send_state(IDLE)
 {
 }
@@ -52,6 +57,7 @@ Connection::Connection(int32_t fd, const Server &server)
     : _fd(fd)
     , _default_server(&server)
     , _server(&server)
+    , _file_fd(-1)
     , _send_state(IDLE)
 {
     _parser.set_remote_addr(peer_address(fd));
@@ -78,14 +84,54 @@ void Connection::enqueue_response(const std::string &data)
     _send_state = SENDING;
 }
 
+void Connection::enqueue_file(int32_t fd)
+{
+    close_file();
+    _file_fd = fd;
+    _send_state = SENDING;
+}
+
 void Connection::wait_for_cgi() { _send_state = WAITING_CGI; }
 
 void Connection::reset()
 {
+    close_file();
     _send_buf.clear();
     _send_state = IDLE;
     _server = _default_server;
     _parser.reset();
+}
+
+void Connection::close_file()
+{
+    if (_file_fd != -1) {
+        close(_file_fd);
+        _file_fd = -1;
+    }
+}
+
+bool Connection::fill_file_buffer()
+{
+    char tmp[FILE_CHUNK];
+    ssize_t n;
+
+    if (!_send_buf.empty() || _file_fd == -1)
+        return true;
+    n = read(_file_fd, tmp, sizeof(tmp));
+    if (n > 0) {
+        _send_buf.assign(tmp, static_cast<std::size_t>(n));
+        return true;
+    }
+    if (n == 0) {
+        close_file();
+        _send_state = IDLE;
+        return true;
+    }
+    L_WARN(
+        "Failed to read static file for client {}: {}", _fd, strerror(errno));
+    close_file();
+    _send_state = IDLE;
+    return false;
 }
 
 bool Connection::do_recv()
@@ -111,6 +157,8 @@ bool Connection::do_recv()
 
 bool Connection::do_send()
 {
+    if (!fill_file_buffer())
+        return false;
     if (_send_buf.empty()) {
         _send_state = IDLE;
         return true;
