@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -394,7 +394,8 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
         conn.set_server(*select_server(conn.default_server(), conn.request()));
         const Config &cfg
             = dispatcher::config_for(conn.request(), conn.server());
-        std::string filesystem_path = cfg.root + conn.request().uri;
+        std::string filesystem_path
+            = dispatcher::filesystem_path_for(conn.request(), conn.server());
 
         if (conn.is_waiting_cgi())
             return;
@@ -419,7 +420,7 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
             int32_t filefd = -1;
 
             if (dispatcher::open_static_file_response(
-                    conn.request(), cfg, response, filefd)) {
+                    conn.request(), cfg, filesystem_path, response, filefd)) {
                 conn.enqueue_response(response);
                 if (filefd != -1)
                     conn.enqueue_file(filefd);

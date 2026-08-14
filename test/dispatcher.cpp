@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -133,6 +133,32 @@ Test(dispatcher, cgi_eligible_request_selects_cgi_config)
 
     cr_assert_str_eq(cfg.cgi_pass.c_str(), "/bin/sh");
     cr_assert_eq(cfg.root + req.uri, root + req.uri);
+}
+
+Test(dispatcher, location_root_maps_uri_suffix_under_root)
+{
+    std::string server_root = test_tmpdir("webserv-dispatcher-test");
+    std::string location_root = test_tmpdir("webserv-location-root-test");
+    Config config = { };
+    Location location;
+    std::vector<Location> locations;
+    http::request req = make_request(http::methods::GET, "/kapouet/pouic");
+
+    config.root = server_root;
+    config.allowed_methods[http::methods::GET] = true;
+    location.path = "/kapouet";
+    location.config = config;
+    location.config.root = location_root;
+    location.config.conf.root = std::vector<std::string>(1, location_root);
+    location.type = location::CLASSIC;
+    locations.push_back(location);
+    Server server(locations, "test", "127.0.0.1:0", config);
+    test_write_file(location_root + "/pouic", "location body\n");
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_neq(response.find("location body\n"), std::string::npos);
 }
 
 Test(dispatcher, disallowed_cgi_method_returns_response_outcome)
