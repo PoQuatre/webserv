@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 07:17:09 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 04:48:41 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/13 22:54:52 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -35,6 +35,7 @@ public:
     bool on_writable();
 
     void enqueue_response(const std::string &data);
+    void enqueue_file(int32_t fd);
     void wait_for_cgi();
 
     bool is_parse_complete() const { return _parser.is_complete(); }
@@ -58,9 +59,12 @@ private:
     const Server *_default_server;
     const Server *_server;
     std::string _send_buf;
+    int32_t _file_fd;
     SendState _send_state;
     HttpParser _parser;
 
+    void close_file();
+    bool fill_file_buffer();
     bool do_recv();
     bool do_send();
 };
