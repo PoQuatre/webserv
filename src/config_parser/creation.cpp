@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/13 19:46:59 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/08/14 02:29:40 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -105,19 +105,12 @@ std::size_t convert_time_to_seconds(const std::string &val)
 
 std::string ConfigParser::handle_relative_path(const std::string &path)
 {
-    char buf[4096];
-
-    if (path.c_str()[0] == '/')
+    if (path.empty() || path[0] == '/')
         return path;
-    char *p2 = realpath(_path.c_str(), buf);
-    if (!p2)
+    std::size_t pos = _path.rfind('/');
+    if (pos == std::string::npos)
         return path;
-    char *p = std::strrchr(buf, '/');
-    if (!p)
-        return path;
-    *(p + 1) = 0;
-    std::strncat(p + 1, path.c_str(), path.length());
-    return std::string(buf);
+    return _path.substr(0, pos + 1) + path;
 }
 
 void ConfigParser::push_configuration(const config_node &node,
