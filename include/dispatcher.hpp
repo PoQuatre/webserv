@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,12 +22,13 @@
 namespace dispatcher {
 
 const Config &config_for(const http::request &req, const Server &server);
+std::string filesystem_path_for(const http::request &req, const Server &server);
 bool request_body_too_large(const http::request &req, const Config &cfg);
 
 std::string handle(const http::request &req, const Server &server);
 
 bool open_static_file_response(const http::request &req, const Config &cfg,
-    std::string &headers, int32_t &filefd);
+    const std::string &fs_path, std::string &headers, int32_t &filefd);
 
 std::string error_response(http::status::type status);
 std::string error_response(

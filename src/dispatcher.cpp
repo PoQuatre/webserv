@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/14 02:55:17 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -350,10 +350,25 @@ const Config &dispatcher::config_for(
     return loc ? loc->config : server.default_config();
 }
 
-bool dispatcher::open_static_file_response(const http::request &req,
-    const Config &cfg, std::string &headers, int32_t &filefd)
+std::string dispatcher::filesystem_path_for(
+    const http::request &req, const Server &server)
 {
-    std::string fs_path = cfg.root + req.uri;
+    const Location *loc = server.find_location(req.uri);
+    const Config &cfg = loc ? loc->config : server.default_config();
+
+    if (loc && !cfg.conf.root.empty() && loc->type != location::CASE_SENSITIVE
+        && loc->type != location::CASE_INSENSITIVE
+        && (req.uri.size() == loc->path.size()
+            || req.uri[loc->path.size()] == '/')) {
+        return cfg.root + "/" + req.uri.substr(loc->path.size());
+    }
+    return cfg.root + req.uri;
+}
+
+bool dispatcher::open_static_file_response(const http::request &req,
+    const Config &cfg, const std::string &fs_path, std::string &headers,
+    int32_t &filefd)
+{
     struct stat st;
 
     filefd = -1;
@@ -423,7 +438,7 @@ bool dispatcher::request_body_too_large(
 std::string dispatcher::handle(const http::request &req, const Server &server)
 {
     const Config &cfg = config_for(req, server);
-    std::string filesystem_path;
+    std::string filesystem_path = filesystem_path_for(req, server);
 
     if (!cfg.allowed_methods[req.method])
         return make_error_response_impl(
@@ -431,8 +446,6 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
     if (request_body_too_large(req, cfg))
         return make_error_response_impl(
             req, http::status::PAYLOAD_TOO_LARGE, cfg);
-
-    filesystem_path = cfg.root + req.uri;
 
     if (req.method == http::methods::POST && !cfg.upload_path.empty()) {
         http::status::type status = upload::save(req, cfg);

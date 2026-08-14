@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/14 02:29:40 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -234,6 +234,7 @@ void ConfigParser::create_all_location(const config_node &node,
             } else {
                 location_struct.path = *(*cit)->vals.begin();
             }
+            location_conf.conf.root.clear();
 
             create_location(cit, location_conf);
 
