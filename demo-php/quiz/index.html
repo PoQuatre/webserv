@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<style>
+    :root {
+        --graphite: #333333;
+        --graphiteD: #212223;
+        /*--pop: #FF3CC7;*/
+        --pop: #9D44B5;
+        --ice: #00E5E8;
+        --ocean: #007C77;
+    }
+    * {padding: 0;margin: 0;font-family: "Bricolage Grotesque";}
+    html, body {
+        position: relative;
+        z-index: 0;
+        height: 100%;
+        width: 100%;
+        background: linear-gradient(25deg, var(--ice), var(--pop));
+    }
+    .filter
+    {
+        position: absolute;
+        z-index: 1.;
+        /*background-color: var(--graphiteD);*/
+        background: #3F4346;
+        background: radial-gradient(at center, #212223, #333333);
+        opacity: 1.;
+        height: 100%;
+        width: 100%;
+    }
+
+    h1
+    {
+        text-align: center;
+        padding-top: 5%;
+        margin-bottom: 40px;
+        color: var(--ocean);
+    }
+
+    button
+    {
+        text-transform: uppercase;
+    }
+
+    #main
+    {
+        position: relative;
+        z-index: 9999;
+    }
+
+    .cnt
+    {
+        margin: auto;
+        background-color: var(--graphite);
+        height: 65%;
+        width: 40%;
+        display: flex;
+        flex-direction: column;
+        border-radius: 10px;
+        flex: 1;
+        /*box-shadow: 0px 0px 10px #212223;*/
+        border: 2px solid rgba(33,34,35,.6);
+        box-shadow: 0px 0px 10px rgba(0, 229, 232, .1);
+    }
+
+    h2
+    {
+        text-align: center;
+        padding-top: 25px;
+        margin-bottom: 5px;
+        padding-left: 25px;
+        max-width: 75%;
+        text-align: left;
+    }
+
+    button
+    {
+        margin: auto auto 20px auto;
+        width: 100px;
+        padding: 3px 7px;
+    }
+
+    .checkbox-input
+    {
+        /*background-color: rgba(255, 60, 199, .2);*/
+        /*background-color: rgba(0, 124, 119, .2);*/
+        background-color: rgba(0, 229, 232, .2);
+        /*border: 2px solid rgba(0, 124, 119, .2);*/
+        /*border: 2px solid rgba(255, 60, 199, .2);*/
+        /*box-shadow: 0px 0px 5px rgba(255, 60, 199, .2);*/
+        /*box-shadow: 0px 0px 5px rgba(218, 62, 82, .2);*/
+        box-shadow: 0px 0px 5px rgba(0, 229, 232, .2);
+        height: 40px;
+        margin: 15px 25px;
+        display: flex;
+        border-radius: 8px;
+        transition: .1s;
+    }
+
+    .text-checkbox
+    {
+        text-align: center;
+        margin: auto auto auto 15px;
+    }
+
+    .icon-checkbox
+    {
+        background-color: var(--ice) !important;
+        padding: 3px 7px;
+        margin-right: 10px;
+        border-radius: 8px;
+    }
+
+    .checkbox-input:hover
+    {
+        transition: .3s;
+        /*background-color: blue;*/
+        background-color: rgba(0, 229, 232, .5);
+        /*box-shadow: 0px 0px 9px rgba(255, 60, 199, .8);*/
+        /*box-shadow: 0px 0px 5px rgba(218, 62, 82, .8);*/
+        box-shadow: 0px 0px 9px rgba(0, 229, 232, 1);
+        cursor: pointer;
+    }
+
+    .checkbox-input:o
+
+    .active
+    {
+        /*background-color: blue !important;*/
+        background-color: rgba(0, 229, 232, .5);
+        animation-name: good_res;
+        animation-duration: .4s;
+        animation-timing-function: ease-in-out;
+        animation-iteration-count: 3;
+    }
+
+    .cnt-head-top
+    {
+        display: flex;
+        justify-content: space-between;
+        padding: 15px 25px 0 25px;
+    }
+
+    .progress-bar
+    {
+        max-width: 100%;
+        height: 10px;
+        background-color: var(--ice);
+        opacity: .9;
+        margin: 10px 25px 0;
+        border-radius: 5px;
+        overflow: hidden;
+    }
+    .progress-bar-in
+    {
+        background-color: var(--pop);
+        opacity: .9;
+        transition: .4s;
+        transition-timing-function: linear;
+        height: 10px;
+        border-radius: 5px;
+        width: 0;
+    }
+
+    @keyframes good_res
+    {
+        from {
+            background-color: rgba(0, 229, 232, .5);
+        }
+        to {
+            background-color: green;
+        }
+    }
+
+    @keyframes bad_res
+    {
+        from {
+            background-color: rgba(0, 229, 232, .5);
+        }
+        to {
+            background-color: red;
+        }
+    }
+
+    @keyframes selected_res
+    {
+        from {
+            background-color: rgba(0, 229, 232, .5);
+        }
+        50% {
+            background-color: var(--pop);
+        }
+        to {
+            background-color: rgba(0, 229, 232, .5);
+        }
+    }
+
+    .good
+    {
+        animation-name: good_res;
+        animation-duration: .4s;
+        animation-timing-function: ease-in-out;
+        animation-iteration-count: 3;
+    }
+
+    .bad
+    {
+        animation-name: bad_res;
+        animation-duration: .4s;
+        animation-timing-function: ease-in-out;
+        animation-iteration-count: 3;
+    }
+
+    .active
+    {
+        /*background-color: blue !important;*/
+        background-color: rgba(0, 229, 232, .5);
+        animation-name: selected_res;
+        animation-duration: .4s;
+        animation-timing-function: ease-in-out;
+        animation-iteration-count: 1;
+    }
+</style>
+
+
+
+<html>
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="filter"></div>
+<section id="main">
+    <h1>Are you a noob</h1>
+    <div class="cnt">
+    <div class="cnt-head">
+        <div class="cnt-head-top">
+        <p>question <span id="count-question">1</span>/<span id="question_cb">10</span><p>
+        <p>00:<span id="count-time"></span></p>
+        </div>
+        <div class="progress-bar"><div class="progress-bar-in"></div></div>
+    </div>
+    <h2 id="question"></h2>
+    <div id="responses">
+        <div class="checkbox-input" id="A"><span class="text-checkbox"><span class="icon-checkbox">A</span><span id="A-res"></span></span></div>
+        <div class="checkbox-input" id="B"><span class="text-checkbox"><span class="icon-checkbox">B</span><span id="B-res"></span></span></div>
+        <div class="checkbox-input" id="C"><span class="text-checkbox"><span class="icon-checkbox">C</span><span id="C-res"></span></span></div>
+        <div class="checkbox-input" id="D"><span class="text-checkbox"><span class="icon-checkbox">D</span><span id="D-res"></span></span></div>
+    </div>
+        <button id="send">next</button>
+    </div>
+</section>
+<body>
+</html>
+
+<script>
+
+const TIMER_TIME = 30;
+const QUESTIONS = 5;
+const jesaispas = new Map();
+jesaispas.set("A", 1);
+jesaispas.set("B", 2);
+jesaispas.set("C", 3);
+jesaispas.set("D", 4);
+
+const A = document.querySelector("#A");
+const B = document.querySelector("#B");
+const C = document.querySelector("#C");
+const D = document.querySelector("#D");
+const ARes = document.querySelector("#A-res");
+const BRes = document.querySelector("#B-res");
+const CRes = document.querySelector("#C-res");
+const DRes = document.querySelector("#D-res");
+const send = document.querySelector("#send");
+const timebar = document.querySelector(".progress-bar-in");
+const questionMax = document.querySelector("#question_cb");
+
+const question = document.querySelector("#question");
+const responses = document.querySelector("#responses");
+let rr = -1;
+
+let actual_question = -1;
+let count_question = 0;
+let time_count = TIMER_TIME;
+let good = 0;
+
+questionMax.innerHTML = QUESTIONS;
+
+function reset_all_checkbox(A, B, C, D)
+{
+    A.className = "checkbox-input";
+    B.className = "checkbox-input";
+    C.className = "checkbox-input";
+    D.className = "checkbox-input";
+}
+
+function draw_question(ques, rep)
+{
+    timebar.style.width = "0";
+    question.innerHTML = ques;
+    ARes.innerHTML = rep[0];
+    BRes.innerHTML = rep[1];
+    CRes.innerHTML = rep[2];
+    DRes.innerHTML = rep[3];
+    reset_all_checkbox(A, B, C, D);
+}
+
+const arr = [A, B, C, D];
+for (let i=0;i<4;i++)
+{
+    arr[i].addEventListener("click", e => {
+        reset_all_checkbox(A, B, C, D);
+        e.currentTarget.classList.add("active");
+        e.currentTarget.classList.add("");
+    });
+}
+
+function refresh_question_count()
+{
+    const qc = document.querySelector("#count-question");
+    qc.innerHTML = count_question;
+}
+
+function new_question()
+{
+    actual_question = -1;
+    fetch("http://127.0.0.1:8082/api.php?question=q", {method: "GET", headers: {"Accept": "*"}})
+        .then(res => {
+            res.json()
+                .then(json => {
+                    //console.log(json);
+                    draw_question(json.question, [json.A, json.B, json.C, json.D]);
+                    actual_question = json.id;
+                    rr = json.reponse;
+                    time_count = TIMER_TIME;
+                })
+        });
+}
+
+function handle_res()
+{
+    if (count_question >= QUESTIONS)
+    {
+        location.href = "http://127.0.0.1:8082/leaderboard.php?good=" + good;
+        return ;
+    }
+
+    const selected = document.querySelector(".active");
+
+    if (selected != null && jesaispas.get(selected.id) == rr)
+    {
+        good++;
+        selected.classList.add("good");
+    }
+    else
+    {
+        selected.classList.add("bad");
+        let elm;
+        switch (rr)
+        {
+            case 1:
+                elm = document.querySelector("#A");
+                break;
+            case 2:
+                elm = document.querySelector("#B");
+                break;
+            case 3:
+                elm = document.querySelector("#C");
+                break;
+            case 4:
+                elm = document.querySelector("#D");
+                break;
+        }
+        elm.classList.add("good");
+    }
+    count_question++;
+    new_question();
+    refresh_question_count();
+}
+
+refresh_question_count();
+
+const time_dom = document.querySelector("#count-time");
+
+function timer()
+{
+    if (time_count >= 0)
+        timebar.style.width = 110 - (100 / TIMER_TIME) * (time_count) + "%";
+    if (count_question >= QUESTIONS)
+    {
+        location.href = "http://127.0.0.1:8082/leaderboard.php?good=" + good;
+        return ;
+    }
+    if (time_count <= 0)
+        return handle_res();
+    time_count--;
+    time_dom.innerHTML = time_count <= 9 ? "0" + time_count : time_count;
+}
+
+send.addEventListener("click", e => handle_res());
+new_question();
+setInterval(timer, 1000);
+
+
+</script>
