@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:23:48 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:54:52 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 20:10:36 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -516,7 +516,7 @@ Test(event_loop, static_get_sends_large_file_body_until_close)
     listen_addr << "127.0.0.1:" << port;
 
     std::string root = test_tmpdir("webserv-static-large");
-    std::string body(128 * 1024, 'x');
+    std::string body(static_cast<std::string::size_type>(128) * 1024, 'x');
     body.replace(4090, 14, "chunk-boundary");
     test_write_file(root + "/large.txt", body);
 

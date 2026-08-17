@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 19:01:36 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/17 19:32:44 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 20:10:36 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -507,6 +507,30 @@ bool ConfigParser::create_node()
     return true;
 }
 
+bool ConfigParser::add_leaf_values(config_node *node,
+    const config_token &directive, uint32_t limit, uint32_t &ac)
+{
+    while (_act_token->type == tokens::WORD && ac < limit) {
+        consume_next_token();
+        if (!is_a_valid_val(_act_token->value, directive)) {
+            L_ERROR("'{}' is invalid value for '{}'", _act_token->value,
+                directive.value);
+            _valid = false;
+            skip_line();
+            _err_count++;
+            delete node;
+            return false;
+        }
+        node->vals.push_back(_act_token->value);
+        ac++;
+        if (!see_next_token()) {
+            delete node;
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ConfigParser::create_leaf()
 {
     config_node *node;
@@ -575,23 +599,8 @@ bool ConfigParser::create_leaf()
     uint32_t ac = 0;
     uint32_t limit = get_max_args(tmp_token);
 
-    while (_act_token->type == tokens::WORD && ac < limit) {
-        consume_next_token();
-        if (!is_a_valid_val(_act_token->value, tmp_token)) {
-            L_ERROR("'{}' is invalid value for '{}'", _act_token->value,
-                tmp_token.value);
-            _valid = false;
-            skip_line();
-            _err_count++;
-            return true;
-        }
-        node->vals.push_back(_act_token->value);
-        ac++;
-        if (!see_next_token()) {
-            delete node;
-            return true;
-        }
-    }
+    if (!add_leaf_values(node, tmp_token, limit, ac))
+        return true;
 
     if (ac >= limit && _act_token->type != tokens::END) {
         L_ERROR("directive '{}' can have up to {} argument(s) (line {}) {}",
