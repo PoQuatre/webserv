@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 19:27:15 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -170,6 +170,28 @@ Test(dispatcher, disallowed_cgi_method_returns_response_outcome)
     std::string response = dispatcher::handle(req, server);
 
     test_assert_status(response, "HTTP/1.1 405 Method Not Allowed");
+}
+
+Test(dispatcher, location_return_redirects_before_method_checks)
+{
+    Config config = { };
+    Location location;
+    std::vector<Location> locations;
+    http::request req = make_request(http::methods::DELETE, "/old/path");
+
+    location.path = "/old";
+    location.config = config;
+    location.config.redirect_status = 307;
+    location.config.redirect_target = "https://example.test/new";
+    location.type = location::CLASSIC;
+    locations.push_back(location);
+    Server server(locations, "test", "127.0.0.1:0", config);
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 307 Temporary Redirect");
+    cr_assert_neq(response.find("Location: https://example.test/new\r\n"),
+        std::string::npos);
 }
 
 Test(dispatcher, autoindex_escapes_and_encodes_directory_entries)

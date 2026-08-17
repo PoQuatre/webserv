@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 04:03:45 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/07/18 22:07:06 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 19:17:58 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -91,7 +91,10 @@ namespace status {
     X(MULTIPLE_CHOICES, 300, "Multiple Choices")                               \
     X(MOVED_PERMANENTLY, 301, "Moved Permanently")                             \
     X(MOVED_TEMPORARILY, 302, "Moved Temporarily")                             \
+    X(SEE_OTHER, 303, "See Other")                                             \
     X(NOT_MODIFIED, 304, "Not Modified")                                       \
+    X(TEMPORARY_REDIRECT, 307, "Temporary Redirect")                           \
+    X(PERMANENT_REDIRECT, 308, "Permanent Redirect")                           \
                                                                                \
     X(BAD_REQUEST, 400, "Bad Request")                                         \
     X(FORBIDDEN, 403, "Forbidden")                                             \
