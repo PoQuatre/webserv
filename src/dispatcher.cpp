@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 19:27:15 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -240,12 +240,23 @@ std::string make_directory_index_response(
     return make_response(req, http::status::OK, ss.str(), "text/html");
 }
 
-std::string make_directory_redirect_response(const http::request &req)
+const char *reason_for_status(uint32_t status)
+{
+    for (std::size_t i = 0; i < http::status::COUNT; ++i) {
+        if (http::status::codes[i] == static_cast<int32_t>(status))
+            return http::status::reasons[i];
+    }
+    return "Found";
+}
+
+std::string make_redirect_response(
+    const http::request &req, uint32_t status, const std::string &target)
 {
     std::ostringstream ss;
 
-    ss << http::versions::strings[req.version] << " 301 Moved Permanently\r\n"
-       << "Location: " << req.uri << "/\r\n"
+    ss << http::versions::strings[req.version] << " " << status << " "
+       << reason_for_status(status) << "\r\n"
+       << "Location: " << target << "\r\n"
        << "Content-Length: 0\r\n"
        << "Connection: " << (req.keep_alive ? "keep-alive" : "close")
        << "\r\n\r\n";
@@ -316,7 +327,7 @@ std::string handle_get(
         std::string response;
 
         if (req.uri.empty() || req.uri[req.uri.size() - 1] != '/')
-            return make_directory_redirect_response(req);
+            return make_redirect_response(req, 301, req.uri + "/");
         if (try_directory_index(req, fs_path, cfg, response))
             return response;
 
@@ -438,6 +449,11 @@ bool dispatcher::request_body_too_large(
 std::string dispatcher::handle(const http::request &req, const Server &server)
 {
     const Config &cfg = config_for(req, server);
+
+    if (cfg.redirect_status != 0 && !cfg.redirect_target.empty())
+        return make_redirect_response(
+            req, cfg.redirect_status, cfg.redirect_target);
+
     std::string filesystem_path = filesystem_path_for(req, server);
 
     if (!cfg.allowed_methods[req.method])

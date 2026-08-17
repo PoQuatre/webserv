@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 19:01:36 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/07/29 20:13:20 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 19:32:44 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -127,6 +127,12 @@ bool int_check(const std::string &val)
             return false;
     }
     return true;
+}
+
+bool valid_return_status(const std::string &val)
+{
+    return val == "301" || val == "302" || val == "303" || val == "307"
+        || val == "308";
 }
 
 bool node_already_present(std::vector<config_node *> &node,
@@ -593,7 +599,18 @@ bool ConfigParser::create_leaf()
         skip_line();
         _err_count++;
         _valid = false;
-        node->children.clear();
+        delete node;
+        return true;
+    }
+
+    if (node->keyword == keywords::RETURN
+        && (node->vals.size() != 2 || !valid_return_status(node->vals[0]))) {
+        L_ERROR("directive 'return' requires <301|302|303|307|308> <target> "
+                "(line {})",
+            line);
+        skip_line();
+        _err_count++;
+        _valid = false;
         delete node;
         return true;
     }

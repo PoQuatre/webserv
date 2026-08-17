@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/13 04:00:10 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 19:17:00 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -334,4 +334,26 @@ Test(config_parsing, upload_path_is_inherited_and_overridable)
     const Location *loc = servers[0].find_location("/upload/file.txt");
     cr_assert_not_null(loc);
     cr_assert_str_eq(loc->config.upload_path.c_str(), "/tmp/location-upload");
+}
+
+Test(config_parsing, return_redirect_location_directive)
+{
+    std::vector<Server> servers;
+    std::string path = "test/data/conf-return-location.conf";
+
+    cr_assert_eq(ConfigParser::parse_config(path, servers), true);
+    cr_assert_eq(servers.size(), 1);
+
+    const Location *loc = servers[0].find_location("/old/page.html");
+    cr_assert_not_null(loc);
+    cr_assert_eq(loc->config.redirect_status, 308);
+    cr_assert_str_eq(loc->config.redirect_target.c_str(), "/new");
+}
+
+Test(config_parsing, return_redirect_rejects_bad_status)
+{
+    std::vector<Server> servers;
+    std::string path = "test/data/conf-return-invalid-status.conf";
+
+    cr_assert_eq(ConfigParser::parse_config(path, servers), false);
 }

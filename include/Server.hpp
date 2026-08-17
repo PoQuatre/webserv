@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/13 02:16:25 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/13 04:20:04 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 19:17:00 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -34,6 +34,8 @@ struct Config {
     std::string cgi_pass;
     uint32_t cgi_timeout;
     std::size_t cgi_output_buffer_size;
+    uint32_t redirect_status;
+    std::string redirect_target;
     bool autoindex;
     bool allowed_methods[http::methods::COUNT];
     config_webserv conf;

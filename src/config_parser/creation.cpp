@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/14 05:03:39 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/17 19:17:00 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -170,6 +170,11 @@ void ConfigParser::set_location_value(
     case keywords::CGI_OUTPUT_BUFFER_SIZE:
         location_conf.cgi_output_buffer_size
             = convert_string_to_size(*node.vals.begin());
+        break;
+    case keywords::RETURN:
+        location_conf.redirect_status
+            = std::strtol(node.vals[0].c_str(), NULL, 10);
+        location_conf.redirect_target = node.vals[1];
         break;
     default:
         return;
