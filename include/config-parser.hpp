@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/20 07:53:07 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/13 19:42:36 by nlaporte         ###   ########.fr       */
+/*   Updated: 2026/08/17 20:10:36 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,6 +54,8 @@ private:
         const std::string &scope_name, uint32_t line, bool print_err = true);
     bool create_location_node();
     bool create_node();
+    bool add_leaf_values(config_node *node, const config_token &directive,
+        uint32_t limit, uint32_t &ac);
     bool create_leaf();
     bool create_tree();
     void config_set_alive_last_token();
