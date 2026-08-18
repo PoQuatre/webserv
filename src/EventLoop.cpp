@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/17 19:07:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/14 02:57:13 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/18 12:57:13 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -429,7 +429,6 @@ void EventLoop::dispatch_pending(int32_t fd, uint32_t events, Connection &conn)
                     dispatcher::handle(conn.request(), conn.server()));
             }
         }
-        conn.on_writable();
         if (events & EPOLLIN)
             update_source_events(fd, EPOLL_WRONLY);
     } else if (events & EPOLLOUT) {
@@ -559,11 +558,7 @@ void EventLoop::process_client(int32_t fd, uint32_t events, Connection &conn)
             if (conn.is_parse_error()) {
                 conn.enqueue_response(
                     dispatcher::error_response(conn.parse_error_code()));
-                if (!conn.on_writable()) {
-                    close_conn = true;
-                } else {
-                    update_source_events(fd, EPOLL_WRONLY);
-                }
+                update_source_events(fd, EPOLL_WRONLY);
             } else {
                 close_conn = true;
             }
