@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/17 19:52:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:56:03 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/18 13:09:16 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,7 @@
 
 #include "logger.hpp"
 
-#define RECV_CHUNK 4096
+#define RECV_CHUNK 16384
 #define FILE_CHUNK 16384
 
 namespace {
