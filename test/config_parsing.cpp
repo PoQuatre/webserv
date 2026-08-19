@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/23 00:10:43 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/17 19:17:00 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 21:52:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -334,6 +334,21 @@ Test(config_parsing, upload_path_is_inherited_and_overridable)
     const Location *loc = servers[0].find_location("/upload/file.txt");
     cr_assert_not_null(loc);
     cr_assert_str_eq(loc->config.upload_path.c_str(), "/tmp/location-upload");
+}
+
+Test(config_parsing, client_max_body_size_units_in_location)
+{
+    std::vector<Server> servers;
+    std::string path = "test/data/conf-client-max-body-size.conf";
+    std::size_t wanted = static_cast<std::size_t>(40) * 1024 * 1024;
+
+    cr_assert_eq(ConfigParser::parse_config(path, servers), true);
+    cr_assert_eq(servers.size(), 1);
+    cr_assert_eq(servers[0].default_config().client_max_body_size, wanted);
+
+    const Location *loc = servers[0].find_location("/upload/file.txt");
+    cr_assert_not_null(loc);
+    cr_assert_eq(loc->config.client_max_body_size, wanted);
 }
 
 Test(config_parsing, return_redirect_location_directive)
