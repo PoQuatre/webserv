@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/17 19:27:15 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 16:51:30 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include <criterion/criterion.h>
 
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cerrno>
 #include <cstring>
@@ -74,6 +75,7 @@ static Server make_upload_server(const std::string &root,
     config.client_max_body_size = client_max_body_size;
     config.allowed_methods[http::methods::GET] = true;
     config.allowed_methods[http::methods::POST] = true;
+    config.allowed_methods[http::methods::DELETE] = true;
     return Server(locations, "test", "127.0.0.1:0", config);
 }
 
@@ -362,6 +364,49 @@ Test(dispatcher, upload_rejects_body_larger_than_configured_limit)
     std::string response = dispatcher::handle(req, server);
 
     test_assert_status(response, "HTTP/1.1 413 Payload Too Large");
+}
+
+Test(dispatcher, delete_upload_removes_uri_basename_from_upload_path)
+{
+    std::string root = test_tmpdir("webserv-upload-test");
+    std::string upload = root + "/uploads";
+    cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
+    Server server = make_upload_server(root, upload);
+    http::request req = make_request(http::methods::DELETE, "/api/photo.bin");
+
+    test_write_file(upload + "/photo.bin", "old\n");
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 204 No Content");
+    cr_assert_eq(access((upload + "/photo.bin").c_str(), F_OK), -1);
+}
+
+Test(dispatcher, delete_upload_missing_file_returns_not_found)
+{
+    std::string root = test_tmpdir("webserv-upload-test");
+    std::string upload = root + "/uploads";
+    cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
+    Server server = make_upload_server(root, upload);
+    http::request req = make_request(http::methods::DELETE, "/missing.txt");
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 404 Not Found");
+}
+
+Test(dispatcher, delete_upload_rejects_directory_target)
+{
+    std::string root = test_tmpdir("webserv-upload-test");
+    std::string upload = root + "/uploads";
+    cr_assert_eq(mkdir(upload.c_str(), 0700), 0);
+    cr_assert_eq(mkdir((upload + "/dir").c_str(), 0700), 0);
+    Server server = make_upload_server(root, upload);
+    http::request req = make_request(http::methods::DELETE, "/dir");
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 403 Forbidden");
 }
 
 Test(dispatcher, non_upload_request_uses_configured_body_limit)
