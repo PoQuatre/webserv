@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/17 19:27:15 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 16:51:30 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -469,6 +469,13 @@ std::string dispatcher::handle(const http::request &req, const Server &server)
         if (status != http::status::CREATED)
             return make_error_response_impl(req, status, cfg);
         return make_response(req, status, "Created\n", "text/plain");
+    }
+    if (req.method == http::methods::DELETE && !cfg.upload_path.empty()) {
+        http::status::type status = upload::remove(req, cfg);
+
+        if (status != http::status::NO_CONTENT)
+            return make_error_response_impl(req, status, cfg);
+        return make_response(req, status, "", "text/plain");
     }
 
     if (req.method != http::methods::GET)

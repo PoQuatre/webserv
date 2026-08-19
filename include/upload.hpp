@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/11 03:22:58 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/11 03:22:58 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 16:51:30 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,5 +18,6 @@
 namespace upload {
 
 http::status::type save(const http::request &req, const Config &cfg);
+http::status::type remove(const http::request &req, const Config &cfg);
 
 }

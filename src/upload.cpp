@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/08/11 03:22:46 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/13 22:56:25 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 17:03:38 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include <cctype>
+#include <cerrno>
 #include <fstream>
 
 namespace {
@@ -233,4 +234,20 @@ http::status::type upload::save(const http::request &req, const Config &cfg)
     if (!ok)
         return http::status::BAD_REQUEST;
     return http::status::CREATED;
+}
+
+http::status::type upload::remove(const http::request &req, const Config &cfg)
+{
+    std::string filename = req.uri.substr(req.uri.rfind('/') + 1);
+
+    if (!upload_path_ready(cfg.upload_path) || !safe_upload_name(filename))
+        return http::status::FORBIDDEN;
+    if (unlink(join_path(cfg.upload_path, filename).c_str()) != 0) {
+        if (errno == ENOENT || errno == ENOTDIR)
+            return http::status::NOT_FOUND;
+        if (errno == EACCES || errno == EPERM || errno == EISDIR)
+            return http::status::FORBIDDEN;
+        return http::status::INTERNAL_SERVER_ERROR;
+    }
+    return http::status::NO_CONTENT;
 }
