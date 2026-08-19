@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/19 21:52:10 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 21:55:49 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -134,9 +134,7 @@ void ConfigParser::push_configuration(const config_node &node,
                 conf[(*cit)->keyword].insert(conf[(*cit)->keyword].end(),
                     (*cit)->vals.begin(), (*cit)->vals.end());
             } else {
-                conf.insert(
-                    std::pair<keywords::type, std::vector<std::string> >(
-                        (*cit)->keyword, (*cit)->vals));
+                conf[(*cit)->keyword] = (*cit)->vals;
             }
         }
     }
