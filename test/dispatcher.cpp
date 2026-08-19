@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/07/20 16:16:07 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/19 16:51:30 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 21:45:34 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -65,7 +65,8 @@ static void test_mkdir(const std::string &path)
 }
 
 static Server make_upload_server(const std::string &root,
-    const std::string &upload_path, std::size_t client_max_body_size = 0)
+    const std::string &upload_path, std::size_t client_max_body_size = 0,
+    bool autoindex = false, bool allow_delete = true)
 {
     Config config = { };
     std::vector<Location> locations;
@@ -73,9 +74,10 @@ static Server make_upload_server(const std::string &root,
     config.root = root;
     config.upload_path = upload_path;
     config.client_max_body_size = client_max_body_size;
+    config.autoindex = autoindex;
     config.allowed_methods[http::methods::GET] = true;
     config.allowed_methods[http::methods::POST] = true;
-    config.allowed_methods[http::methods::DELETE] = true;
+    config.allowed_methods[http::methods::DELETE] = allow_delete;
     return Server(locations, "test", "127.0.0.1:0", config);
 }
 
@@ -212,6 +214,72 @@ Test(dispatcher, autoindex_escapes_and_encodes_directory_entries)
     cr_assert_eq(response.find("<script>.txt"), std::string::npos);
     cr_assert_neq(response.find("&lt;script&gt;.txt"), std::string::npos);
     cr_assert_neq(response.find("href=\"what%3F%23.txt\""), std::string::npos);
+    cr_assert_eq(response.find("deleteEntry("), std::string::npos);
+}
+
+Test(dispatcher, autoindex_upload_location_shows_delete_buttons_for_files)
+{
+    std::string root = test_tmpdir("webserv-dispatcher-test");
+    Config config = { };
+    Location location;
+    std::vector<Location> locations;
+    http::request req = make_request(http::methods::GET, "/upload/");
+
+    test_mkdir(root + "/dir");
+    config.root = root;
+    location.path = "/upload";
+    location.config = config;
+    location.config.root = root + "/dir/";
+    location.config.upload_path = root + "/dir/";
+    location.config.autoindex = true;
+    location.config.allowed_methods[http::methods::GET] = true;
+    location.config.allowed_methods[http::methods::DELETE] = true;
+    location.config.conf.root.push_back(root + "/dir/");
+    location.type = location::CLASSIC;
+    locations.push_back(location);
+    Server server(locations, "test", "127.0.0.1:0", config);
+    test_mkdir(root + "/dir/subdir");
+    test_write_file(root + "/dir/file.txt", "x\n");
+    cr_assert_eq(symlink("file.txt", (root + "/dir/link.txt").c_str()), 0,
+        "symlink() failed: %s", strerror(errno));
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_neq(response.find("deleteEntry('file.txt')"), std::string::npos);
+    cr_assert_eq(response.find("deleteEntry('link.txt')"), std::string::npos);
+    cr_assert_eq(response.find("deleteEntry('subdir')"), std::string::npos);
+}
+
+Test(dispatcher, autoindex_upload_location_hides_delete_if_delete_disallowed)
+{
+    std::string root = test_tmpdir("webserv-dispatcher-test");
+    http::request req = make_request(http::methods::GET, "/dir/");
+
+    test_mkdir(root + "/dir");
+    Server server = make_upload_server(root, root + "/dir", 0, true, false);
+    test_write_file(root + "/dir/file.txt", "x\n");
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_eq(response.find("deleteEntry("), std::string::npos);
+}
+
+Test(dispatcher, autoindex_upload_location_hides_delete_outside_upload_path)
+{
+    std::string root = test_tmpdir("webserv-dispatcher-test");
+    http::request req = make_request(http::methods::GET, "/dir/");
+
+    test_mkdir(root + "/dir");
+    test_mkdir(root + "/uploads");
+    Server server = make_upload_server(root, root + "/uploads", 0, true);
+    test_write_file(root + "/dir/file.txt", "x\n");
+
+    std::string response = dispatcher::handle(req, server);
+
+    test_assert_status(response, "HTTP/1.1 200 OK");
+    cr_assert_eq(response.find("deleteEntry("), std::string::npos);
 }
 
 Test(dispatcher, unreadable_index_returns_error_instead_of_autoindex)

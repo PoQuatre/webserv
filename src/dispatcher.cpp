@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/19 16:51:30 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 21:45:34 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -117,6 +117,28 @@ std::string encode_uri_component(const std::string &value)
     return encoded;
 }
 
+std::string without_trailing_slash(std::string path)
+{
+    while (!path.empty() && path[path.size() - 1] == '/')
+        path.erase(path.size() - 1);
+    return path;
+}
+
+bool autoindex_can_delete(const std::string &fs_path, const Config &cfg)
+{
+    return !cfg.upload_path.empty()
+        && without_trailing_slash(cfg.upload_path)
+        == without_trailing_slash(fs_path)
+        && cfg.allowed_methods[http::methods::DELETE];
+}
+
+bool is_regular_entry(const std::string &path)
+{
+    struct stat st;
+
+    return lstat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+
 std::string make_response(const http::request &req, http::status::type status,
     const std::string &body, const std::string &content_type)
 {
@@ -182,9 +204,17 @@ std::string make_directory_index_response(
 {
     std::ostringstream ss;
     std::string escaped_uri = escape_html(req.uri);
+    bool show_delete = autoindex_can_delete(fs_path, cfg);
 
     ss << "<html><head><title>Index of " << escaped_uri << "</title></head>";
     ss << "<body><h1>Index of " << escaped_uri << "</h1><hr>";
+    if (show_delete) {
+        ss << "<script>function deleteEntry(path){if(!confirm('Delete '+path";
+        ss << "+'?'))";
+        ss << "return;fetch(path,{method:'DELETE'}).then(function(r){if(r.ok)";
+        ss << "location.reload();else alert('Delete failed: '+r.status);});}";
+        ss << "</script>";
+    }
     ss << "<pre>";
 
     DIR *dir = opendir(fs_path.c_str());
@@ -201,7 +231,9 @@ std::string make_directory_index_response(
 
         struct stat st;
         std::string filename(entry->d_name);
-        if (stat((fs_path + filename).c_str(), &st)) {
+        std::string entry_path = fs_path + filename;
+
+        if (stat(entry_path.c_str(), &st)) {
             closedir(dir);
             return make_error_response_impl(
                 req, http::status::INTERNAL_SERVER_ERROR, cfg);
@@ -214,8 +246,13 @@ std::string make_directory_index_response(
                 req, http::status::INTERNAL_SERVER_ERROR, cfg);
         }
 
-        ss << "<a href=\"" << encode_uri_component(filename) << "\">"
+        std::string encoded_filename = encode_uri_component(filename);
+
+        ss << "<a href=\"" << encoded_filename << "\">"
            << escape_html(filename).substr(0, 39) << "</a>";
+        if (show_delete && is_regular_entry(entry_path))
+            ss << " <button type=\"button\" onclick=\"deleteEntry('"
+               << encoded_filename << "')\">delete</button>";
 
         char date[256];
         (void)std::strftime(
