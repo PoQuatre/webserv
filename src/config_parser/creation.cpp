@@ -6,7 +6,7 @@
 /*   By: nlaporte <nlaporte@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/06/17 18:57:11 by nlaporte          #+#    #+#             */
-/*   Updated: 2026/08/17 19:17:00 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/19 21:52:10 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -145,7 +145,6 @@ void ConfigParser::push_configuration(const config_node &node,
 void ConfigParser::set_location_value(
     const config_node &node, Config &location_conf)
 {
-    char *p;
     switch (node.keyword) {
     case keywords::ROOT:
         location_conf.root = handle_relative_path(*(node.vals.begin()));
@@ -158,8 +157,7 @@ void ConfigParser::set_location_value(
         break;
     case keywords::CLIENT_MAX_BODY_SIZE:
         location_conf.client_max_body_size
-            = std::strtol(node.vals.begin()->c_str(), &p, 10);
-        // TODO: handle error
+            = convert_string_to_size(*node.vals.begin());
         break;
     case keywords::CGI_PASS:
         location_conf.cgi_pass = handle_relative_path(*(node.vals.begin()));
