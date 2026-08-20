@@ -6,7 +6,7 @@
 /*   By: mle-flem <mle-flem@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/05/29 00:00:00 by mle-flem          #+#    #+#             */
-/*   Updated: 2026/08/19 21:45:34 by mle-flem         ###   ########.fr       */
+/*   Updated: 2026/08/20 05:15:39 by mle-flem         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -309,7 +309,7 @@ bool try_directory_index(const http::request &req, const std::string &fs_path,
         indexes.push_back("index.html");
     for (std::vector<std::string>::const_iterator it = indexes.begin();
         it != indexes.end(); ++it) {
-        std::string index_path = fs_path + *it;
+        std::string index_path = fs_path + "/" + *it;
         struct stat index_stat;
         if (stat(index_path.c_str(), &index_stat) != 0) {
             if (errno == ENOENT || errno == ENOTDIR)
