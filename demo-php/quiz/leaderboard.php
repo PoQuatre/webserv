@@ -19,7 +19,7 @@ if (isset($_POST['name']) && isset($_POST['good']))
     }
     $_SESSION['user'][$idx]['name'] = $_POST['name'];
     $_SESSION['user'][$idx]['good'] = $good;
-    header("location: http://127.0.0.1:8081/leaderboard.php");
+    header("location: http://127.0.0.1:8082/leaderboard.php");
 }
 ?>
 
